@@ -11,6 +11,16 @@ import type { RunState, CombatState, CardInstance, EnemyInstance } from '@/game/
 declare const ASSETS: Record<string, string>
 const A = (k: string) => ASSETS[k] || ''
 
+// 状态图标映射（修复缺失素材：angry→anger、metallicizeE→metallicize、asleep→意图 Zzz）
+const STATUS_IMG_FIX: Record<string, string> = {
+  angry: 'status/anger.png',
+  metallicizeE: 'status/metallicize.png',
+  asleep: 'intent/sleep.png',
+}
+function statusImgKey(id: string): string {
+  return STATUS_IMG_FIX[id] || ('status/' + id + '.png')
+}
+
 const STATUS_INFO: Record<string, { name: string; desc: string; buff?: boolean }> = {
   strength: { name: '力量', desc: '每点力量使攻击伤害 +1。', buff: true },
   dexterity: { name: '敏捷', desc: '每点敏捷使获得的格挡 +1。', buff: true },
@@ -86,7 +96,7 @@ function statusRow(statuses: Record<string, number>, size = 26): string {
   return `<div class="status-row">${entries.map(([id, n]) => {
     const info = STATUS_INFO[id]
     return `<span class="status-badge" data-tip="<b>${esc(info?.name ?? id)}</b><br>${esc(info?.desc ?? '')}" style="width:${size}px;height:${size}px">
-      <img src="${A('status/' + id + '.png')}" alt="">
+      <img src="${A(statusImgKey(id))}" alt="">
       ${(n !== 1 || ['vulnerable', 'weak', 'frail', 'noDraw'].includes(id)) ? `<i style="font-size:${size * 0.42}px">${n}</i>` : ''}
     </span>`
   }).join('')}</div>`
@@ -167,6 +177,7 @@ function rMap(run: RunState): string {
     <span class="stat" style="color:#ffd980">💰 ${run.gold}</span>
     <span class="relics">${run.relics.map(id => relicIcon(id)).join('')}</span>
     <span class="pots">${run.potions.map((p, i) => potionHtml(p, i, false)).join('')}</span>
+    <button class="sts-btn deck-btn" data-act="openPile" data-pile="deck" style="font-size:13px;padding:4px 14px">查看牌组</button>
     <span class="stat right">第 1 幕 · 层 ${run.visitedNodes.length}</span>
   </div>
   <div class="map-scroll" id="mapScroll">
@@ -512,7 +523,7 @@ function renderNewFx() {
     else if (f.kind === 'block') { color = '#9ac8f0'; content = '+' + f.value }
     else if (f.kind === 'status') {
       const info = STATUS_INFO[f.text || '']
-      content = `<img src="${A('status/' + f.text + '.png')}" width="24" height="24"><span style="color:${(f.value || 0) > 0 ? '#7fe08a' : '#ff8a7a'}">${(f.value || 0) > 0 ? '+' : ''}${f.value}</span>`
+      content = `<img src="${A(statusImgKey(f.text || ''))}" width="24" height="24"><span style="color:${(f.value || 0) > 0 ? '#7fe08a' : '#ff8a7a'}">${(f.value || 0) > 0 ? '+' : ''}${f.value}</span>`
     } else if (f.kind === 'text') { color = '#ffe9a0'; content = String(f.text) }
     el.style.cssText = `left:${pos.x}px;top:${pos.y}px;color:${color};font-size:${size}px`
     el.innerHTML = content
@@ -551,7 +562,9 @@ const ACTIONS: Record<string, (el: HTMLElement) => void> = {
     const st = g()
     const idx = Number(el.dataset.idx)
     const pid = st.run?.potions[idx]
-    if (!pid || !st.run?.combat) return
+    if (!pid) return
+    // 非战斗场景（地图）：血瓶/果汁可直接使用，其余提示
+    if (!st.run?.combat) { g().usePotionMap(idx); return }
     const def = POTIONS[pid]
     const living = st.run.combat.enemies.filter(e => !e.dying && e.hp > 0)
     if (def.target === 'enemy' && living.length > 1) {

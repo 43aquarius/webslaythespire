@@ -49,14 +49,20 @@ export function calcBlock(base: number, statuses: StatusMap): number {
 export function enemyDisplayDamage(enemy: EnemyInstance, playerStatuses: StatusMap): { dmg: number; times: number } {
   const i = enemy.intent
   if (!i || !i.damage) return { dmg: 0, times: 0 }
+  // 实时计算（力感/虚弱/易伤变化后意图显示同步更新）
   return { dmg: calcEnemyAttack(i.damage, enemy.statuses, playerStatuses), times: i.times || 1 }
 }
 
 // ============ 状态施加 ============
+// 负面状态集合：反制（Artifact）可无效化的效果
+const DEBUFF_STATUSES = new Set(['vulnerable', 'weak', 'frail'])
 export function applyStatus(combat: CombatState, target: 'player' | EnemyInstance, id: string, amount: number) {
   if (amount === 0) return
   const map: StatusMap = target === 'player' ? combat.player.statuses : target.statuses
-  if (map.artifact && amount < 0) {
+  // 反制：负面状态（易伤/虚弱/脆弱）或力量/敏捷降低被无效化
+  const isDebuff = DEBUFF_STATUSES.has(id) ||
+    ((id === 'strength' || id === 'dexterity') && amount < 0)
+  if (map.artifact && isDebuff) {
     map.artifact -= 1
     if (map.artifact <= 0) delete map.artifact
     fx(combat, 'text', target === 'player' ? 'player' : target.uid, undefined, '反制!')
@@ -172,13 +178,12 @@ function onEnemyDeath(combat: CombatState, run: RunState, e: EnemyInstance) {
   }
   if (def?.onDeath === 'splitAcid' || def?.onDeath === 'splitBoss') {
     // 分裂出小型史莱姆
-    const spawnId = def.onDeath === 'splitBoss' ? null : 'acidSlimeS'
     if (def.onDeath === 'splitBoss') {
       spawnEnemyAt(combat, run, 'acidSlimeM', e, Math.ceil(e.maxHp * 0.25))
       spawnEnemyAt(combat, run, 'spikeSlimeM', e, Math.ceil(e.maxHp * 0.25))
     } else {
-      spawnEnemyAt(combat, run, spawnId, e, 7)
-      spawnEnemyAt(combat, run, spawnId, e, 7)
+      spawnEnemyAt(combat, run, 'acidSlimeS', e, 7)
+      spawnEnemyAt(combat, run, 'acidSlimeS', e, 7)
     }
   }
   if (def?.onDeath === 'splitSpike') {
@@ -324,9 +329,7 @@ export function rollEnemyIntent(combat: CombatState, e: EnemyInstance) {
   e.nextMoveIdx = idx
   const mv = def.moves[idx]
   const intent: Intent = { ...mv.intent }
-  if (intent.damage) {
-    intent.damage = calcEnemyAttack(intent.damage, e.statuses, combat.player.statuses)
-  }
+  // damage 保存基础值，显示时实时计算（rollEnemyIntent 不再预计算）
   e.intent = intent
 }
 
@@ -351,7 +354,7 @@ export function startCombat(run: RunState, encounterName: string, enemyIds: stri
     turn: 0, phase: 'player',
     encounterName, isElite, isBoss,
     goldReward: isBoss ? rnd(95, 105) : isElite ? rnd(25, 35) : rnd(10, 20),
-    potionDrop: !run.relics.includes('sozu') && Math.random() < 0.40,
+    potionDrop: !run.relics.includes('sozu') && (isBoss ? true : Math.random() < (isElite ? 0.6 : 0.4)),
     fx: [], log: [],
     combatOver: false, playerWon: false, combatEndTriggered: false,
   }
@@ -484,7 +487,7 @@ export function enemyStep(combat: CombatState, run: RunState): boolean {
     if (actor.statuses.regen <= 0) delete actor.statuses.regen
   }
 
-  // 沉睡
+  // 沉睡（保留 Zzz 意图显示）
   if (actor.statuses.asleep) {
     actor.statuses.asleep -= 1
     if (actor.statuses.asleep <= 0) {
@@ -497,6 +500,9 @@ export function enemyStep(combat: CombatState, run: RunState): boolean {
     actor.custom.acted = 1
     return true
   }
+
+  // 行动瞬间清除意图显示（原版行为）
+  actor.intent = null
 
   const def = ENEMIES[actor.id]
   const mvIdx = actor.nextMoveIdx
@@ -604,7 +610,8 @@ export function canPlayCard(combat: CombatState, run: RunState, card: CardInstan
   const def = CARDS[card.id]
   if (!def) return { ok: false, reason: '未知卡牌' }
   if (def.cost === -99) return { ok: false, reason: '不可打出' }
-  let cost = cardCost(card, combat.player.hpLostThisCombat)
+  // 药水墨牌本回合 0 费
+  let cost = card.freeThisTurn ? 0 : cardCost(card, combat.player.hpLostThisCombat)
   // 堕落：技能 0 费
   if (def.type === 'skill' && combat.player.statuses.corruption) cost = 0
   if (def.id === 'clash') {
@@ -614,7 +621,7 @@ export function canPlayCard(combat: CombatState, run: RunState, card: CardInstan
   if (cost === -1) return { ok: true } // X 费只要有能量就能打
   if (combat.player.energy < Math.max(0, cost)) return { ok: false, reason: '能量不足' }
   // 天鹅绒项圈
-  if (run.relics.includes('velvetChoker') && combat.player.cardsPlayedThisTurn >= 6) return { ok: false, reason: '天鹅绒项圈：每回合最多6张' }
+  if (run.relics.includes('velvetChoker') && (combat.player.cardsPlayedThisTurn || 0) >= 6) return { ok: false, reason: '天鹅绒项圈：每回合最多6张' }
   return { ok: true }
 }
 
@@ -625,11 +632,11 @@ export function playCard(combat: CombatState, run: RunState, uid: string, target
   const check = canPlayCard(combat, run, card)
   if (!check.ok) return
 
-  const target = targetUid ? combat.enemies.find(e => e.uid === targetUid && !e.dying && e.hp > 0) : null
+  const target = targetUid ? (combat.enemies.find(e => e.uid === targetUid && !e.dying && e.hp > 0) ?? null) : null
   if (def.target === 'enemy' && !target) return
 
-  // 费用
-  let cost = cardCost(card, combat.player.hpLostThisCombat)
+  // 费用（药水墨牌本回合 0 费；堕落使技能 0 费）
+  let cost = card.freeThisTurn ? 0 : cardCost(card, combat.player.hpLostThisCombat)
   if (def.type === 'skill' && combat.player.statuses.corruption) cost = 0
   let X = 0
   if (cost === -1) {
@@ -643,9 +650,6 @@ export function playCard(combat: CombatState, run: RunState, uid: string, target
   // 从手牌移除
   const hi = combat.hand.findIndex(c => c.uid === uid)
   combat.hand.splice(hi, 1)
-
-  // 药水墨牌：费用为 0
-  if (card.freeThisTurn) cost = 0
 
   // 连击：攻击牌双倍
   const repeat = def.type === 'attack' && combat.player.statuses.doubleTap ? 2 : 1
@@ -791,7 +795,7 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
     }
     case 'flex':
       applyStatus(combat, 'player', 'strength', v[0])
-      P.tempStr += v[0]
+      P.tempStr = (P.tempStr || 0) + v[0]
       break
     case 'headbutt':
       playerAttack(combat, run, v[0], target)
@@ -983,7 +987,7 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
 export function usePotion(combat: CombatState, run: RunState, idx: number, targetUid: string | null): boolean {
   const pid = run.potions[idx]
   if (!pid || !combat || combat.combatOver) return false
-  const target = targetUid ? combat.enemies.find(e => e.uid === targetUid && !e.dying && e.hp > 0) : null
+  const target = targetUid ? (combat.enemies.find(e => e.uid === targetUid && !e.dying && e.hp > 0) ?? null) : null
   switch (pid) {
     case 'firePotion':
       if (!target) return false
@@ -1018,4 +1022,27 @@ export function usePotion(combat: CombatState, run: RunState, idx: number, targe
   run.potions[idx] = null
   checkCombatEnd(combat, run)
   return true
+}
+
+// ============ 非战斗场景使用药水（地图/事件等） ============
+export function usePotionOutOfCombat(run: RunState, idx: number): { ok: boolean; msg?: string } {
+  const pid = run.potions[idx]
+  if (!pid) return { ok: false }
+  const def = POTIONS[pid]
+  switch (pid) {
+    case 'bloodPotion': {
+      run.potions[idx] = null
+      const heal = Math.min(Math.floor(run.maxHp * 0.2), run.maxHp - run.hp)
+      healPlayer(run, null, Math.floor(run.maxHp * 0.2))
+      return { ok: true, msg: `血液药水：回复 ${heal} 点生命` }
+    }
+    case 'fruitJuice':
+      run.potions[idx] = null
+      run.maxHp += 5
+      run.hp += 5
+      return { ok: true, msg: '果汁：最大生命值永久提高 5 点' }
+    default:
+      // 其余药水仅战斗中可用（firePotion: '对一名敌人造成 20 点伤害'）
+      return { ok: false, msg: `${def?.name ?? '该药水'} 仅能在战斗中使用` }
+  }
 }

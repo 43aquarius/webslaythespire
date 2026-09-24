@@ -9,7 +9,9 @@ export function PileViewOverlay() {
   const run = useGame(s => s.run)
   const pileView = useGame(s => s.pileView)
   const closePile = useGame(s => s.closePile)
-  if (!run || !pileView || !run.combat) return null
+  // deck 模式（查看牌组）在地图等非战斗场景也可用
+  if (!run || !pileView) return null
+  if (pileView !== 'deck' && !run.combat) return null
 
   const titles: Record<string, string> = {
     draw: '抽牌堆（随机排序）',
@@ -18,9 +20,9 @@ export function PileViewOverlay() {
     deck: '牌组',
   }
   let cards: CardInstance[] = []
-  if (pileView === 'draw') cards = [...run.combat.drawPile].reverse()
-  else if (pileView === 'discard') cards = [...run.combat.discardPile].reverse()
-  else if (pileView === 'exhaust') cards = [...run.combat.exhaustPile].reverse()
+  if (pileView === 'draw') cards = [...(run.combat?.drawPile ?? [])].reverse()
+  else if (pileView === 'discard') cards = [...(run.combat?.discardPile ?? [])].reverse()
+  else if (pileView === 'exhaust') cards = [...(run.combat?.exhaustPile ?? [])].reverse()
   else cards = run.deck
 
   return (

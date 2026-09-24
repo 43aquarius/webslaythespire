@@ -7,7 +7,7 @@ import { CARDS, cardCost, cardDesc } from '@/game/cards'
 import { ENEMIES } from '@/game/enemies'
 import { enemyDisplayDamage } from '@/game/engine'
 import { CardView } from './CardView'
-import { StatusRow, HpBar, Tip, RelicIcon, PotionSlot, STATUS_INFO } from './Shared'
+import { StatusRow, HpBar, Tip, RelicIcon, PotionSlot, STATUS_INFO, statusImg } from './Shared'
 
 const A = '/assets'
 
@@ -48,8 +48,15 @@ function IntentView({ enemy, targetable }: { enemy: EnemyInstance; targetable: b
 
 // ============ 浮动数字 ============
 function FloatFx({ items, removeFx }: { items: FxItem[]; removeFx: (id: number) => void }) {
+  // 按 id 追踪：只为新出现的特效设置定时器，避免列表更新重置旧计时
+  const timedRef = useRef<Set<number>>(new Set())
   useEffect(() => {
-    const timers = items.map(it => setTimeout(() => removeFx(it.id), 1150))
+    let timers: ReturnType<typeof setTimeout>[] = []
+    for (const it of items) {
+      if (timedRef.current.has(it.id)) continue
+      timedRef.current.add(it.id)
+      timers.push(setTimeout(() => removeFx(it.id), 1150))
+    }
     return () => timers.forEach(clearTimeout)
   }, [items, removeFx])
   if (!items.length) return null
@@ -65,7 +72,7 @@ function FloatFx({ items, removeFx }: { items: FxItem[]; removeFx: (id: number) 
           const info = STATUS_INFO[it.text || '']
           content = (
             <span className="flex items-center gap-1">
-              <img src={`${A}/status/${it.text}.png`} alt="" width={26} height={26} />
+              <img src={statusImg(it.text || '')} alt="" width={26} height={26} />
               <span style={{ color: (it.value || 0) > 0 ? '#7fe08a' : '#ff8a7a' }}>{(it.value || 0) > 0 ? '+' : ''}{it.value}</span>
             </span>
           )
@@ -202,7 +209,9 @@ export function CombatScreen() {
         backgroundPosition: 'center 30%',
       }}
       onClick={(e) => {
-        if ((e.target as HTMLElement).dataset.bg === '1') cancelSelection()
+        // 点击非交互元素（背景/敌人区空白）时取消选牌
+        const t = e.target as HTMLElement
+        if (!t.closest('button, .sts-card, .sts-slot, .sts-relic, .sts-targetable')) cancelSelection()
       }}
       data-bg="1"
     >
@@ -294,7 +303,7 @@ export function CombatScreen() {
       <button
         className="sts-btn absolute sts-title"
         style={{
-          right: 28, bottom: 118, fontSize: 22, padding: '12px 30px',
+          right: 28, bottom: 118, fontSize: 22, padding: '12px 30px', zIndex: 46,
           opacity: combat.phase !== 'player' || busy ? 0.5 : 1,
         }}
         disabled={combat.phase !== 'player' || busy || combat.combatOver}
@@ -303,8 +312,8 @@ export function CombatScreen() {
         {combat.phase === 'player' ? '结束回合' : '敌方回合…'}
       </button>
 
-      {/* ===== 手牌 ===== */}
-      <div className="absolute inset-x-0 flex justify-center items-end" style={{ bottom: -34, height: 300, zIndex: 45 }}>
+      {/* ===== 手牌（容器不拦截点击，只有卡牌本身可点） ===== */}
+      <div className="absolute inset-x-0 flex justify-center items-end" style={{ bottom: -34, height: 300, zIndex: 45, pointerEvents: 'none' }}>
         {hand.map((card, i) => {
           const layout = handLayout[i]
           const def = CARDS[card.id]
@@ -321,6 +330,7 @@ export function CombatScreen() {
                 transform: `translateX(${layout.x}px) translateY(${layout.ty}px) rotate(${layout.rot}deg)`,
                 transformOrigin: 'bottom center',
                 zIndex: 10 + i,
+                pointerEvents: 'auto',
               }}
             >
               <div className="hand-inner transition-all duration-150"

@@ -5,7 +5,8 @@ import { RunState, Screen, CardInstance, FxEvent, NodeType } from '@/game/types'
 import { CARDS, makeCard, cardCost } from '@/game/cards'
 import {
   startCombat, playCard as engPlayCard, endPlayerTurn, enemyTurnStart, enemyStep,
-  enemyTurnEnd, startPlayerTurn, usePotion as engUsePotion, canPlayCard, exhaustCard,
+  enemyTurnEnd, startPlayerTurn, usePotion as engUsePotion, usePotionOutOfCombat,
+  canPlayCard, exhaustCard,
 } from '@/game/engine'
 import {
   newRun, pickEncounter, makeCombatReward, makeShop, applyEventEffect, bossRelicChoices,
@@ -46,6 +47,7 @@ interface GameStore {
   playCard: (uid: string, targetUid: string | null) => void
   endTurn: () => void
   usePotion: (idx: number, targetUid: string | null) => void
+  usePotionMap: (idx: number) => void
   discardPotion: (idx: number) => void
   clickCard: (uid: string) => void
   clickEnemy: (uid: string) => void
@@ -83,7 +85,6 @@ export const useGame = create<GameStore>((set, get) => {
     run.combat.fx = []
     set(s => ({ fxList: [...s.fxList, ...items] }))
   }
-
   function showToastSafe(msg: string) {
     set({ toast: msg })
     setTimeout(() => { if (get().toast === msg) set({ toast: null }) }, 2400)
@@ -108,8 +109,7 @@ export const useGame = create<GameStore>((set, get) => {
         if (run.relics.includes('meatOnTheBone') && run.hp < run.maxHp * 0.5) {
           run.hp = Math.min(run.maxHp, run.hp + 12)
         }
-        run.gold += c.goldReward
-        run.goldEarned += c.goldReward
+        // 金币改为奖励界面主动领取（takeGold），修复双倍计入
         run.reward = makeCombatReward(run, c.isElite, c.isBoss)
         run.screen = 'reward'
         set({ run, fxList: [] })
@@ -218,12 +218,12 @@ export const useGame = create<GameStore>((set, get) => {
 
     startRun: () => {
       set({
-        run: newRun(), screen: 'map', fxList: [], select: null, pileView: null,
+        run: newRun(), screen: 'map', busy: false, fxList: [], select: null, pileView: null,
         selectedCardUid: null, selectedPotionIdx: null, eventMsg: null, bossOptions: [], toast: null, endBanner: null,
       })
     },
     backToTitle: () => set({
-      run: null, screen: 'title', fxList: [], select: null, pileView: null,
+      run: null, screen: 'title', busy: false, fxList: [], select: null, pileView: null,
       selectedCardUid: null, selectedPotionIdx: null, eventMsg: null, bossOptions: [], toast: null, endBanner: null,
     }),
 
@@ -294,36 +294,49 @@ export const useGame = create<GameStore>((set, get) => {
       if (combat.phase !== 'player' || combat.combatOver) return
       set({ busy: true, selectedCardUid: null, selectedPotionIdx: null })
 
-      let r = clone(run)
-      endPlayerTurn(r.combat!, r)
-      set({ run: r })
-      drainFx(r)
-      if (r.combat!.combatOver) { finishCombat(); set({ busy: false }); return }
-
-      r = clone(get().run!)
-      enemyTurnStart(r.combat!)
-      set({ run: r })
-
-      for (let guard = 0; guard < 30; guard++) {
-        await sleep(650)
-        r = clone(get().run!)
-        const more = enemyStep(r.combat!, r)
+      // try/finally 保证 busy 一定复位：任何异常都不会永久锁死战斗界面
+      try {
+        let r = clone(run)
+        endPlayerTurn(r.combat!, r)
         set({ run: r })
         drainFx(r)
-        if (!more || r.combat!.combatOver) break
-      }
-      if (get().run!.combat!.combatOver) { finishCombat(); set({ busy: false }); return }
+        if (r.combat!.combatOver) { finishCombat(); return }
 
-      await sleep(450)
-      r = clone(get().run!)
-      enemyTurnEnd(r.combat!, r)
-      if (r.hp > 0 && !r.combat!.combatOver) {
-        startPlayerTurn(r.combat!, r)
+        r = clone(get().run!)
+        enemyTurnStart(r.combat!)
+        set({ run: r })
+
+        for (let guard = 0; guard < 30; guard++) {
+          await sleep(600)
+          r = clone(get().run!)
+          const more = enemyStep(r.combat!, r)
+          set({ run: r })
+          drainFx(r)
+          if (!more || r.combat!.combatOver) break
+        }
+        if (get().run!.combat!.combatOver) { finishCombat(); return }
+
+        await sleep(400)
+        r = clone(get().run!)
+        enemyTurnEnd(r.combat!, r)
+        if (r.hp > 0 && !r.combat!.combatOver) {
+          startPlayerTurn(r.combat!, r)
+        }
+        set({ run: r })
+        drainFx(r)
+        if (r.combat!.combatOver) { finishCombat() }
+      } catch (err) {
+        // 引擎异常：记录并强制恢复玩家回合，避免界面锁死
+        console.error('[endTurn] 引擎异常:', err)
+        const r = clone(get().run!)
+        if (r.combat && !r.combat.combatOver) {
+          r.combat.phase = 'player'
+          set({ run: r, toast: '发生异常，回合已恢复' })
+          setTimeout(() => { if (get().toast === '发生异常，回合已恢复') set({ toast: null }) }, 2000)
+        }
+      } finally {
+        set({ busy: false })
       }
-      set({ run: r })
-      drainFx(r)
-      if (r.combat!.combatOver) { finishCombat() }
-      set({ busy: false })
     },
 
     usePotion: (idx, targetUid) => {
@@ -337,6 +350,19 @@ export const useGame = create<GameStore>((set, get) => {
       set({ run: r, selectedPotionIdx: null })
       drainFx(r)
       if (r.combat!.combatOver) finishCombat()
+    },
+
+    // 地图/非战斗场景使用药水（血瓶、果汁可直接生效）
+    usePotionMap: (idx) => {
+      const { run } = get()
+      if (!run || run.combat) return
+      const pid = run.potions[idx]
+      if (!pid) return
+      const r = clone(run)
+      const res = usePotionOutOfCombat(r, idx)
+      if (!res.ok) { showToastSafe(res.msg || '无法使用该药水'); return }
+      set({ run: r, toast: res.msg || null })
+      if (res.msg) setTimeout(() => { if (get().toast === res.msg) set({ toast: null }) }, 2200)
     },
 
     discardPotion: (idx) => {
@@ -438,6 +464,9 @@ export const useGame = create<GameStore>((set, get) => {
     takeCard: (cardId) => {
       const { run } = get()
       if (!run?.reward) return
+      // 原版规则：奖励只能选一张卡，选后其他卡不可再选
+      const alreadyTook = run.reward.taken.some(t => t.startsWith('card_'))
+      if (alreadyTook) { showToastSafe('已经选择过一张卡牌了'); return }
       if (run.reward.taken.includes('card_' + cardId)) return
       const r = clone(run)
       r.deck.push(makeCard(cardId))
@@ -586,8 +615,9 @@ export const useGame = create<GameStore>((set, get) => {
       if (!run?.currentEvent || select) return
       const ev = EVENTS_POOL[run.currentEvent]
       const choice = ev.choices[idx]
-      const result: EventResult = applyEventEffect(run, ev.id, choice.effect)
+      // 先克隆再应用效果，避免直接突变 store 状态
       const r = clone(run)
+      const result: EventResult = applyEventEffect(r, ev.id, choice.effect)
 
       if (result.gold) { r.gold += result.gold; r.goldEarned += Math.max(0, result.gold) }
       if (result.healPct) {

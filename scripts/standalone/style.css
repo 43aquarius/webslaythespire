@@ -106,11 +106,11 @@ body { font-family: "Noto Serif SC", "Source Han Serif SC", "STSong", "SimSun", 
 .energy img { width: 100%; height: 100%; object-fit: contain; }
 .energy span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 900;
   color: #fff; text-shadow: 2px 2px 0 #802000, 0 0 12px #ff5000; font-family: inherit; }
-.end-turn { position: absolute; right: 28px; bottom: 118px; font-size: 22px; padding: 12px 30px; z-index: 40; }
+.end-turn { position: absolute; right: 28px; bottom: 118px; font-size: 22px; padding: 12px 30px; z-index: 46; }
 
 /* 手牌 */
-.hand-row { position: absolute; left: 0; right: 0; bottom: -34px; height: 300px; display: flex; justify-content: center; align-items: flex-end; z-index: 45; }
-.hand-card { position: absolute; transform-origin: bottom center; cursor: pointer; transition: transform .18s ease-out; }
+.hand-row { position: absolute; left: 0; right: 0; bottom: -34px; height: 300px; display: flex; justify-content: center; align-items: flex-end; z-index: 45; pointer-events: none; }
+.hand-card { position: absolute; transform-origin: bottom center; cursor: pointer; transition: transform .18s ease-out; pointer-events: auto; }
 .hand-inner { transition: transform .16s ease-out; }
 .hand-card:hover { z-index: 60 !important; }
 .hand-card:hover .hand-inner { transform: translateY(-90px) scale(1.3); }

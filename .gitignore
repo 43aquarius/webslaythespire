@@ -64,3 +64,4 @@ server.log
 agent-browser*
 scripts/standalone/bundle.js
 scripts/standalone/assets.json
+tool-results/

@@ -20,6 +20,8 @@ const NODE_NAME: Record<string, string> = {
 export function MapScreen() {
   const run = useGame(s => s.run)
   const chooseNode = useGame(s => s.chooseNode)
+  const usePotionMap = useGame(s => s.usePotionMap)
+  const openPile = useGame(s => s.openPile)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [tipNode, setTipNode] = useState<string | null>(null)
 
@@ -55,9 +57,17 @@ export function MapScreen() {
         <div className="flex gap-1 items-center">
           {run.relics.map(id => <RelicIcon key={id} id={id} size={34} />)}
         </div>
-        <div className="flex gap-1 items-center ml-2">
-          {run.potions.map((pid, i) => <PotionSlot key={i} potionId={pid} size={32} />)}
+        <div className="flex gap-1 items-center">
+          {run.potions.map((pid, i) => (
+            <PotionSlot
+              key={i} potionId={pid} size={32}
+              onClick={() => usePotionMap(i)}
+            />
+          ))}
         </div>
+        <button className="sts-btn" style={{ fontSize: 13, padding: '4px 14px' }} onClick={() => openPile('deck')}>
+          查看牌组
+        </button>
         <div className="ml-auto sts-body" style={{ color: '#a89070', fontSize: 13 }}>
           第 1 幕 · 层 {run.visitedNodes.length}
         </div>

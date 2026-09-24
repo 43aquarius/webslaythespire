@@ -7,6 +7,18 @@ import { POTIONS } from '@/game/potions'
 
 const A = '/assets'
 
+// ============ 状态图标映射（修复缺失素材） ============
+const STATUS_IMG_FIX: Record<string, string> = {
+  angry: 'anger',            // 素材库文件名为 anger.png
+  metallicizeE: 'metallicize', // 敌人金属化复用 metallicize 图标
+  asleep: '../intent/sleep',   // 沉睡复用意图 Zzz 图标
+}
+export function statusImg(id: string): string {
+  const fix = STATUS_IMG_FIX[id]
+  if (fix) return `${A}/${fix.startsWith('../') ? fix.slice(3) : 'status/' + fix}.png`
+  return `${A}/status/${id}.png`
+}
+
 // ============ 状态名称映射 ============
 export const STATUS_INFO: Record<string, { name: string; desc: string; buff?: boolean }> = {
   strength: { name: '力量', desc: '每点力量使攻击伤害 +1。', buff: true },
@@ -91,7 +103,7 @@ export function StatusRow({ statuses, size = 30 }: { statuses: StatusMap; size?:
                 border: '1px solid rgba(255,255,255,0.25)',
               }}
             >
-              <img src={`${A}/status/${id}.png`} alt={id} className="w-full h-full object-contain" draggable={false}
+              <img src={statusImg(id)} alt={id} className="w-full h-full object-contain" draggable={false}
                 style={{ filter: id === 'vulnerable' || id === 'weak' || id === 'frail' || id === 'noDraw' ? 'drop-shadow(0 0 3px #c04030)' : 'drop-shadow(0 0 3px #30a0c0)' }} />
               {n !== 1 || id === 'vulnerable' || id === 'weak' || id === 'frail' ? (
                 <span

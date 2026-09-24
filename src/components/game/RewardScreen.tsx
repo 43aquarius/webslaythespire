@@ -45,24 +45,29 @@ export function RewardScreen() {
           <div className="flex flex-col items-center gap-2 mt-2">
             <div className="sts-body" style={{ color: '#c8b090', fontSize: 15 }}>选择一张卡牌加入牌组（或跳过）</div>
             <div className="flex gap-4 flex-wrap justify-center px-4">
-              {r.cards.map((cid, i) => {
-                const taken = r.taken.includes('card_' + cid)
-                return (
-                  <div key={cid} className="sts-card-in" style={{ animationDelay: `${i * 0.12}s` }}>
-                    <CardView
-                      card={{ uid: 'reward_' + cid, id: cid, upgraded: 0 }}
-                      width={168}
-                      dimmed={taken}
-                      onClick={() => !taken && takeCard(cid)}
-                    />
-                    {taken && (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="sts-title" style={{ fontSize: 30, color: '#7fe08a', textShadow: '2px 2px 0 #000' }}>已选</span>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+              {(() => {
+                // 原版规则：奖励卡牌只能选一张，选后其余锁定
+                const tookAny = r.taken.some(t => t.startsWith('card_'))
+                return r.cards.map((cid, i) => {
+                  const taken = r.taken.includes('card_' + cid)
+                  const locked = tookAny && !taken
+                  return (
+                    <div key={cid} className="sts-card-in relative" style={{ animationDelay: `${i * 0.12}s` }}>
+                      <CardView
+                        card={{ uid: 'reward_' + cid, id: cid, upgraded: 0 }}
+                        width={168}
+                        dimmed={taken || locked}
+                        onClick={() => !taken && !locked && takeCard(cid)}
+                      />
+                      {taken && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="sts-title" style={{ fontSize: 30, color: '#7fe08a', textShadow: '2px 2px 0 #000' }}>已选</span>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
+              })()}
             </div>
           </div>
         )}
