@@ -93,9 +93,9 @@ export const CARDS_SILENT: Record<string, CardDef> = {
     id: 'bane', name: '祸根', nameEn: 'Bane', type: 'attack', rarity: 'uncommon', cost: 1, target: 'enemy', color: 'green',
     values: [7], upValues: [10], desc: '造成 {0} 点伤害。若目标处于中毒状态，再造成 {0} 点伤害。', upDesc: '造成 {0} 点伤害。若目标处于中毒状态，再造成 {0} 点伤害。', art: 'bane',
   },
-  bouncingBlade: {
-    id: 'bouncingBlade', name: '弹跳之刃', nameEn: 'Bouncing Blade', type: 'skill', rarity: 'uncommon', cost: 1, target: 'enemy', color: 'green',
-    values: [3, 3], upValues: [4, 4], desc: '对随机敌人造成 {0} 点伤害，共 {1} 次。', upDesc: '对随机敌人造成 {0} 点伤害，共 {1} 次。', art: 'bouncingBlade',
+  bouncingFlask: {
+    id: 'bouncingFlask', name: '弹跳药瓶', nameEn: 'Bouncing Flask', type: 'skill', rarity: 'uncommon', cost: 1, target: 'none', color: 'green',
+    values: [3, 3], upValues: [4, 3], desc: '对随机敌人施加 {0} 层中毒，共 {1} 次。', upDesc: '对随机敌人施加 {0} 层中毒，共 {1} 次。', art: 'bouncingFlask',
   },
   calculatedGamble: {
     id: 'calculatedGamble', name: '谨慎下注', nameEn: 'Calculated Gamble', type: 'skill', rarity: 'uncommon', cost: 2, upCost: 0, target: 'none', exhaust: true, color: 'green',
@@ -109,9 +109,9 @@ export const CARDS_SILENT: Record<string, CardDef> = {
     id: 'catalyst', name: '催化剂', nameEn: 'Catalyst', type: 'skill', rarity: 'uncommon', cost: 1, target: 'enemy', exhaust: true, color: 'green',
     values: [2], upValues: [3], desc: '目标的 Poison层数翻 {0} 倍。消耗。', upDesc: '目标的中毒层数变为 {0} 倍。消耗。', art: 'catalyst',
   },
-  chumpBlocker: {
-    id: 'chumpBlocker', name: '肉盾', nameEn: 'Chump Blocker', type: 'skill', rarity: 'uncommon', cost: 1, target: 'self', color: 'green',
-    values: [5, 1], upValues: [8, 1], desc: '获得 {0} 点格挡。将 {1} 张"小刀"加入手牌。', upDesc: '获得 {0} 点格挡。将 {1} 张"小刀"加入手牌。', art: 'chumpBlocker',
+  cripplingCloud: {
+    id: 'cripplingCloud', name: '致残云雾', nameEn: 'Crippling Cloud', type: 'skill', rarity: 'uncommon', cost: 2, target: 'none', color: 'green',
+    values: [4, 2], upValues: [7, 2], desc: '使所有敌人获得 {0} 层中毒和 {1} 层虚弱、{1} 层易伤。', upDesc: '使所有敌人获得 {0} 层中毒和 {1} 层虚弱、{1} 层易伤。', art: 'cripplingCloud',
   },
   concentrate: {
     id: 'concentrate', name: '专注', nameEn: 'Concentrate', type: 'skill', rarity: 'uncommon', cost: 0, target: 'none', color: 'green',

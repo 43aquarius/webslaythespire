@@ -7,6 +7,7 @@ import { MapScreen } from '@/components/game/MapScreen'
 import { CombatScreen } from '@/components/game/CombatScreen'
 import { RewardScreen, BossRelicScreen, RestScreen, TreasureScreen, GameOverScreen } from '@/components/game/RewardScreen'
 import { ShopScreen, EventScreen } from '@/components/game/ShopScreen'
+import { NeowScreen } from '@/components/game/NeowScreen'
 import { PileViewOverlay, CardSelectOverlay, ToastView } from '@/components/game/Overlays'
 import { MusicPlayer } from '@/components/game/MusicPlayer'
 
@@ -21,6 +22,7 @@ export default function Home() {
     <Stage>
       <div className="w-full h-full relative">
         {cur === 'title' && <TitleScreen />}
+        {cur === 'neow' && <NeowScreen />}
         {cur === 'map' && <MapScreen />}
         {cur === 'combat' && <CombatScreen />}
         {cur === 'reward' && <RewardScreen />}

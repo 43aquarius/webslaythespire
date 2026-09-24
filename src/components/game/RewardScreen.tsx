@@ -240,7 +240,7 @@ export function GameOverScreen() {
         <StatRow label="赚取金币" value={String(info.goldEarned)} />
       </div>
       <div className="flex gap-5">
-        <button className="sts-btn sts-title" style={{ fontSize: 22 }} onClick={startRun}>再来一局</button>
+        <button className="sts-btn sts-title" style={{ fontSize: 22 }} onClick={() => startRun()}>再来一局</button>
         <button className="sts-btn sts-title" style={{ fontSize: 22 }} onClick={backToTitle}>回到主菜单</button>
       </div>
     </div>

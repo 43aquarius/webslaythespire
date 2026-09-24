@@ -438,7 +438,11 @@ export function evokeOrbEffect(combat: CombatState, run: RunState, orb: Orb) {
   const focus = combat.player.statuses.focus || 0
   const living = () => combat.enemies.filter(e => !e.dying && e.hp > 0)
   if (orb.type === 'lightning') {
-    if (living().length) damageEnemy(combat, run, pick(living()), 9 + focus, false)
+    if (combat.player.statuses.electro) {
+      living().forEach(e => damageEnemy(combat, run, e, 9 + focus, false))
+    } else if (living().length) {
+      damageEnemy(combat, run, pick(living()), 9 + focus, false)
+    }
   } else if (orb.type === 'frost') {
     playerGainBlock(combat, run, 5 + focus)
   } else if (orb.type === 'dark') {
@@ -464,7 +468,11 @@ function orbsPassiveEnd(combat: CombatState, run: RunState) {
   const living = () => combat.enemies.filter(e => !e.dying && e.hp > 0)
   orbs.forEach(orb => {
     if (orb.type === 'lightning') {
-      if (living().length) damageEnemy(combat, run, pick(living()), orbBase(combat, 'lightning'), false)
+      if (combat.player.statuses.electro) {
+        living().forEach(e => damageEnemy(combat, run, e, orbBase(combat, 'lightning'), false))
+      } else if (living().length) {
+        damageEnemy(combat, run, pick(living()), orbBase(combat, 'lightning'), false)
+      }
     } else if (orb.type === 'frost') {
       playerGainBlock(combat, run, orbBase(combat, 'frost'))
     } else if (orb.type === 'dark') {
@@ -1467,13 +1475,20 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
       for (let i = 0; i < v[0]; i++) combat.hand.push(makeCard('shiv'))
       break
     }
-    case 'cloakAndDagger': case 'chumpBlocker': {
+    case 'cloakAndDagger': {
       playerGainBlock(combat, run, v[0])
       const n = v[1]
-      const up = id === 'cloakAndDagger' && card.upgraded > 0 ? 1 : 0
+      const up = card.upgraded > 0 ? 1 : 0
       for (let i = 0; i < n; i++) combat.hand.push(makeCard('shiv', up))
       break
     }
+    case 'cripplingCloud':
+      for (const e of all()) {
+        applyStatus(combat, e, 'poison', v[0])
+        applyStatus(combat, e, 'weak', v[1])
+        applyStatus(combat, e, 'vulnerable', v[1])
+      }
+      break
     case 'daggerSpray':
       for (let i = 0; i < v[1]; i++) playerAttack(combat, run, v[0], null, 1, true)
       break
@@ -1534,11 +1549,11 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
       playerAttack(combat, run, v[0], target)
       if (target && target.hp > 0 && target.statuses.poison) playerAttack(combat, run, v[0], target)
       break
-    case 'bouncingBlade':
+    case 'bouncingFlask':
       for (let i = 0; i < v[1]; i++) {
         const living = all()
         if (living.length === 0) break
-        playerAttack(combat, run, v[0], pick(living))
+        applyStatus(combat, pick(living), 'poison', v[0])
       }
       break
     case 'calculatedGamble': {
@@ -1835,17 +1850,10 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
     case 'amplifyS':
       applyStatus(combat, 'player', 'amplifyS', v[0])
       break
-    case 'chainLightning': {
-      if (!target) break
-      let cur = v[0]
-      const hit: string[] = []
-      let t: EnemyInstance | null = target
-      while (t) {
-        playerAttack(combat, run, cur, t)
-        hit.push(t.uid)
-        cur += v[1]
-        t = all().find(e => !hit.includes(e.uid)) || null
-      }
+    case 'electrodynamics': {
+      // 电动力学：闪电命中所有敌人（本场战斗）+ 引导闪电
+      applyStatus(combat, 'player', 'electro', v[1] || 1)
+      for (let i = 0; i < v[0]; i++) channelOrb(combat, run, 'lightning')
       break
     }
     case 'coreSurge':

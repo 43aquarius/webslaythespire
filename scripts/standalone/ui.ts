@@ -2,59 +2,26 @@
 // 架构：1600×900 舞台等比缩放 + 屏幕切换时构建骨架 + 状态更新时仅差异更新区域
 // 修复：innerHTML 全量重建导致的画面闪动；补上选牌/牌堆遮罩渲染
 import { useGame } from '@/store/gameStore'
-import { CARDS, cardCost, cardDesc } from '@/game/cards'
+import { CARDS, cardCost, cardDesc, cardColor } from '@/game/cards'
 import { ENEMIES } from '@/game/enemies'
 import { RELICS } from '@/game/relics'
 import { POTIONS } from '@/game/potions'
 import { enemyDisplayDamage } from '@/game/engine'
 import { EVENTS } from '@/game/events'
+import { CHARACTER_INFO } from '@/game/run'
+import { STATUS_INFO, STATUS_IMG_FIX, statusImgPath } from '@/game/statusInfo'
+import type { CharacterId } from '@/game/types'
 import type { RunState, CombatState, CardInstance, EnemyInstance } from '@/game/types'
 
 declare const ASSETS: Record<string, string>
 const A = (k: string) => ASSETS[k] || ''
 
-// 状态图标映射（修复缺失素材：angry→anger、metallicizeE→metallicize、asleep→意图 Zzz）
-const STATUS_IMG_FIX: Record<string, string> = {
-  angry: 'status/anger.png',
-  metallicizeE: 'status/metallicize.png',
-  asleep: 'intent/sleep.png',
-}
+// 状态图标路径（共享映射 + 单文件素材解析）
 function statusImgKey(id: string): string {
-  return STATUS_IMG_FIX[id] || ('status/' + id + '.png')
+  const fix = STATUS_IMG_FIX[id]
+  return fix ? (fix.startsWith('../') ? fix.slice(3) : 'status/' + fix) + '.png' : 'status/' + id + '.png'
 }
 
-const STATUS_INFO: Record<string, { name: string; desc: string; buff?: boolean }> = {
-  strength: { name: '力量', desc: '每点力量使攻击伤害 +1。', buff: true },
-  dexterity: { name: '敏捷', desc: '每点敏捷使获得的格挡 +1。', buff: true },
-  vulnerable: { name: '易伤', desc: '受到的攻击伤害 ×1.5。每回合结束 -1。' },
-  weak: { name: '虚弱', desc: '造成的攻击伤害 ×0.75。每回合结束 -1。' },
-  frail: { name: '脆弱', desc: '获得的格挡 ×0.75。每回合结束 -1。' },
-  thorns: { name: '尖刺', desc: '被攻击时对攻击者造成 N 点伤害。', buff: true },
-  metallicize: { name: '金属化', desc: '回合结束时获得 N 点格挡。', buff: true },
-  regen: { name: '回复', desc: '回合开始时回复 N 点生命，然后 -1。', buff: true },
-  ritual: { name: '仪式', desc: '回合开始时获得 N 点力量。', buff: true },
-  demonForm: { name: '恶魔形态', desc: '回合开始时获得 N 点力量。', buff: true },
-  barricade: { name: '壁垒', desc: '格挡不再在回合开始时消失。', buff: true },
-  brutality: { name: '残暴', desc: '回合开始时失去 1 点生命并抽 1 张牌。', buff: true },
-  corruption: { name: '堕落', desc: '技能牌费用为 0，打出后消耗。', buff: true },
-  combust: { name: '燃烧', desc: '回合结束时失去 1 点生命，对所有敌人造成 N 点伤害。', buff: true },
-  darkEmbrace: { name: '暗黑拥抱', desc: '每当有牌被消耗时抽 1 张牌。', buff: true },
-  evolve: { name: '进化', desc: '抽到状态牌时额外抽 N 张牌。', buff: true },
-  feelNoPain: { name: '无痛', desc: '每当有牌被消耗时获得 N 点格挡。', buff: true },
-  fireBreathing: { name: '火焰吐息', desc: '抽到状态/诅咒牌时对所有敌人造成 N 点伤害。', buff: true },
-  rupture: { name: '破裂', desc: '因打牌失去生命时获得 N 点力量。', buff: true },
-  juggernaut: { name: '主宰', desc: '获得格挡时对随机敌人造成 N 点伤害。', buff: true },
-  berserk: { name: '狂暴', desc: '回合开始时获得 1 点能量。', buff: true },
-  rage: { name: '狂怒', desc: '本回合每打出一张攻击牌获得 N 点格挡。', buff: true },
-  doubleTap: { name: '连击', desc: '接下来 N 张攻击牌被打出两次。', buff: true },
-  noDraw: { name: '无法抽牌', desc: '本回合无法再抽牌。' },
-  angry: { name: '激怒', desc: '你每打出一张技能牌，获得 N 点力量。' },
-  asleep: { name: '沉睡', desc: '沉睡中，受到攻击会立即醒来。' },
-  curlUp: { name: '蜷缩', desc: '首次受到攻击伤害时获得 N 点格挡。' },
-  metallicizeE: { name: '金属化', desc: '回合结束时获得 N 点格挡。' },
-  flameBarrier: { name: '火焰屏障', desc: '本回合被攻击时对攻击者造成 N 点伤害。', buff: true },
-  modeShift: { name: '模式切换', desc: '守卫者的防御模式，格挡攒满后切换攻击模式。' },
-}
 
 const esc = (s: string) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 const g = () => useGame.getState()
@@ -75,11 +42,20 @@ let stageEl: HTMLElement
 let fxLayer: HTMLElement
 const app = document.getElementById('app')!
 
+let portraitForceContinue = false
+function isPortraitNeed() {
+  // 双信号：任一判定竖屏且小屏才提示（平板竖屏不提示）
+  const bySize = window.innerHeight > window.innerWidth
+  const byMq = matchMedia('(orientation: portrait)').matches
+  const small = Math.min(window.innerWidth, window.innerHeight) < 760
+  return small && (bySize || byMq) && !portraitForceContinue
+}
+
 function fitStage() {
   const k = Math.min(window.innerWidth / STAGE_W, window.innerHeight / STAGE_H)
   stageEl.style.transform = `translate(-50%, -50%) scale(${k})`
   const rp = document.getElementById('rotate-prompt')
-  if (rp) rp.style.display = (window.innerHeight > window.innerWidth && Math.min(window.innerWidth, window.innerHeight) < 760) ? 'flex' : 'none'
+  if (rp) rp.style.display = isPortraitNeed() ? 'flex' : 'none'
 }
 
 function setupStage() {
@@ -94,17 +70,35 @@ function setupStage() {
   stage.appendChild(toast)
   const ov = document.createElement('div'); ov.id = 'overlay-layer'
   stage.appendChild(ov)
-  // 竖屏提示
+  // 竖屏提示（含逃生按钮：永不卡死）
   const rp = document.createElement('div'); rp.id = 'rotate-prompt'
   rp.innerHTML = `<div class="rotate-phone"></div>
     <div class="sts-title" style="font-size:30px;color:#ffd980;text-shadow:2px 2px 0 #000">请横屏游玩</div>
-    <div class="sts-body" style="color:#a89070;font-size:15px;line-height:1.8;text-align:center">杀戮尖塔为横屏游戏<br>旋转设备以获得最佳体验</div>`
+    <div class="sts-body" style="color:#a89070;font-size:15px;line-height:1.8;text-align:center">杀戮尖塔为横屏游戏<br>旋转设备以获得最佳体验</div>
+    <button class="sts-btn sts-title" id="rp-try-landscape" style="font-size:18px;padding:9px 30px">⛶ 自动切换横屏</button>
+    <button class="sts-btn" id="rp-continue" style="font-size:15px;padding:7px 22px;opacity:.85">竖屏继续游玩 →</button>`
   document.body.appendChild(rp)
+  rp.querySelector('#rp-try-landscape')?.addEventListener('click', async () => {
+    try {
+      const d = document as any
+      if (!d.fullscreenElement) await d.documentElement.requestFullscreen().catch(() => { })
+      const so = (screen as any).orientation
+      await so?.lock?.('landscape')?.catch(() => { })
+    } catch { /* iOS 不支持，静默 */ }
+  })
+  rp.querySelector('#rp-continue')?.addEventListener('click', () => {
+    portraitForceContinue = true
+    fitStage()
+  })
   stageEl = stage
   fxLayer = fx
   fitStage()
   window.addEventListener('resize', fitStage)
-  window.addEventListener('orientationchange', fitStage)
+  window.addEventListener('orientationchange', () => {
+    // 部分安卓浏览器尺寸延迟更新：多次重测
+    setTimeout(fitStage, 100); setTimeout(fitStage, 350); setTimeout(fitStage, 800)
+  })
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', fitStage)
   // 预加载关键背景，避免首次切屏白闪
   for (const k of ['bg/combat.jpg', 'bg/map.jpg']) { const img = new Image(); img.src = A(k) }
 }
@@ -247,7 +241,8 @@ function updateMusic(st: ReturnType<typeof g>) {
   }
   musicLastStinger = null
   let key: TrackKey = 'level'
-  if (scr === 'shop') key = 'merchant'
+  if (scr === 'neow') key = 'shrine'
+  else if (scr === 'shop') key = 'merchant'
   else if (scr === 'event') key = 'shrine'
   else if (scr === 'bossRelic') key = 'credits'
   else if (scr === 'combat') {
@@ -257,34 +252,50 @@ function updateMusic(st: ReturnType<typeof g>) {
   music.play(key)
 }
 
-// ============ 卡牌 HTML ============
+// ============ 卡牌 HTML（四色卡框/宝球/类型图标） ============
 function raritySuffix(rarity: string): string {
   if (rarity === 'rare') return 'Rare'
   if (rarity === 'uncommon') return 'Uncommon'
   return 'Common'
 }
-const TYPE_BG: Record<string, string> = {
-  attack: 'frames/bgAttackRed.png',
-  skill: 'frames/bgSkillRed.png',
-  power: 'frames/bgPowerRed.png',
+const COLOR_FRAME_BG: Record<string, Record<string, string>> = {
+  red: { attack: 'frames/bgAttackRed.png', skill: 'frames/bgSkillRed.png', power: 'frames/bgPowerRed.png' },
+  green: { attack: 'frames/bgAttackGreen.png', skill: 'frames/bgSkillGreen.png', power: 'frames/bgPowerGreen.png' },
+  blue: { attack: 'frames/bgAttackBlue.png', skill: 'frames/bgSkillBlue.png', power: 'frames/bgPowerBlue.png' },
+  purple: { attack: 'frames/bgAttackPurple.png', skill: 'frames/bgSkillPurple.png', power: 'frames/bgPowerPurple.png' },
+  colorless: { attack: 'frames/bgAttackRed.png', skill: 'frames/bgSkillRed.png', power: 'frames/bgPowerRed.png' },
 }
+const COLOR_ORB: Record<string, string> = { red: 'cardRedOrb', green: 'cardGreenOrb', blue: 'cardBlueOrb', purple: 'cardPurpleOrb', colorless: 'cardRedOrb' }
+const TYPEICON_BASE: Record<string, string> = { red: '', green: 'silent', blue: 'defect', purple: 'watcher', colorless: '' }
+function typeIconKey(color: string, type: string, rarity: string): string {
+  const base = TYPEICON_BASE[color] || ''
+  let rar = raritySuffix(rarity)
+  if (type === 'power' && rar === 'Common') rar = 'Uncommon'
+  if (!base) return 'typeicons/' + type + rar + '.png'
+  return 'typeicons/' + base + type + rar.toLowerCase() + '.png'
+}
+const TYPE_NAME: Record<string, string> = { attack: '攻击', skill: '技能', power: '能力' }
 
 // 卡面内容（不含外层 .sts-card 包装，供手牌做差异更新）
 function cardInner(card: CardInstance, width = 148): string {
   const def = CARDS[card.id]
   if (!def) return ''
   const rar = raritySuffix(def.rarity)
+  const color = cardColor(card.id)
   const cost = cardCost(card, 0)
   const desc = cardDesc(card)
   const up = card.upgraded > 0
-  return `<img class="c512" src="${A(TYPE_BG[def.type])}" alt="">
+  const bg = (COLOR_FRAME_BG[color] || COLOR_FRAME_BG.red)[def.type]
+  const orb = COLOR_ORB[color] || 'cardRedOrb'
+  return `<img class="c512" src="${A(bg)}" alt="">
   <img src="${A('cardart/' + card.id + '.png')}" alt="" style="position:absolute;object-fit:cover;left:4%;top:11.5%;width:87.6%;height:49%;border-radius:3px">
   <img class="c512" src="${A('frames/frame' + def.type[0].toUpperCase() + def.type.slice(1) + rar + '.png')}" alt="">
   <img class="c512" src="${A('frames/banner' + rar + '.png')}" alt="">
   <div class="sts-title card-name" style="font-size:${width * 0.088}px;color:${rar === 'Rare' ? '#ffd98a' : '#ffe9c4'}">${esc(def.name)}</div>
-  ${cost !== -99 ? `<img class="c512" src="${A('frames/cardRedOrb.png')}" alt="">
+  ${cost !== -99 ? `<img class="c512" src="${A('frames/' + orb + '.png')}" alt="">
   <div class="sts-title card-cost" style="font-size:${width * 0.115}px">${cost === -1 ? 'X' : cost}</div>` : ''}
   <div class="sts-body card-desc" style="font-size:${width * 0.076}px">${up ? '<span style="color:#7fe08a">+ </span>' : ''}${esc(desc)}</div>
+  <div class="card-type-row"><img src="${A(typeIconKey(color, def.type, def.rarity))}" alt=""><span class="sts-title" style="font-size:${width * 0.062}px">${TYPE_NAME[def.type]}</span></div>
   ${up ? '<div class="sts-title card-up">✦</div>' : ''}`
 }
 
@@ -378,45 +389,107 @@ function updateHud(run: RunState, combat: boolean) {
   const floorEl = document.getElementById('hud-floor')
   if (floorEl) {
     if (combat) floorEl.style.display = 'none'
-    else { floorEl.style.display = ''; setText(floorEl, `第 1 幕 · 第 ${run.visitedNodes.length} 层`) }
+    else { floorEl.style.display = ''; setText(floorEl, `第 ${run.act} 幕 · 第 ${run.visitedNodes.length} 层`) }
   }
   setText(document.getElementById('hud-gold'), `💰 ${run.gold}`)
   setHtml(document.getElementById('hud-potions'), run.potions.map((p, i) => potionHtml(p, i, combat)).join(''))
   setHtml(document.getElementById('hud-relics'), run.relics.map(id => relicIcon(id)).join(''))
 }
 
-// ============ 标题 ============
+// ============ GitHub 图标（内联 SVG） ============
+const GITHUB_SVG = `<svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>`
+
+// ============ 标题（四角色选择 + GitHub 入口） ============
+const CHARACTERS: CharacterId[] = ['ironclad', 'silent', 'defect', 'watcher']
+const CHAR_COLOR: Record<string, string> = { ironclad: '#b03828', silent: '#3a9a5a', defect: '#3a7ac8', watcher: '#9a5ab8' }
+let selectedChar: CharacterId = 'ironclad'
+
 function rTitle(): string {
+  const cards = CHARACTERS.map(c => {
+    const info = CHARACTER_INFO[c]
+    const sel = selectedChar === c
+    const col = CHAR_COLOR[c]
+    return `<div class="char-card ${sel ? 'sel' : ''}" data-act="pickChar" data-char="${c}" style="${sel ? `border-color:${col};box-shadow:0 0 22px ${col}66` : ''}">
+      <img src="${A('hero/' + c + '.png')}" alt="${info.name}" draggable="false">
+      <div class="sts-title" style="font-size:20px;color:${sel ? col : '#d8c8a8'};text-shadow:1px 1px 0 #000">${info.name}</div>
+      <div class="sts-body" style="font-size:12px;color:#a89878;line-height:1.5">${info.desc}<br>❤ ${info.hp} 生命 · ${RELICS[info.relic]?.name ?? ''}</div>
+    </div>`
+  }).join('')
   return `<div class="screen bg-cover" style="background-image:url('${A('bg/combat.jpg')}')">
   <div class="shade"></div>
-  <div class="center-col">
-    <img src="${A('hero/ironclad.png')}" alt="ironclad" style="width:300px;filter:drop-shadow(0 14px 22px rgba(0,0,0,.8))">
+  <div class="center-col" style="padding-top:26px">
     <h1 class="sts-title game-title">杀戮尖塔</h1>
     <div class="sts-title subtitle">—— SLAY THE SPIRE · WEB 复刻版 ——</div>
-    <button class="sts-btn" data-act="startRun" style="font-size:28px;padding:14px 60px;margin-top:18px">开始攀登</button>
-    <div class="sts-body hint">扮演铁甲战士，征服第一幕的尖塔。<br>60+ 张卡牌 · 26 件遗物 · 14 种药水 · 15 种敌人 · 3 位首领</div>
+    <div class="char-row">${cards}</div>
+    <button class="sts-btn" data-act="startRun" style="font-size:26px;padding:12px 56px;margin-top:10px">开始攀登</button>
+    <div class="sts-body hint">4 位可选角色 · 220+ 张卡牌 · 60+ 种敌人 · 4 幕完整旅程</div>
+  </div>
+  <a class="github-btn" href="https://github.com/43aquarius/webslaythespire" target="_blank" rel="noreferrer" title="GitHub 仓库">${GITHUB_SVG}<span>43aquarius/webslaythespire</span></a>
+</div>`
+}
+
+// ============ 涅奥祝福（大鲸鱼开局事件） ============
+const NEOW_GREETING: Record<string, string> = {
+  ironclad: '哦，被放逐的战士', silent: '哦，沉默的猎手',
+  defect: '哦，战斗傀儡', watcher: '哦，盲眼的朝圣者',
+}
+function rNeow(run: RunState): string {
+  if (!run.neow) return ''
+  const chosen = run.neow.chosen
+  const opts = run.neow.options.map((opt, i) => {
+    const picked = chosen === opt.id
+    return `<button class="neow-opt ${picked ? 'picked' : ''} ${chosen ? 'off' : ''}" data-act="chooseNeow" data-idx="${i}" ${chosen && !picked ? 'disabled' : ''}>
+      <div class="sts-title" style="font-size:18px;color:#ffd980">${esc(opt.title)}</div>
+      <div class="sts-body" style="font-size:13px;color:#c8b898;line-height:1.6">${esc(opt.desc)}</div>
+    </button>`
+  }).join('')
+  return `<div class="screen bg-cover" style="background-image:url('${A('bg/map.jpg')}')">
+  <div class="shade" style="background:linear-gradient(180deg,rgba(4,4,10,.85),rgba(8,6,14,.6),rgba(4,4,10,.88))"></div>
+  <div class="center-col" style="padding-top:8px">
+    <img src="${A('neow/neow.png')}" alt="涅奥" draggable="false" style="width:400px;max-width:46vw;object-fit:contain;filter:drop-shadow(0 20px 36px rgba(0,0,0,.9)) drop-shadow(0 0 50px rgba(90,140,255,.25));animation:neowFloat 4s ease-in-out infinite">
+    <div class="sts-title" style="font-size:38px;color:#b8d0ff;text-shadow:3px 3px 0 #000,0 0 44px rgba(80,120,255,.5);letter-spacing:8px">涅奥</div>
+    <div class="sts-body" style="color:#a8b8d8;font-size:15px;line-height:1.8;max-width:620px;margin:4px 0 14px">巨鲸涅奥在尖塔脚下苏醒。<br>「<span style="color:#ffd980">${NEOW_GREETING[run.character] || '旅人'}</span>，我将赐予你一份祝福——选择吧。」</div>
+    <div class="neow-row">${opts}</div>
   </div>
 </div>`
 }
 
-// ============ 战斗界面（骨架 + 区域更新） ============
-function buildCombatScreen(): string {
-  return `<div class="screen bg-cover" id="combat-screen" data-bg="1" style="background-image:url('${A('bg/combat.jpg')}')">
+// ============ 战斗界面（骨架 + 区域更新，按角色/幕数适配） ============
+const ENERGY_ORB: Record<string, string> = { ironclad: 'redEnergy', silent: 'greenEnergy', defect: 'blueEnergy', watcher: 'purpleEnergy' }
+const STANCE_STYLE: Record<string, { name: string; color: string; desc: string }> = {
+  wrath: { name: '怒', color: '#ff8a4a', desc: '造成的攻击伤害翻倍，受到的攻击伤害翻倍。' },
+  calm: { name: '静', color: '#5aa8ff', desc: '退出平静姿态时获得 2 点能量。' },
+  divinity: { name: '神格', color: '#ffd980', desc: '造成的攻击伤害三倍。回合结束自动退出。' },
+}
+const ORB_NAME: Record<string, string> = { lightning: '闪电', frost: '冰霜', dark: '暗影', plasma: '等离子' }
+
+function combatBgKey(act: number): string {
+  if (act >= 4) return 'bg/combat4.jpg'
+  if (act === 3) return 'bg/combat3.jpg'
+  if (act === 2) return 'bg/combat2.jpg'
+  return 'bg/combat.jpg'
+}
+
+function buildCombatScreen(run: RunState): string {
+  const hero = run.character
+  return `<div class="screen bg-cover" id="combat-screen" data-bg="1" style="background-image:url('${A(combatBgKey(run.act))}')">
   ${topHudShell()}
   <div class="player-zone">
     <div class="player-fx-slot" id="player-fx-slot"></div>
+    <div id="player-extra"></div>
     <div id="player-status"></div>
-    <img src="${A('hero/ironclad.png')}" alt="" style="width:240px;filter:drop-shadow(0 8px 10px rgba(0,0,0,.5))">
+    <img src="${A('hero/' + hero + '.png')}" alt="" style="width:240px;filter:drop-shadow(0 8px 10px rgba(0,0,0,.5))">
   </div>
   <div class="enemies-row" id="enemies-row"></div>
   <div id="hint-holder"></div>
   <button class="pile-btn" id="pile-draw" data-act="openPile" data-pile="draw" style="left:26px;bottom:158px"><b>0</b><span>抽牌堆</span></button>
   <button class="pile-btn" id="pile-discard" data-act="openPile" data-pile="discard" style="right:26px;bottom:158px"><b>0</b><span>弃牌堆</span></button>
   <span id="exhaust-holder"></span>
-  <div class="energy" id="energy-box"><img src="${A('frames/redEnergy.png')}" alt=""><span id="energy-num"></span></div>
+  <div class="energy" id="energy-box"><img src="${A('frames/' + (ENERGY_ORB[hero] || 'redEnergy') + '.png')}" alt=""><span id="energy-num"></span></div>
   <button class="sts-btn end-turn sts-title" data-act="endTurn" id="end-turn-btn"></button>
   <div class="hand-row" id="hand-row"></div>
   <div id="banner-holder"></div>
+  <div id="card-play-fx"></div>
 </div>`
 }
 
@@ -527,11 +600,53 @@ function updateHand(run: RunState) {
   })
 }
 
+// 姿态徽章 + 宝球行（player-extra 区域差异更新）
+function playerExtraHtml(run: RunState): string {
+  const c = run.combat
+  if (!c) return ''
+  const p = c.player
+  let html = ''
+  if (run.character === 'watcher') {
+    const stance = p.stance || 'none'
+    const mantra = p.mantra || 0
+    const st = STANCE_STYLE[stance]
+    if (st) {
+      html += `<div class="stance-badge sts-title" data-tip="<b style='color:${st.color}'>${st.name}</b><br>${st.desc}" style="background:linear-gradient(180deg,${st.color}33,rgba(10,8,6,.9));border:2px solid ${st.color};color:${st.color}">${st.name}</div>`
+    }
+    if (mantra > 0) {
+      html += `<div class="mantra-badge sts-body" data-tip="<b>真言</b><br>积攒12点后进入神格姿态。">真言 ${mantra}/12</div>`
+    }
+  }
+  if (run.character === 'defect') {
+    const orbs = p.orbs || []
+    const slots = p.orbSlots ?? 3
+    const cells: string[] = []
+    for (let i = 0; i < slots; i++) {
+      const o = orbs[i]
+      if (o) {
+        const nm = ORB_NAME[o.type] || o.type
+        cells.push(`<span class="orb-cell has" data-tip="<b>${nm}球</b>">${o.type[0].toUpperCase()}</span>`)
+      } else {
+        cells.push('<span class="orb-cell"></span>')
+      }
+    }
+    html += `<div class="orb-row">${cells.join('')}</div>`
+  }
+  return html
+}
+
 function updateCombatScreen(run: RunState) {
   const c = run.combat
   if (!c) return
   const st = g()
   updateHud(run, true)
+  // 背景随幕数切换（键控，避免重复设 url）
+  const cs = document.getElementById('combat-screen')
+  if (cs) {
+    const bg = A(combatBgKey(run.act))
+    if ((cs as any).__bg !== bg) { (cs as any).__bg = bg; cs.style.backgroundImage = `url('${bg}')` }
+  }
+  setHtml(document.getElementById('player-extra'), playerExtraHtml(run))
   setHtml(document.getElementById('player-status'), statusRow(c.player.statuses, 30))
   updateEnemies(run)
   updateHand(run)
@@ -895,10 +1010,33 @@ function rGameOver(run: RunState): string {
 </div>`
 }
 
-// ============ 遮罩层（牌堆查看 / 选牌） ============
+// ============ 遮罩层（牌堆查看 / 选牌 / 预见） ============
+let scryMarked: Set<string> = new Set()
+
 function overlayHtml(st: ReturnType<typeof g>): { html: string; sig: string } {
   const run = st.run
   if (!run) return { html: '', sig: '' }
+  if (run.combat?.pendingScry) {
+    // 预见：展示抽牌堆顶 N 张，点击标记弃置
+    const n = run.combat.pendingScry
+    const top = run.combat.drawPile.slice(-n)
+    const sig = `scry:${n}:${top.map(c => c.uid).join(',')}:${[...scryMarked].join(',')}`
+    const cards = top.map((c, i) => `<div class="card-in scry-card ${scryMarked.has(c.uid) ? 'marked' : ''}" style="animation-delay:${Math.min(i, 8) * 0.06}s" data-act="scryToggle" data-uid="${c.uid}">${cardHtml(c, 150)}</div>`).join('')
+    return {
+      sig,
+      html: `<div class="overlay" style="background:rgba(4,2,8,.55)">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:16px">
+          <div class="sts-title" style="font-size:30px;color:#c8b8f0;text-shadow:2px 2px 0 #000">预见</div>
+          <div class="sts-body" style="color:#a898c0;font-size:15px">点击卡牌将其弃置（下回合不会抽到），最多弃 ${n} 张</div>
+          <div class="sel-cards" style="max-height:520px">${cards || '<div class="sts-body">抽牌堆已空</div>'}</div>
+          <div style="display:flex;align-items:center;gap:18px">
+            <div class="sts-body" style="color:#c8a860;font-size:14px">已弃置 ${scryMarked.size} 张</div>
+            <button class="sts-btn sts-title" data-act="resolveScry" style="font-size:20px;padding:8px 36px">确认</button>
+          </div>
+        </div>
+      </div>`
+    }
+  }
   if (st.pileView) {
     const pile = st.pileView
     const titles: Record<string, string> = { draw: '抽牌堆（随机排序）', discard: '弃牌堆', exhaust: '消耗堆', deck: '牌组' }
@@ -990,6 +1128,66 @@ function enemyFlash(uid: string) {
   ], { duration: 350, easing: 'ease-out' })
 }
 
+// 敌人突进：向玩家方向冲撞
+function enemyLunge(uid: string) {
+  const el = document.querySelector(`.enemy[data-euid="${uid}"] .sprite`) as HTMLElement | null
+  el?.animate?.([
+    { transform: 'translateX(0)' },
+    { transform: 'translateX(-120px) scale(1.06)' },
+    { transform: 'translateX(0)' },
+  ], { duration: 420, easing: 'cubic-bezier(.3,0,.4,1)' })
+}
+
+// 出牌动画：卡牌在屏幕中央放大淡出
+let lastCardPlayFx = 0
+function cardPlayFx(text: string) {
+  const holder = document.getElementById('card-play-fx')
+  if (!holder) return
+  // text 格式：cardId|upgraded
+  const [cid, up] = (text || '').split('|')
+  const inst: CardInstance = { uid: 'fx_' + Date.now(), id: cid, upgraded: Number(up) || 0 }
+  if (!CARDS[cid]) return
+  const el = document.createElement('div')
+  el.className = 'card-play-fx'
+  el.innerHTML = cardHtml(inst, 190)
+  holder.appendChild(el)
+  const anim = el.animate?.([
+    { transform: 'scale(1.25)', opacity: 1 },
+    { transform: 'scale(1.35)', opacity: 1, offset: 0.6 },
+    { transform: 'scale(1.5)', opacity: 0 },
+  ], { duration: 620, easing: 'ease-out' })
+  if (anim) anim.onfinish = () => el.remove()
+}
+
+// 斩击特效：在目标敌人位置显示白色斩击弧光
+function spawnSlash(uid: string) {
+  const target = document.querySelector(`.enemy[data-euid="${uid}"] .sprite`) as HTMLElement | null
+  const holder = document.getElementById('card-play-fx') || fxLayer
+  const pos = fxPositions[uid]
+  if (!pos) return
+  const el = document.createElement('div')
+  el.className = 'slash-fx'
+  el.style.left = pos.x + 'px'
+  el.style.top = (pos.y + 100) + 'px'
+  holder.appendChild(el)
+  setTimeout(() => el.remove(), 480)
+  void target
+}
+
+// 引导宝球特效：能量球光效闪烁
+const ORB_FX_COLOR: Record<string, string> = { lightning: '#f0d040', frost: '#7ac0e8', dark: '#9a6ad8', plasma: '#e87ab0' }
+function spawnOrbFx(type: string) {
+  const pos = fxPositions['player']
+  if (!pos) return
+  const el = document.createElement('div')
+  el.className = 'fx-float'
+  const col = ORB_FX_COLOR[type] || '#c0d0ff'
+  el.style.cssText = `left:${pos.x + 120}px;top:${pos.y}px;color:${col};font-size:26px`
+  el.innerHTML = `${type === 'lightning' ? '⚡' : type === 'frost' ? '❄' : type === 'dark' ? '●' : '✦'} <span style="color:${col}">引导</span>`
+  fxLayer.appendChild(el)
+  setTimeout(() => el.remove(), 1100)
+}
+
 function renderNewFx() {
   const st = g()
   if (st.fxList.length === 0 && renderedFx.size > 0) renderedFx.clear()
@@ -1002,6 +1200,10 @@ function renderNewFx() {
       else enemyFlash(f.target)
     }
     if (f.kind === 'dmg') enemyFlash(f.target)
+    if (f.kind === 'lunge') enemyLunge(f.target)
+    if (f.kind === 'cardPlay' && f.text) cardPlayFx(f.text)
+    if (f.kind === 'slash') spawnSlash(f.target)
+    if (f.kind === 'orb') spawnOrbFx(f.text || '')
     const pos = fxPositions[f.target]
     if (!pos) { st.removeFx(f.id); continue }
     const el = document.createElement('div')
@@ -1025,8 +1227,9 @@ let curScreenKey = ''
 
 function buildScreen(scr: string, run: RunState | null): string {
   if (scr === 'title' || !run) return rTitle()
+  if (scr === 'neow') return rNeow(run)
   if (scr === 'map') return buildMapScreen()
-  if (scr === 'combat') return buildCombatScreen()
+  if (scr === 'combat') return buildCombatScreen(run)
   if (scr === 'reward') return buildRewardScreen()
   if (scr === 'shop') return buildShopScreen()
   return '' // 简单界面由 sigScreen 构建
@@ -1043,6 +1246,7 @@ function updateScreen(scr: string, run: RunState | null) {
   else if (scr === 'map') updateMapScreen(run)
   else if (scr === 'reward') updateRewardScreen(run)
   else if (scr === 'shop') updateShopScreen(run)
+  else if (scr === 'neow') sigScreen(`neow:${run.character}:${run.neow?.chosen ?? ''}:${run.neow?.options.map(o => o.id).join(',')}`, () => rNeow(run))
   else if (scr === 'event') sigScreen(`event:${run.currentEvent}:${g().eventMsg}:${run.gold}`, () => rEvent(run))
   else if (scr === 'rest') sigScreen(`rest:${run.hp}:${run.maxHp}:${run.relics.length}`, () => rRest(run))
   else if (scr === 'treasure') sigScreen('treasure', () => rTreasure())
@@ -1068,7 +1272,24 @@ function render() {
 
 // ============ 事件委托 ============
 const ACTIONS: Record<string, (el: HTMLElement) => void> = {
-  startRun: () => g().startRun(),
+  startRun: () => g().startRun(selectedChar),
+  pickChar: (el) => {
+    const c = el.dataset.char as CharacterId
+    if (c && CHARACTER_INFO[c]) {
+      selectedChar = c
+      sigScreen('title:' + c, () => rTitle())
+    }
+  },
+  chooseNeow: (el) => g().chooseNeow(Number(el.dataset.idx)),
+  scryToggle: (el) => {
+    const uid = el.dataset.uid!
+    if (scryMarked.has(uid)) scryMarked.delete(uid)
+    else scryMarked.add(uid)
+  },
+  resolveScry: () => {
+    g().resolveScry([...scryMarked])
+    scryMarked = new Set()
+  },
   backTitle: () => g().backToTitle(),
   chooseNode: (el) => g().chooseNode(el.dataset.id!),
   clickCard: (el) => g().clickCard(el.dataset.uid!),

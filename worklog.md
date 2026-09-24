@@ -90,3 +90,20 @@ Stage Summary:
 - 产物：Next.js版 + 单文件版(10.90MB) 均已更新至 download/
 - 三大需求全部完成：手机适配+全屏、闪动根因修复(两版本)、原版布局重构
 - 额外修复：单文件版选牌/牌堆遮罩不显示的严重遗留bug
+
+---
+Task ID: 6
+Agent: main
+Task: 第三批需求：动画还原 + GitHub图标 + 内容扩充收尾 + 横屏修复 + 涅奥祝福 + UI还原 + 单文件版全同步
+
+Work Log:
+- 【素材补全】发现上一会话素材脚本未成功执行：修复 wiki.gg 下载三大坑（URL用下划线计算MD5、32×32小图标<300字节被误判失败、命名是驼峰Icon_AfterImage式）→ 用 MediaWiki API(经jina代理) 拿到128个Icon真实文件名清单；共补齐：状态图标52个、敌人51个、卡面235张、遗物32、药水18、typeicons 27张彩色、角色立绘4张、涅奥鲸鱼图；PIL生成姿态图标(怒/静/神格)+四幕背景(combat2/3/4色调偏移)；修复corruptHeart损坏图
+- 【内容修正】替换3张自创卡为原版卡：连锁闪电→电动力学(闪电AOE+electro状态)、肉盾→致残云雾、弹跳之刃→弹跳药瓶；引擎同步实现(electro使闪电命中全体)；munchkin精灵改用darkling
+- 【Next.js修复】修3个编译错误(ScryOverlay缺失/glassKnifePenalty类型/startRun onClick)；NeowScreen组件存在但从未挂载到page.tsx(黑屏根因)→挂载；新增ScryOverlay预见界面；CardView补底部类型行(小图标+攻击/技能/能力字样)；补齐globals.css缺失的sts-slash/sts-card-play/sts-neow-float(此前斩击/出牌特效不可见)；抽取statusInfo.ts共享模块
+- 【横屏修复】双信号判定(尺寸+matchMedia)+orientationchange多次重测(100/350/800ms)+逃生按钮(自动切换横屏:全屏+lock / 竖屏继续游玩:sessionStorage记忆) —— 两版本同构
+- 【单文件版全同步】ui.ts大改：标题4角色选择卡+GitHub入口、涅奥祝福界面(鲸鱼浮动动画)、四色卡框/宝球/类型图标、按角色能量球与立绘、观者姿态徽章+真言、机器人宝球行、四幕背景切换、出牌动画(中央放大卡牌)+斩击弧光+敌人突进+引导球特效、预见Scry遮罩、竖屏逃生按钮、共享statusInfo
+- 测试：tsc 0错误；16项回归全过；4角色全流程模拟(寂静猎手通关第一幕Boss进第二幕/机器人通关/观者/铁甲正常)；生产构建通过；VLM视觉验收——两版本标题(GitHub图标+4角色)/涅奥(鲸鱼+4选项)/三角色战斗(立绘+卡框色+能量球色)/出牌动画(中央卡牌+斩击弧光+伤害数字)/竖屏(双逃生按钮+继续功能)/预见遮罩 全部通过；素材完整性扫描527图0损坏、222卡0缺面、52敌人0缺图
+
+Stage Summary:
+- 用户7项需求全部完成：动画(出牌/斩击/突进/闪白/震动/抽牌)、GitHub图标(两版本)、内容(4角色222卡52敌4幕)、横屏修复(双信号+逃生按钮永不卡死)、涅奥祝福、UI还原(类型图标/四色卡框/姿态/宝球)、待提交
+- 产物：Next.js版 + 单文件版18.47MB(download/slay-the-spire-standalone.html)

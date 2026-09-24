@@ -189,7 +189,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     ],
   },
   munchkin: {
-    id: 'munchkin', name: '小食尸鬼', nameEn: 'Munchkin', minHp: 30, maxHp: 36, sprite: 'munchkin', small: true,
+    id: 'munchkin', name: '小食尸鬼', nameEn: 'Munchkin', minHp: 30, maxHp: 36, sprite: 'darkling', small: true,
     moveLogic: 'random', weights: [60, 40],
     moves: [
       { name: '啃咬', intent: { type: 'attack', damage: 8, times: 1 }, dmg: 8 },

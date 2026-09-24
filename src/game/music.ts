@@ -184,6 +184,7 @@ export function trackForScreen(screen: string, combat: { isBoss: boolean; isElit
   switch (screen) {
     case 'title': return 'menu'
     case 'map': case 'rest': case 'treasure': case 'reward': return 'level'
+    case 'neow': return 'shrine'
     case 'shop': return 'merchant'
     case 'event': return 'shrine'
     case 'bossRelic': return 'credits'

@@ -150,9 +150,9 @@ export const CARDS_DEFECT: Record<string, CardDef> = {
     id: 'amplifyS', name: '扩增', nameEn: 'Amplify', type: 'skill', rarity: 'rare', cost: 1, target: 'none', color: 'blue',
     values: [1], upValues: [2], desc: '本回合你打出的下 {0} 张能力牌将被打出两次。', upDesc: '本回合你打出的下 {0} 张能力牌将被打出两次。', art: 'amplifyS',
   },
-  chainLightning: {
-    id: 'chainLightning', name: '连锁闪电', nameEn: 'Chain Lightning', type: 'attack', rarity: 'rare', cost: 1, target: 'enemy', color: 'blue',
-    values: [7, 3], upValues: [9, 4], desc: '造成 {0} 点伤害，然后在敌人之间弹射，每弹射一次伤害提高 {1} 点。', upDesc: '造成 {0} 点伤害，然后在敌人之间弹射，每弹射一次伤害提高 {1} 点。', art: 'chainLightning',
+  electrodynamics: {
+    id: 'electrodynamics', name: '电动力学', nameEn: 'Electrodynamics', type: 'attack', rarity: 'rare', cost: 2, target: 'none', color: 'blue',
+    values: [2, 1], upValues: [3, 1], desc: '引导 {0} 道闪电。本场战斗中，闪电会击中所有敌人。', upDesc: '引导 {0} 道闪电。本场战斗中，闪电会击中所有敌人。', art: 'electrodynamics',
   },
   coreSurge: {
     id: 'coreSurge', name: '核心涌动', nameEn: 'Core Surge', type: 'attack', rarity: 'rare', cost: 1, target: 'enemy', exhaust: true, color: 'blue',

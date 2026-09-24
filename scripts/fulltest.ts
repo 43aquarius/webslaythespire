@@ -28,7 +28,7 @@ async function main() {
     await sleep(4000)
   }
 
-  ev(`window.__sts.getState().startRun()`)
+  ev(`window.__sts.getState().startRun('${process.argv[3] || 'ironclad'}')`)
   await sleep(500)
 
   let step = 0
@@ -66,6 +66,14 @@ async function main() {
     if (sig === lastAction) { /* 同状态重复出现是允许的（等待动画），超过一定次数会由 MAX_STEPS 兜底 */ }
     lastAction = sig
 
+    if (s.scr === 'neow') {
+      // 涅奥祝福：选第一项（通常是最大生命/金币类）
+      ev(`window.__sts.getState().chooseNeow(0)`)
+      log.push('NEOW')
+      await sleep(800)
+      continue
+    }
+
     if (s.scr === 'map') {
       const acted = ev(`(() => {
         const g = window.__sts.getState(), r = g.run
@@ -79,8 +87,8 @@ async function main() {
         }
         const floor = r.visitedNodes.length
         let picked
-        if (floor < 3) picked = pickByType(['monster', 'event', 'elite', 'treasure', 'shop', 'rest'])
-        else picked = pickByType(['treasure', 'shop', 'rest', 'event', 'monster', 'elite'])
+        if (floor < 3) picked = pickByType(['monster', 'event', 'elite', 'treasure', 'shop', 'rest', 'boss'])
+        else picked = pickByType(['treasure', 'shop', 'rest', 'event', 'monster', 'elite', 'boss'])
         return picked || 'STUCK'
       })()`)
       if (acted === 'STUCK') { console.log('!! 地图无路可走'); break }

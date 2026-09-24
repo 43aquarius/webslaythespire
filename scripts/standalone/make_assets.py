@@ -14,6 +14,7 @@ PLANS = {
     'hero': (None, 'PNG', None),
     'intent': (None, 'PNG', None),
     'mapicons': (140, 'PNG', None),
+    'neow': (640, 'PNG', None),      # 涅奥鲸鱼
     'potions': (None, 'PNG', None),
     'relics': (110, 'PNG', None),
     'status': (72, 'PNG', None),

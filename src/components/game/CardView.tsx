@@ -51,6 +51,15 @@ const COLOR_TYPEICON: Record<string, string> = {
   red: 'ironclad', green: 'silent', blue: 'defect', purple: 'watcher', colorless: 'ironclad',
 }
 
+// 类型小图标路径（原版：能力牌无普通稀有度，common 回退 uncommon）
+function typeIconUrl(color: string, type: string, rarity: string): string {
+  const base = COLOR_TYPEICON[color] || 'ironclad'
+  let rar = raritySuffix(rarity)
+  if (type === 'power' && rar === 'Common') rar = 'Uncommon'
+  if (base === 'ironclad') return `${A}/typeicons/${type}${rar}.png`
+  return `${A}/typeicons/${base}${type}${rar.toLowerCase()}.png`
+}
+
 export interface CardViewProps {
   card: CardInstance
   width?: number
@@ -59,7 +68,7 @@ export interface CardViewProps {
   dimmed?: boolean
   className?: string
   hoverPlay?: boolean   // 手牌中可打出的悬浮高亮
-  ctx?: { strikesInDeck?: number; hpLost?: number; rampageBonus?: number }
+  ctx?: { strikesInDeck?: number; hpLost?: number; rampageBonus?: number; glassKnifePenalty?: number; clawBonus?: number; shivBonus?: number }
 }
 
 function CardViewInner({ card, width = 150, onClick, selected, dimmed, className = '', hoverPlay, ctx }: CardViewProps) {
@@ -70,12 +79,12 @@ function CardViewInner({ card, width = 150, onClick, selected, dimmed, className
   const rar = raritySuffix(def.rarity)
   const frame = `${A}/frames/frame${def.type[0].toUpperCase()}${def.type.slice(1)}${rar}.png`
   const banner = `${A}/frames/banner${rar}.png`
+  const typeIcon = typeIconUrl(color, def.type, def.rarity)
   const cost = cardCost(card, ctx?.hpLost ?? 0)
   const desc = cardDesc(card, ctx)
   const upgraded = card.upgraded > 0
   const bg = (TYPE_BG[color] || TYPE_BG.red)[def.type]
   const orbImg = COLOR_ORB[color] || 'cardRedOrb'
-  const typeIconBase = COLOR_TYPEICON[color] || 'ironclad'
 
   return (
     <div
@@ -134,7 +143,7 @@ function CardViewInner({ card, width = 150, onClick, selected, dimmed, className
       <div
         className="sts-body absolute text-center"
         style={{
-          left: '8%', right: '8%', top: '49.5%', bottom: '6%',
+          left: '8%', right: '8%', top: '49.5%', bottom: '13%',
           fontSize: width * 0.076,
           lineHeight: 1.28,
           color: '#f2e6d0',
@@ -147,6 +156,29 @@ function CardViewInner({ card, width = 150, onClick, selected, dimmed, className
           {upgraded && <span style={{ color: '#7fe08a' }}>+ </span>}
           {desc}
         </div>
+      </div>
+      {/* 底部类型行：类型小图标 + 类型名（对齐原版） */}
+      <div
+        className="absolute flex items-center justify-center gap-1"
+        style={{ left: '18%', right: '18%', bottom: '2.5%', height: '8.5%' }}
+      >
+        <img
+          src={typeIcon}
+          alt=""
+          draggable={false}
+          style={{ height: '62%', width: 'auto', objectFit: 'contain' }}
+        />
+        <span
+          className="sts-title"
+          style={{
+            fontSize: width * 0.062,
+            color: '#ffe9c4',
+            textShadow: '1px 1px 0 #000',
+            letterSpacing: 1,
+          }}
+        >
+          {def.type === 'attack' ? '攻击' : def.type === 'skill' ? '技能' : '能力'}
+        </span>
       </div>
       {/* 升级标识 */}
       {upgraded && (

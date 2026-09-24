@@ -1,5 +1,6 @@
 'use client'
-// ============ 遮罩层：牌堆查看 / 卡牌选择 ============
+// ============ 遮罩层：牌堆查看 / 卡牌选择 / 预见 ============
+import { useState } from 'react'
 import { useGame } from '@/store/gameStore'
 import { CardInstance } from '@/game/types'
 import { CardView } from './CardView'
@@ -93,6 +94,74 @@ export function CardSelectOverlay() {
             {select.kind === 'shopRemove' ? '取消购买' : '放弃'}
           </button>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ============ 预见（观者：查看抽牌堆顶 N 张，标记弃置） ============
+export function ScryOverlay() {
+  const run = useGame(s => s.run)
+  const resolveScry = useGame(s => s.resolveScry)
+  const [marked, setMarked] = useState<Set<string>>(new Set())
+  const pending = run?.combat?.pendingScry
+  if (!run || !run.combat || !pending) return null
+
+  // 抽牌堆末尾 N 张是即将抽到的牌
+  const topCards = run.combat.drawPile.slice(-pending)
+
+  const toggle = (uid: string) => {
+    setMarked(prev => {
+      const next = new Set(prev)
+      if (next.has(uid)) next.delete(uid)
+      else next.add(uid)
+      return next
+    })
+  }
+
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 select-none"
+      style={{ zIndex: 88, background: 'rgba(4,2,8,0.55)' }}>
+      <div className="sts-title" style={{ fontSize: 30, color: '#c8b8f0', textShadow: '2px 2px 0 #000' }}>
+        预见
+      </div>
+      <div className="sts-body" style={{ color: '#a898c0', fontSize: 15 }}>
+        点击卡牌将其弃置（下回合不会抽到），最多弃 {pending} 张
+      </div>
+      <div className="flex flex-wrap gap-4 justify-center items-end" style={{ maxWidth: 1200 }}>
+        {topCards.map((c: CardInstance, i: number) => {
+          const isMarked = marked.has(c.uid)
+          return (
+            <div
+              key={c.uid}
+              className="sts-card-in transition-all"
+              style={{
+                animationDelay: `${Math.min(i, 8) * 0.06}s`,
+                cursor: 'pointer',
+                transform: isMarked ? 'translateY(-26px) scale(1.04)' : undefined,
+                filter: isMarked ? 'drop-shadow(0 0 14px rgba(220,80,80,0.9))' : undefined,
+              }}
+              onClick={() => toggle(c.uid)}
+            >
+              <CardView card={c} width={150} hoverPlay={!isMarked} />
+            </div>
+          )
+        })}
+        {topCards.length === 0 && (
+          <div className="sts-body" style={{ color: '#a89070', fontSize: 15 }}>抽牌堆已空</div>
+        )}
+      </div>
+      <div className="flex items-center gap-4">
+        <div className="sts-body" style={{ color: '#c8a860', fontSize: 14 }}>
+          已弃置 {marked.size} 张
+        </div>
+        <button
+          className="sts-btn sts-title"
+          style={{ fontSize: 20, padding: '8px 36px' }}
+          onClick={() => resolveScry([...marked])}
+        >
+          确认
+        </button>
       </div>
     </div>
   )

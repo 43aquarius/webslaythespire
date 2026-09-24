@@ -67,7 +67,7 @@ img { -webkit-user-drag: none; }
   text-shadow: 1px 1px 0 #000, 0 0 6px #000; line-height: 1.05; overflow: hidden; }
 .card-cost { position: absolute; left: -1%; top: -1.5%; width: 19%; height: 13.5%; display: flex; align-items: center; justify-content: center;
   color: #fff; text-shadow: 1px 1px 0 #000, 0 0 8px #a02010; }
-.card-desc { position: absolute; left: 8%; right: 8%; top: 49.5%; bottom: 6%; text-align: center; line-height: 1.28; color: #f2e6d0;
+.card-desc { position: absolute; left: 8%; right: 8%; top: 49.5%; bottom: 13%; text-align: center; line-height: 1.28; color: #f2e6d0;
   text-shadow: 1px 1px 1px #000; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .card-up { position: absolute; right: 2%; top: 1%; color: #7fe08a; text-shadow: 1px 1px 0 #000; font-size: 15px; }
 .sts-card.dimmed { opacity: .5; }
@@ -245,3 +245,70 @@ img { -webkit-user-drag: none; }
   70% { transform: translateX(-50%) translateY(-46px) scale(1); opacity: 1; }
   100% { transform: translateX(-50%) translateY(-72px) scale(.9); opacity: 0; } }
 @keyframes card-in { 0% { transform: translateY(60px) scale(.7); opacity: 0; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+
+/* ============ 卡牌底部类型行（类型小图标 + 类型名） ============ */
+.card-type-row { position: absolute; left: 18%; right: 18%; bottom: 2.5%; height: 8.5%;
+  display: flex; align-items: center; justify-content: center; gap: 4px; }
+.card-type-row img { height: 62%; width: auto; object-fit: contain; }
+.card-type-row span { color: #ffe9c4; text-shadow: 1px 1px 0 #000; letter-spacing: 1px; }
+
+/* ============ 标题：角色选择 + GitHub ============ */
+.char-row { display: flex; gap: 18px; justify-content: center; margin: 14px 0 4px; flex-wrap: wrap; }
+.char-card { width: 200px; padding: 12px 10px 14px; border: 2px solid #5a4a38; border-radius: 12px;
+  background: linear-gradient(170deg, rgba(30,24,18,.88), rgba(14,10,8,.94)); cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 6px; transition: all .15s ease; }
+.char-card img { width: 118px; height: 118px; object-fit: contain; filter: drop-shadow(0 6px 10px rgba(0,0,0,.6)); }
+.char-card:hover { transform: translateY(-4px); border-color: #8a7a5a; }
+.github-btn { position: absolute; right: 14px; bottom: 12px; display: flex; align-items: center; gap: 7px;
+  color: #c8bca8; text-decoration: none; font-size: 13px; padding: 7px 12px; border-radius: 8px;
+  background: rgba(20,16,12,.7); border: 1px solid #4a4038; z-index: 60; }
+.github-btn:hover { color: #fff; border-color: #8a7a5a; }
+
+/* ============ 涅奥祝福 ============ */
+.neow-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; max-width: 1160px; }
+.neow-opt { width: 262px; padding: 16px; border-radius: 12px; cursor: pointer;
+  background: linear-gradient(170deg, rgba(34,28,52,.9), rgba(16,12,30,.94));
+  border: 2px solid #4a4266; box-shadow: 0 6px 18px rgba(0,0,0,.65); transition: all .18s ease; }
+.neow-opt:hover { transform: translateY(-4px); border-color: #8aa0e8;
+  box-shadow: 0 10px 26px rgba(0,0,0,.7), 0 0 18px rgba(110,140,255,.25); }
+.neow-opt.picked { background: linear-gradient(170deg, rgba(60,90,170,.55), rgba(20,30,70,.85)); border-color: #9ab8ff;
+  box-shadow: 0 0 26px rgba(120,160,255,.45); }
+.neow-opt.off { opacity: .45; cursor: default; }
+@keyframes neowFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-18px); } }
+
+/* ============ 观者姿态 / 机器人宝球 ============ */
+#player-extra { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; min-height: 8px; }
+.stance-badge { padding: 3px 14px; border-radius: 20px; font-size: 16px; letter-spacing: 3px; text-shadow: 1px 1px 0 #000; }
+.mantra-badge { padding: 2px 10px; border-radius: 12px; font-size: 12px; color: #d8c8a8;
+  background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.2); }
+.orb-row { display: flex; gap: 6px; align-items: center; }
+.orb-cell { width: 34px; height: 34px; border-radius: 50%; border: 2px dashed rgba(120,140,200,.35); display: inline-block; }
+.orb-cell.has { border: 2px solid rgba(160,180,255,.6); display: inline-flex; align-items: center; justify-content: center;
+  color: #cfe0ff; font-weight: bold; font-size: 16px; text-shadow: 0 0 8px rgba(120,160,255,.8);
+  background: radial-gradient(circle, rgba(80,100,200,.4), rgba(20,24,50,.7));
+  box-shadow: 0 0 12px rgba(100,130,255,.35); }
+
+/* ============ 出牌动画 / 斩击 ============ */
+#card-play-fx { position: absolute; inset: 0; pointer-events: none; z-index: 70;
+  display: flex; align-items: center; justify-content: center; }
+.card-play-fx { animation: card-play-fx-anim .62s ease-out forwards; }
+@keyframes card-play-fx-anim {
+  0% { transform: scale(1.15); opacity: 0; }
+  20% { opacity: 1; }
+  55% { transform: scale(1.3); opacity: 1; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+.slash-fx { position: absolute; width: 180px; height: 180px; border-radius: 50%; pointer-events: none;
+  background: conic-gradient(from 200deg, transparent 0deg, rgba(255,255,255,.95) 60deg, transparent 130deg);
+  filter: drop-shadow(0 0 14px rgba(255,240,200,.9)); z-index: 55; opacity: 0;
+  animation: slash-anim .42s ease-out forwards; }
+@keyframes slash-anim {
+  0% { opacity: 0; transform: translate(-50%,-50%) rotate(-30deg) scale(.3); }
+  25% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%,-50%) rotate(50deg) scale(1.25); }
+}
+
+/* ============ 预见（Scry） ============ */
+.scry-card { cursor: pointer; transition: transform .15s ease, filter .15s ease; }
+.scry-card:hover { transform: translateY(-6px); }
+.scry-card.marked { transform: translateY(-26px) scale(1.04); filter: drop-shadow(0 0 14px rgba(220,80,80,.9)); }
