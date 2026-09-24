@@ -13,10 +13,44 @@ const STATUS_IMG_FIX: Record<string, string> = {
   angry: 'anger',            // 素材库文件名为 anger.png
   metallicizeE: 'metallicize', // 敌人金属化复用 metallicize 图标
   asleep: '../intent/sleep',   // 沉睡复用意图 Zzz 图标
+  wraithFormS: 'intangible',
+  phantasmal: 'wrath',
+  blasphemyD: 'divinity',
+  vaultS: 'divinity',
+  alphaS: 'divotion_placeholder',
+  betaActive: 'divotion_placeholder',
+  omegaActive: 'wrath',
+  foresight: 'divotion_placeholder',
+  creativeAI: 'divotion_placeholder',
+  machineLearning: 'divotion_placeholder',
+  capacitor: 'divotion_placeholder',
+  echoForm: 'echo',
+  amplifyS: 'amplify',
+  loopS: 'loop',
+  staticDischargeS: 'staticDischarge',
+  stormS: 'storm',
+  accuracy: 'accuracy',
+  afterImage: 'afterImage',
+  aThousandCuts: 'aThousandCuts',
+  caltropsS: 'caltrops',
+  envenomS: 'envenom',
+  equilibriumS: 'equilibrium',
+  mentalFortressS: 'mentalFortress',
+  likeWaterS: 'likeWater',
+  nirvanaS: 'nirvana',
+  devotionS: 'devotion',
+  brillianceS: 'brilliance',
+  corpseExplosionS: 'poison',
+  beatOfDeath: 'beatOfDeath',
+  entangled: 'shackle_placeholder',
 }
+const STATUS_IMG_MISSING = new Set(['divotion_placeholder', 'shackle_placeholder'])
 export function statusImg(id: string): string {
   const fix = STATUS_IMG_FIX[id]
-  if (fix) return `${A}/${fix.startsWith('../') ? fix.slice(3) : 'status/' + fix}.png`
+  if (fix) {
+    if (STATUS_IMG_MISSING.has(fix)) return ''
+    return `${A}/${fix.startsWith('../') ? fix.slice(3) : 'status/' + fix}.png`
+  }
   return `${A}/status/${id}.png`
 }
 
@@ -53,6 +87,49 @@ export const STATUS_INFO: Record<string, { name: string; desc: string; buff?: bo
   metallicizeE: { name: '金属化', desc: '回合结束时获得 N 点格挡。' },
   flameBarrier: { name: '火焰屏障', desc: '本回合被攻击时对攻击者造成 N 点伤害。', buff: true },
   modeShift: { name: '模式切换', desc: '守卫者的防御模式，格挡攒满后切换攻击模式。' },
+  // ---- 新角色/新怪物状态 ----
+  poison: { name: '中毒', desc: '回合开始时受到等同于层数的伤害，然后层数 -1。' },
+  focus: { name: '集中', desc: '增强充能球的被动与唤起效果。', buff: true },
+  intangible: { name: '虚无形体', desc: '受到的任何伤害变为 1 点。', buff: true },
+  lockOn: { name: '锁定', desc: '受到的闪电伤害提高 50%。' },
+  mark: { name: '印记', desc: '每当你施加印记，敌人失去等同其印记层数的生命值。' },
+  mantra: { name: '真言', desc: '累积 10 点真言时进入神格姿态。', buff: true },
+  constricted: { name: '束缚', desc: '回合结束时受到等同层数的伤害。' },
+  hex: { name: '咒术', desc: '每当你打出一张非攻击牌，受到 3 点伤害，然后层数 -1。' },
+  flying: { name: '飞行', desc: '受到的攻击伤害降低 40%。', buff: true },
+  time: { name: '时间', desc: '时间吞噬者：你每打出一张牌层数 +1，达到 8 层时获得力量并重置。' },
+  beatOfDeath: { name: '死亡节拍', desc: '腐朽之心：你每打出一张牌，受到 2 点伤害。' },
+  accuracy: { name: '精准', desc: '小刀造成的伤害提高 N 点。', buff: true },
+  afterImage: { name: '残像', desc: '每当你打出一张牌，获得 N 点格挡。', buff: true },
+  aThousandCuts: { name: '千刀万剐', desc: '每当你打出一张牌，对所有敌人造成 N 点伤害。', buff: true },
+  caltropsS: { name: '蒺藜', desc: '每当你被攻击时，对攻击者造成 N 点伤害。', buff: true },
+  envenomS: { name: '淬毒', desc: '攻击造成的未被格挡伤害施加 N 层中毒。', buff: true },
+  echoForm: { name: '回声形态', desc: '每回合你打出的第一张牌将被打出两次。', buff: true },
+  amplifyS: { name: '扩增', desc: '本回合你打出的下 N 张能力牌将被打出两次。', buff: true },
+  loopS: { name: '循环', desc: '回合开始时，触发最右侧充能球的被动效果 N 次。', buff: true },
+  staticDischargeS: { name: '静电释放', desc: '每当你受到攻击伤害，引导 N 个闪电球。', buff: true },
+  stormS: { name: '风暴', desc: '每当你打出一张能力牌，引导 N 个闪电球。', buff: true },
+  equilibriumS: { name: '平衡', desc: '本回合保留手牌。', buff: true },
+  mentalFortressS: { name: '心灵壁垒', desc: '每当你切换姿态，获得 N 点格挡。', buff: true },
+  likeWaterS: { name: '静如水', desc: '回合结束时若处于静相，获得 N 点格挡。', buff: true },
+  nirvanaS: { name: '涅槃', desc: '每当你预见一张牌，获得 N 点格挡。', buff: true },
+  devotionS: { name: '奉献', desc: '回合开始时获得 N 点真言。', buff: true },
+  brillianceS: { name: '光辉', desc: '每当你获得真言，对随机敌人造成 N 点伤害。', buff: true },
+  alphaS: { name: '阿尔法', desc: '回合开始时将一张贝塔加入手牌。', buff: true },
+  betaActive: { name: '贝塔', desc: '回合开始时将一张欧米茄加入手牌。', buff: true },
+  omegaActive: { name: '欧米茄', desc: '回合结束时对所有敌人造成 50 点伤害。', buff: true },
+  foresight: { name: '先见之明', desc: '回合结束时预见 N 张牌。', buff: true },
+  creativeAI: { name: '创造AI', desc: '回合开始时将一张随机能力牌加入手牌。', buff: true },
+  machineLearning: { name: '机器学习', desc: '回合开始时多抽 N 张牌。', buff: true },
+  capacitor: { name: '电容器', desc: '充能球上限提高 N 点。', buff: true },
+  burstS: { name: '连发', desc: '本回合你打出的下 N 张技能牌将被打出两次。', buff: true },
+  phantasmal: { name: '幻影杀手', desc: '下一张攻击牌造成的伤害翻倍。', buff: true },
+  blasphemyD: { name: '亵渎', desc: '下回合开始时，你将死亡。' },
+  vaultS: { name: '穹顶', desc: '跳过敌人的回合。', buff: true },
+  rebirth: { name: '重生', desc: '首次死亡时复活至半血并获得力量。', buff: true },
+  entangled: { name: '纠缠', desc: '本回合无法打出攻击牌。' },
+  corpseExplosionS: { name: '尸体爆炸', desc: '该敌人死亡时，对所有敌人造成其最大生命值的伤害。', buff: true },
+  wraithFormS: { name: '幽魂形态', desc: '回合结束时失去 1 点敏捷。', buff: true },
 }
 
 // ============ 悬浮提示（支持触屏：轻点显示 2 秒） ============
@@ -190,7 +267,7 @@ export function StatusRow({ statuses, size = 30 }: { statuses: StatusMap; size?:
               }}
             >
               <img src={statusImg(id)} alt={id} className="w-full h-full object-contain" draggable={false}
-                style={{ filter: id === 'vulnerable' || id === 'weak' || id === 'frail' || id === 'noDraw' ? 'drop-shadow(0 0 3px #c04030)' : 'drop-shadow(0 0 3px #30a0c0)' }} />
+                style={{ filter: id === 'vulnerable' || id === 'weak' || id === 'frail' || id === 'noDraw' ? 'drop-shadow(0 0 3px #c04030)' : 'drop-shadow(0 0 3px #30a0c0)', visibility: statusImg(id) ? 'visible' : 'hidden' }} />
               {n !== 1 || id === 'vulnerable' || id === 'weak' || id === 'frail' ? (
                 <span
                   className="absolute sts-num font-bold"

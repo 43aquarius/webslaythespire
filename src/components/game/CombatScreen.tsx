@@ -1,16 +1,19 @@
 'use client'
-// ============ 战斗界面（参照原版布局） ============
+// ============ 战斗界面（参照原版布局 + 动画系统） ============
 // 布局：左上 牌组+血条 / 右上 金币+药水+遗物（TopHud）
 //       玩家左下、敌人中偏右、手牌底部扇形、能量球左下、结束回合右下
-// 闪动修复：震动/受击动画改用 Web Animations API，不再重挂载 DOM
-import { useEffect, useRef, useState } from 'react'
+// 动画：出牌飞入（cardPlay fx）、斩击特效（slash fx）、敌人突进（lunge fx）、
+//       抽牌飞入（新卡 keyframe）、受击闪白/震动（Web Animations API）
+// 新系统：故障机器人宝球、观者姿态
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useGame, FxItem } from '@/store/gameStore'
-import { EnemyInstance } from '@/game/types'
+import { EnemyInstance, CardInstance } from '@/game/types'
 import { CARDS, cardCost } from '@/game/cards'
 import { ENEMIES } from '@/game/enemies'
 import { enemyDisplayDamage } from '@/game/engine'
 import { CardView } from './CardView'
 import { StatusRow, HpBar, Tip, TopHud, STATUS_INFO, statusImg } from './Shared'
+import { ScryOverlay } from './Overlays'
 
 const A = '/assets'
 
@@ -19,7 +22,7 @@ function IntentView({ enemy, targetable }: { enemy: EnemyInstance; targetable: b
   const combat = useGame(s => s.run?.combat)
   if (!combat || !enemy.intent || enemy.dying) return null
   const it = enemy.intent
-  const { dmg, times } = enemyDisplayDamage(enemy, combat.player.statuses)
+  const { dmg, times } = enemyDisplayDamage(enemy, combat.player.statuses, combat.player.stance)
   const map: Record<string, string> = {
     attack: 'attack3', attackDebuff: 'attack5', attackDefend: 'attack4',
     defend: 'defend', buff: 'buff', debuff: 'debuff', strongDebuff: 'debuffStrong',
@@ -51,7 +54,6 @@ function IntentView({ enemy, targetable }: { enemy: EnemyInstance; targetable: b
 
 // ============ 浮动数字 ============
 function FloatFx({ items, removeFx }: { items: FxItem[]; removeFx: (id: number) => void }) {
-  // 按 id 追踪：只为新出现的特效设置定时器，避免列表更新重置旧计时
   const timedRef = useRef<Set<number>>(new Set())
   useEffect(() => {
     let timers: ReturnType<typeof setTimeout>[] = []
@@ -80,6 +82,7 @@ function FloatFx({ items, removeFx }: { items: FxItem[]; removeFx: (id: number) 
             </span>
           )
         } else if (it.kind === 'text') { content = it.text; color = '#ffe9a0' }
+        else return null
         return (
           <div
             key={it.id}
@@ -97,6 +100,30 @@ function FloatFx({ items, removeFx }: { items: FxItem[]; removeFx: (id: number) 
   )
 }
 
+// ============ 斩击特效 ============
+function SlashFx({ items, removeFx, big }: { items: FxItem[]; removeFx: (id: number) => void; big?: boolean }) {
+  const timedRef = useRef<Set<number>>(new Set())
+  useEffect(() => {
+    let timers: ReturnType<typeof setTimeout>[] = []
+    for (const it of items) {
+      if (timedRef.current.has(it.id)) continue
+      timedRef.current.add(it.id)
+      timers.push(setTimeout(() => removeFx(it.id), 420))
+    }
+    return () => timers.forEach(clearTimeout)
+  }, [items, removeFx])
+  if (!items.length) return null
+  return (
+    <>
+      {items.map(it => (
+        <div key={it.id} className="absolute inset-0 pointer-events-none overflow-visible" style={{ zIndex: 55 }}>
+          <div className="sts-slash" style={{ width: big ? 260 : 170, height: big ? 260 : 170, left: '50%', top: '38%', transform: 'translate(-50%,-50%)' }} />
+        </div>
+      ))}
+    </>
+  )
+}
+
 // ============ 敌人视图 ============
 function EnemyView({ enemy }: { enemy: EnemyInstance }) {
   const run = useGame(s => s.run)
@@ -108,7 +135,6 @@ function EnemyView({ enemy }: { enemy: EnemyInstance }) {
   const fxList = useGame(s => s.fxList)
   const def = ENEMIES[enemy.id]
 
-  // 受击闪白：Web Animations API 播放，不重挂载（修复闪动）
   const spriteRef = useRef<HTMLDivElement>(null)
   const lastFlashRef = useRef(0)
   const dmgEvents = fxList.filter(f => (f.kind === 'dmg' || f.kind === 'shake') && f.target === enemy.uid)
@@ -126,10 +152,29 @@ function EnemyView({ enemy }: { enemy: EnemyInstance }) {
     lastFlashRef.current = Math.max(lastFlashRef.current, flashId)
   }, [flashId])
 
+  // 突进动画：敌人攻击时向玩家方向冲撞
+  const lungeEvents = fxList.filter(f => f.kind === 'lunge' && f.target === enemy.uid)
+  const lungeId = lungeEvents.length > 0 ? lungeEvents[lungeEvents.length - 1].id : 0
+  const lastLungeRef = useRef(0)
+  useEffect(() => {
+    if (lungeId > lastLungeRef.current && spriteRef.current) {
+      spriteRef.current.animate(
+        [
+          { transform: 'translateX(0)' },
+          { transform: 'translateX(-120px) scale(1.06)' },
+          { transform: 'translateX(0)' },
+        ],
+        { duration: 420, easing: 'cubic-bezier(.3,0,.4,1)' }
+      )
+    }
+    lastLungeRef.current = Math.max(lastLungeRef.current, lungeId)
+  }, [lungeId])
+
   if (!combat || !run) return null
   const targetable = !!selectedCard || selectedPotion !== null
-  const myFx = fxList.filter(f => f.target === enemy.uid)
-  const spriteW = def.boss ? 340 : def.elite ? 260 : 210
+  const myFx = fxList.filter(f => f.target === enemy.uid && f.kind !== 'slash' && f.kind !== 'lunge')
+  const mySlashes = fxList.filter(f => f.target === enemy.uid && f.kind === 'slash')
+  const spriteW = def.boss ? 340 : def.elite ? 260 : def.small ? 150 : 210
 
   return (
     <div
@@ -145,6 +190,8 @@ function EnemyView({ enemy }: { enemy: EnemyInstance }) {
       <div className="absolute" style={{ top: 100, left: '50%', marginLeft: -60, width: 120, height: 40, zIndex: 60 }}>
         <FloatFx items={myFx} removeFx={removeFx} />
       </div>
+      {/* 斩击特效 */}
+      <SlashFx items={mySlashes} removeFx={removeFx} big={def.boss} />
       {/* 精灵图 */}
       <div ref={spriteRef}>
         <img
@@ -163,8 +210,128 @@ function EnemyView({ enemy }: { enemy: EnemyInstance }) {
         <div className="sts-body font-bold" style={{ fontSize: 15, color: '#f5e5c8', textShadow: '1px 1px 0 #000' }}>
           {def.name}
         </div>
-        <HpBar hp={enemy.hp} maxHp={enemy.maxHp} block={enemy.block} width={def.boss ? 280 : 170} />
+        <HpBar hp={enemy.hp} maxHp={enemy.maxHp} block={enemy.block} width={def.boss ? 280 : def.small ? 120 : 170} />
         <StatusRow statuses={enemy.statuses} size={28} />
+      </div>
+    </div>
+  )
+}
+
+// ============ 宝球显示（故障机器人） ============
+const ORB_STYLE: Record<string, { color: string; glow: string; symbol: string }> = {
+  lightning: { color: '#f0d040', glow: 'rgba(240,208,64,0.55)', symbol: '⚡' },
+  frost: { color: '#7ac0e8', glow: 'rgba(122,192,232,0.55)', symbol: '❄' },
+  dark: { color: '#9a6ad8', glow: 'rgba(154,106,216,0.55)', symbol: '●' },
+  plasma: { color: '#e87ab0', glow: 'rgba(232,122,176,0.55)', symbol: '✦' },
+}
+
+function OrbRow() {
+  const combat = useGame(s => s.run?.combat)
+  if (!combat?.player.orbs) return null
+  const orbs = combat.player.orbs
+  const slots = combat.player.orbSlots ?? 3
+  if (combat.player.orbs.length === 0 && slots === 0) return null
+  return (
+    <div className="flex items-center gap-1.5" style={{ marginBottom: 4 }}>
+      {Array.from({ length: Math.max(slots, orbs.length) }).map((_, i) => {
+        const orb = orbs[i]
+        if (!orb) {
+          return <span key={i} style={{ width: 34, height: 34, borderRadius: '50%', border: '2px dashed rgba(120,140,200,0.35)', display: 'inline-block' }} />
+        }
+        const st = ORB_STYLE[orb.type]
+        return (
+          <Tip key={i} tip={<><b style={{ color: st.color }}>{ORB_NAME[orb.type]}</b><br />{ORB_DESC[orb.type]}</>}>
+            <span
+              className="sts-orb"
+              style={{
+                width: 34, height: 34, borderRadius: '50%',
+                background: `radial-gradient(circle at 35% 30%, ${st.color} 0%, rgba(20,20,40,0.95) 80%)`,
+                border: `2px solid ${st.color}`,
+                boxShadow: `0 0 12px ${st.glow}`,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                color: '#fff', fontSize: 16, textShadow: '0 0 6px #000',
+              }}
+            >
+              {st.symbol}
+            </span>
+          </Tip>
+        )
+      })}
+    </div>
+  )
+}
+const ORB_NAME: Record<string, string> = { lightning: '闪电球', frost: '霜球', dark: '暗球', plasma: '等离子球' }
+const ORB_DESC: Record<string, string> = {
+  lightning: '被动：回合结束对随机敌人造成 3 点伤害（受集中加成）。唤起：造成 9 点伤害。',
+  frost: '被动：回合结束获得 2 点格挡。唤起：获得 5 点格挡。',
+  dark: '被动：回合结束蓄伤 +6。唤起：造成等同蓄伤的伤害。',
+  plasma: '被动：回合结束获得 1 点能量。唤起：获得 2 点能量。',
+}
+
+// ============ 姿态显示（观者） ============
+const STANCE_STYLE: Record<string, { name: string; color: string; desc: string }> = {
+  wrath: { name: '怒相', color: '#ff5a4a', desc: '造成与受到的攻击伤害翻倍。回合结束自动退出。' },
+  calm: { name: '静相', color: '#7ac0e8', desc: '退出静相时获得 2 点能量。' },
+  divinity: { name: '神格', color: '#ffd980', desc: '造成的攻击伤害三倍。回合结束自动退出。' },
+}
+
+function StanceBadge() {
+  const combat = useGame(s => s.run?.combat)
+  const stance = combat?.player.stance || 'none'
+  const mantra = combat?.player.mantra || 0
+  if (stance === 'none' && mantra === 0) return null
+  const st = STANCE_STYLE[stance]
+  return (
+    <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
+      {st && (
+        <Tip tip={<><b style={{ color: st.color }}>{st.name}</b><br />{st.desc}</>}>
+          <span
+            className="sts-stance sts-title"
+            style={{
+              padding: '3px 14px', borderRadius: 20,
+              background: `linear-gradient(180deg, ${st.color}33, rgba(10,8,6,0.9))`,
+              border: `2px solid ${st.color}`,
+              color: st.color, fontSize: 16, letterSpacing: 3,
+              textShadow: '1px 1px 0 #000',
+              boxShadow: `0 0 14px ${st.color}44`,
+            }}
+          >
+            {st.name}
+          </span>
+        </Tip>
+      )}
+      {mantra > 0 && (
+        <Tip tip={<><b style={{ color: '#c8b0e8' }}>真言 {mantra}/10</b><br />累积 10 点真言进入神格。</>}>
+          <span className="sts-body" style={{ color: '#c8b0e8', fontSize: 13, textShadow: '1px 1px 0 #000' }}>
+            真言 {mantra}/10
+          </span>
+        </Tip>
+      )}
+    </div>
+  )
+}
+
+// ============ 出牌动画（卡牌飞入屏幕中央后消散） ============
+function PlayedCardFx({ items, removeFx }: { items: FxItem[]; removeFx: (id: number) => void }) {
+  const timedRef = useRef<Set<number>>(new Set())
+  useEffect(() => {
+    let timers: ReturnType<typeof setTimeout>[] = []
+    for (const it of items) {
+      if (timedRef.current.has(it.id)) continue
+      timedRef.current.add(it.id)
+      timers.push(setTimeout(() => removeFx(it.id), 620))
+    }
+    return () => timers.forEach(clearTimeout)
+  }, [items, removeFx])
+  if (!items.length) return null
+  const last = items[items.length - 1]
+  const [cardId, upgraded] = (last.text || '').split('|')
+  if (!CARDS[cardId]) return null
+  const inst: CardInstance = { uid: 'played_fx', id: cardId, upgraded: Number(upgraded) || 0 }
+  return (
+    <div className="absolute inset-0 pointer-events-none flex items-center justify-center" style={{ zIndex: 70 }}>
+      <div className="sts-card-play">
+        <CardView card={inst} width={190} />
       </div>
     </div>
   )
@@ -185,7 +352,7 @@ export function CombatScreen() {
   const removeFx = useGame(s => s.removeFx)
   const fxList = useGame(s => s.fxList)
 
-  // 屏幕震动：Web Animations API 播放，不重挂载整个画面（修复闪动）
+  // 屏幕震动
   const rootRef = useRef<HTMLDivElement>(null)
   const lastShakeRef = useRef(0)
   const shakeEvents = fxList.filter(f => f.kind === 'shake' && f.target === 'player')
@@ -206,14 +373,23 @@ export function CombatScreen() {
     lastShakeRef.current = Math.max(lastShakeRef.current, shakeId)
   }, [shakeId])
 
-  const playerFx = fxList.filter(f => f.target === 'player')
+  const playerFx = fxList.filter(f => f.target === 'player' && f.kind !== 'cardPlay')
+  const cardPlayFx = fxList.filter(f => f.kind === 'cardPlay')
   const hand = combat?.hand ?? []
 
-  // 触屏设备提示文案（触屏为两段式打出）
+  // 手牌 uid 集合（用于抽牌动画：新出现的卡播放飞入）
+  const prevHandRef = useRef<Set<string>>(new Set())
+  const handUids = useMemo(() => new Set(hand.map(c => c.uid)), [hand])
+  const isNewCard = (uid: string) => !prevHandRef.current.has(uid)
+  useEffect(() => {
+    prevHandRef.current = handUids
+  }, [handUids])
+
+  // 触屏设备提示文案
   const [isTouch, setIsTouch] = useState(false)
   useEffect(() => { setIsTouch(window.matchMedia('(hover: none)').matches) }, [])
 
-  // 手牌扇形布局（计算量小，直接计算）
+  // 手牌扇形布局
   const handLayout = (() => {
     const n = hand.length
     return hand.map((_, i) => {
@@ -228,40 +404,46 @@ export function CombatScreen() {
 
   if (!run || !combat) return null
   const p = combat.player
+  const isDefect = run.character === 'defect'
+  const isWatcher = run.character === 'watcher'
+  const energyOrb = { ironclad: 'redEnergy', silent: 'greenEnergy', defect: 'blueEnergy', watcher: 'purpleEnergy' }[run.character]
+  const heroSprite = run.character
 
   return (
     <div
       ref={rootRef}
       className="w-full h-full relative overflow-hidden select-none sts-screen-fade"
       style={{
-        backgroundImage: `url(${A}/bg/combat.jpg)`,
+        backgroundImage: `url(${A}/bg/${combatBg(run.act)}.jpg)`,
         backgroundSize: 'cover',
         backgroundPosition: 'center 30%',
       }}
       onClick={(e) => {
-        // 点击非交互元素（背景/敌人区空白）时取消选牌
         const t = e.target as HTMLElement
         if (!t.closest('button, .sts-card, .sts-slot, .sts-relic, .sts-targetable')) cancelSelection()
       }}
     >
-      {/* ===== 顶部 HUD（原版：左上牌组+血条，右上金币+药水+遗物） ===== */}
+      {/* ===== 顶部 HUD ===== */}
       <TopHud combat />
 
-      {/* ===== 玩家（左下，原版：状态在角色上方） ===== */}
+      {/* ===== 玩家（左下） ===== */}
       <div className="absolute flex flex-col items-center gap-1.5" style={{ left: 44, bottom: 96, zIndex: 40 }}>
         <div className="relative" style={{ width: 240, height: 60 }}>
           <FloatFx items={playerFx} removeFx={removeFx} />
         </div>
+        {/* 宝球 / 姿态 */}
+        {isDefect && <OrbRow />}
+        {isWatcher && <StanceBadge />}
         <StatusRow statuses={p.statuses} size={30} />
         <img
-          src={`${A}/hero/ironclad.png`}
-          alt="铁甲战士"
+          src={`${A}/hero/${heroSprite}.png`}
+          alt=""
           draggable={false}
           style={{ width: 240, height: 171, objectFit: 'contain', filter: 'drop-shadow(0 8px 10px rgba(0,0,0,0.5))' }}
         />
       </div>
 
-      {/* ===== 敌人区（中偏右，参照原版站位） ===== */}
+      {/* ===== 敌人区 ===== */}
       <div className="absolute flex items-start justify-center gap-10"
         style={{ left: '31%', right: 12, top: 118, bottom: 300, zIndex: 30 }}>
         {combat.enemies.map(e => (
@@ -281,34 +463,25 @@ export function CombatScreen() {
         </div>
       )}
 
-      {/* ===== 抽牌堆（左下角） ===== */}
-      <PileButton
-        label="抽牌堆" count={combat.drawPile.length} style={{ left: 26, bottom: 158 }}
-        onClick={() => openPile('draw')} shuffled
-      />
-      {/* ===== 弃牌堆（右下角） ===== */}
-      <PileButton
-        label="弃牌堆" count={combat.discardPile.length} style={{ right: 26, bottom: 158 }}
-        onClick={() => openPile('discard')}
-      />
+      {/* ===== 抽牌堆 ===== */}
+      <PileButton label="抽牌堆" count={combat.drawPile.length} style={{ left: 26, bottom: 158 }} onClick={() => openPile('draw')} shuffled />
+      {/* ===== 弃牌堆 ===== */}
+      <PileButton label="弃牌堆" count={combat.discardPile.length} style={{ right: 26, bottom: 158 }} onClick={() => openPile('discard')} />
       {/* ===== 消耗堆 ===== */}
       {combat.exhaustPile.length > 0 && (
-        <PileButton
-          label="消耗堆" count={combat.exhaustPile.length} style={{ right: 26, bottom: 88 }}
-          onClick={() => openPile('exhaust')} small
-        />
+        <PileButton label="消耗堆" count={combat.exhaustPile.length} style={{ right: 26, bottom: 88 }} onClick={() => openPile('exhaust')} small />
       )}
 
-      {/* ===== 能量球（左下，手牌左侧） ===== */}
+      {/* ===== 能量球 ===== */}
       <div className="absolute sts-energy" style={{ left: 118, bottom: 116, width: 104, height: 104, zIndex: 44 }}>
-        <img src={`${A}/frames/redEnergy.png`} alt="能量" className="w-full h-full object-contain" draggable={false} />
+        <img src={`${A}/frames/${energyOrb}.png`} alt="能量" className="w-full h-full object-contain" draggable={false} />
         <div className="absolute inset-0 flex items-center justify-center sts-num font-black"
-          style={{ fontSize: 40, color: '#fff', textShadow: '2px 2px 0 #802000, 0 0 12px #ff5000' }}>
+          style={{ fontSize: 40, color: '#fff', textShadow: '2px 2px 0 #403010, 0 0 12px #ff5000' }}>
           {p.energy}
         </div>
       </div>
 
-      {/* ===== 结束回合按钮（右下，弃牌堆上方） ===== */}
+      {/* ===== 结束回合按钮 ===== */}
       <button
         className="sts-btn absolute sts-title"
         style={{
@@ -321,18 +494,18 @@ export function CombatScreen() {
         {combat.phase === 'player' ? '结束回合' : '敌方回合…'}
       </button>
 
-      {/* ===== 手牌（容器不拦截点击，只有卡牌本身可点） ===== */}
+      {/* ===== 手牌 ===== */}
       <div className="absolute inset-x-0 flex justify-center items-end" style={{ bottom: -40, height: 320, zIndex: 45, pointerEvents: 'none' }}>
         {hand.map((card, i) => {
           const layout = handLayout[i]
           const isPlayable = combat.phase === 'player' && !busy && !combat.combatOver
           const isSelected = selectedCardUid === card.uid
-          const cost = cardCost(card, p.hpLostThisCombat)
+          const cost = cardCost(card, p.hpLostThisCombat, p.cardsDiscardedThisTurn || 0)
           const enough = cost === -1 ? true : p.energy >= Math.max(0, cost)
           return (
             <div
               key={card.uid}
-              className="sts-hand-card"
+              className={`sts-hand-card ${isNewCard(card.uid) ? 'sts-draw-in' : ''}`}
               style={{
                 position: 'absolute',
                 transform: `translateX(${layout.x}px) translateY(${layout.ty}px) rotate(${layout.rot}deg)`,
@@ -346,7 +519,7 @@ export function CombatScreen() {
                 <CardView
                   card={card}
                   width={168}
-                  ctx={{ hpLost: p.hpLostThisCombat, rampageBonus: combat.rampage?.[card.uid] || 0 }}
+                  ctx={{ hpLost: p.hpLostThisCombat, rampageBonus: combat.rampage?.[card.uid] || 0, glassKnifePenalty: combat.glassKnife?.[card.uid] || 0, clawBonus: combat.clawBonus || 0, shivBonus: p.statuses.accuracy || 0 }}
                   dimmed={!isPlayable || !enough}
                   selected={isSelected}
                   hoverPlay={isPlayable && enough}
@@ -357,6 +530,12 @@ export function CombatScreen() {
           )
         })}
       </div>
+
+      {/* ===== 出牌动画 ===== */}
+      <PlayedCardFx items={cardPlayFx} removeFx={removeFx} />
+
+      {/* ===== 预见界面 ===== */}
+      <ScryOverlay />
 
       {/* ===== 战斗结束横幅 ===== */}
       {endBanner && (
@@ -376,6 +555,14 @@ export function CombatScreen() {
       )}
     </div>
   )
+}
+
+// 各幕战斗背景
+function combatBg(act: number): string {
+  if (act >= 4) return 'combat4'
+  if (act === 3) return 'combat3'
+  if (act === 2) return 'combat2'
+  return 'combat'
 }
 
 // ============ 牌堆按钮 ============

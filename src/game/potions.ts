@@ -58,6 +58,22 @@ export const POTIONS: Record<string, PotionDef> = {
     id: 'attackPotion', name: '攻击药水', nameEn: 'Attack Potion', rarity: 'uncommon',
     desc: '将一张随机攻击牌（本回合费用为 0）加入手牌。', color: '#cb4335', target: 'none',
   },
+  poisonPotion: {
+    id: 'poisonPotion', name: '毒药', nameEn: 'Poison Potion', rarity: 'common',
+    desc: '对一名敌人施加 6 层中毒。', color: '#4a8a3a', target: 'enemy',
+  },
+  ghostInAJar: {
+    id: 'ghostInAJar', name: '罐中幽灵', nameEn: 'Ghost in a Jar', rarity: 'rare',
+    desc: '获得 1 层虚无形体。', color: '#aab8d0', target: 'none',
+  },
+  liquidBronze: {
+    id: 'liquidBronze', name: '青铜液', nameEn: 'Liquid Bronze', rarity: 'common',
+    desc: '获得 3 层金属化。', color: '#b08d3e', target: 'none',
+  },
+  cultistPotion: {
+    id: 'cultistPotion', name: '邪教徒药水', nameEn: 'Cultist Potion', rarity: 'common',
+    desc: '获得 1 层仪式。', color: '#6a4a8a', target: 'none',
+  },
 }
 
 export function potionPool(): string[] {

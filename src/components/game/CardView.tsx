@@ -1,8 +1,8 @@
 'use client'
-// ============ 卡牌渲染组件（还原原版样式） ============
+// ============ 卡牌渲染组件（还原原版样式，四色角色卡面） ============
 import { memo } from 'react'
 import { CardInstance } from '@/game/types'
-import { CARDS, cardCost, cardDesc } from '@/game/cards'
+import { CARDS, cardCost, cardDesc, cardColor } from '@/game/cards'
 
 const A = '/assets'
 
@@ -14,10 +14,41 @@ function raritySuffix(rarity: string): string {
   return 'Common'
 }
 
-const TYPE_BG: Record<string, string> = {
-  attack: `${A}/frames/bgAttackRed.png`,
-  skill: `${A}/frames/bgSkillRed.png`,
-  power: `${A}/frames/bgPowerRed.png`,
+// 卡面背景/费用宝珠/类型图标按角色色区分
+const TYPE_BG: Record<string, Record<string, string>> = {
+  red: {
+    attack: `${A}/frames/bgAttackRed.png`,
+    skill: `${A}/frames/bgSkillRed.png`,
+    power: `${A}/frames/bgPowerRed.png`,
+  },
+  green: {
+    attack: `${A}/frames/bgAttackGreen.png`,
+    skill: `${A}/frames/bgSkillGreen.png`,
+    power: `${A}/frames/bgPowerGreen.png`,
+  },
+  blue: {
+    attack: `${A}/frames/bgAttackBlue.png`,
+    skill: `${A}/frames/bgSkillBlue.png`,
+    power: `${A}/frames/bgPowerBlue.png`,
+  },
+  purple: {
+    attack: `${A}/frames/bgAttackPurple.png`,
+    skill: `${A}/frames/bgSkillPurple.png`,
+    power: `${A}/frames/bgPowerPurple.png`,
+  },
+  colorless: {
+    attack: `${A}/frames/bgAttackRed.png`,
+    skill: `${A}/frames/bgSkillRed.png`,
+    power: `${A}/frames/bgPowerRed.png`,
+  },
+}
+
+const COLOR_ORB: Record<string, string> = {
+  red: 'cardRedOrb', green: 'cardGreenOrb', blue: 'cardBlueOrb', purple: 'cardPurpleOrb', colorless: 'cardRedOrb',
+}
+
+const COLOR_TYPEICON: Record<string, string> = {
+  red: 'ironclad', green: 'silent', blue: 'defect', purple: 'watcher', colorless: 'ironclad',
 }
 
 export interface CardViewProps {
@@ -35,12 +66,16 @@ function CardViewInner({ card, width = 150, onClick, selected, dimmed, className
   const def = CARDS[card.id]
   if (!def) return null
   const H = width * 1.4003  // 419/299
+  const color = cardColor(card.id)
   const rar = raritySuffix(def.rarity)
   const frame = `${A}/frames/frame${def.type[0].toUpperCase()}${def.type.slice(1)}${rar}.png`
   const banner = `${A}/frames/banner${rar}.png`
   const cost = cardCost(card, ctx?.hpLost ?? 0)
   const desc = cardDesc(card, ctx)
   const upgraded = card.upgraded > 0
+  const bg = (TYPE_BG[color] || TYPE_BG.red)[def.type]
+  const orbImg = COLOR_ORB[color] || 'cardRedOrb'
+  const typeIconBase = COLOR_TYPEICON[color] || 'ironclad'
 
   return (
     <div
@@ -48,8 +83,8 @@ function CardViewInner({ card, width = 150, onClick, selected, dimmed, className
       style={{ width, height: H }}
       onClick={onClick}
     >
-      {/* 卡面背景 */}
-      <img src={TYPE_BG[def.type]} alt="" className="sts-canvas512" draggable={false} />
+      {/* 卡面背景（按角色色） */}
+      <img src={bg} alt="" className="sts-canvas512" draggable={false} />
       {/* 艺术图 */}
       <img
         src={`${A}/cardart/${card.id}.png`}
@@ -78,10 +113,10 @@ function CardViewInner({ card, width = 150, onClick, selected, dimmed, className
       >
         {def.name}
       </div>
-      {/* 费用宝珠 */}
+      {/* 费用宝珠（按角色色） */}
       {cost !== -99 && (
         <>
-          <img src={`${A}/frames/cardRedOrb.png`} alt="" className="sts-canvas512" draggable={false}
+          <img src={`${A}/frames/${orbImg}.png`} alt="" className="sts-canvas512" draggable={false}
             style={{ transform: 'scale(0.98)' }} />
           <div
             className="sts-title absolute flex items-center justify-center"

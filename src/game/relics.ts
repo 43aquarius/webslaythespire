@@ -110,6 +110,32 @@ export const RELICS: Record<string, RelicDef> = {
     id: 'bustedCrown', name: '破损王冠', nameEn: 'Busted Crown', rarity: 'boss',
     desc: '获得 1 点额外能量。卡牌奖励减少一个选项。', icon: '👑', color: '#8a7a2e',
   },
+  // 角色专属初始遗物
+  ringOfTheSnake: {
+    id: 'ringOfTheSnake', name: '蛇戒', nameEn: 'Ring of the Snake', rarity: 'starter',
+    desc: '每场战斗的第 1 回合，多抽 2 张牌。', icon: '🐍', color: '#3a6e3a',
+  },
+  crackedCore: {
+    id: 'crackedCore', name: '破碎之核', nameEn: 'Cracked Core', rarity: 'starter',
+    desc: '战斗开始时，引导 1 个闪电球。', icon: '⚡', color: '#3a4a6e',
+  },
+  pureWater: {
+    id: 'pureWater', name: '圣水', nameEn: 'Pure Water', rarity: 'starter',
+    desc: '每场战斗开始时，将一张“奇迹”加入手牌。', icon: '💧', color: '#5a4a7a',
+  },
+  // 新增通用
+  tungstenRod: {
+    id: 'tungstenRod', name: '钨钢棒', nameEn: 'Tungsten Rod', rarity: 'common',
+    desc: '每当你失去生命时，减少 1 点伤害。', icon: '🥢', color: '#4a4a5a',
+  },
+  ginger: {
+    id: 'ginger', name: '姜', nameEn: 'Ginger', rarity: 'uncommon',
+    desc: '你不会获得虚弱。', icon: '🫚', color: '#8a6a2e',
+  },
+  turnip: {
+    id: 'turnip', name: '萝卜', nameEn: 'Turnip', rarity: 'uncommon',
+    desc: '你不会获得脆弱。', icon: '🥬', color: '#6e8a4a',
+  },
 }
 
 // 战斗开始时生效的遗物集合

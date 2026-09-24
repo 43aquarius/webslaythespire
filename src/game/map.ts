@@ -175,3 +175,28 @@ export function reachableNodes(map: GameMap, currentNodeId: string | null): stri
   if (!node) return []
   return node.edges
 }
+
+// ============ 第四幕：固定结构（篝火 → 精英 → 篝火 → Boss） ============
+export function generateAct4Map(seed: number): GameMap {
+  void seed
+  const nodes: Record<string, MapNode> = {}
+  const mk = (id: string, row: number, col: number, type: NodeType): MapNode => {
+    const n: MapNode = { id, row, col, type, edges: [], x: 0, y: 0 }
+    nodes[id] = n
+    return n
+  }
+  const rest1 = mk('a4r0', 0, 3, 'rest')
+  const elite = mk('a4r1', 1, 3, 'elite')
+  const rest2 = mk('a4r2', 2, 3, 'rest')
+  const boss = mk('a4r3', 3, 3, 'boss')
+  rest1.edges.push(elite.id)
+  elite.edges.push(rest2.id)
+  rest2.edges.push(boss.id)
+  const width = 1100, height = 1450
+  const rowH = height / 4.5
+  Object.values(nodes).forEach(n => {
+    n.x = width / 2
+    n.y = height - (n.row + 1) * rowH + rowH / 2
+  })
+  return { nodes, startNodes: [rest1.id], bossNodeId: boss.id }
+}

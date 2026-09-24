@@ -1,28 +1,31 @@
 'use client'
 // ============ 游戏主控 Store ============
 import { create } from 'zustand'
-import { RunState, Screen, CardInstance, FxEvent, NodeType } from '@/game/types'
+import { RunState, Screen, CardInstance, FxEvent, NodeType, CharacterId } from '@/game/types'
 import { CARDS, makeCard, cardCost } from '@/game/cards'
 import {
   startCombat, playCard as engPlayCard, endPlayerTurn, enemyTurnStart, enemyStep,
   enemyTurnEnd, startPlayerTurn, usePotion as engUsePotion, usePotionOutOfCombat,
-  canPlayCard, exhaustCard,
+  canPlayCard, exhaustCard, setCombatRunRef,
 } from '@/game/engine'
 import {
   newRun, pickEncounter, makeCombatReward, makeShop, applyEventEffect, bossRelicChoices,
-  gainRelic, addPotion, EventResult,
+  gainRelic, addPotion, advanceAct, transformCardId, EventResult,
 } from '@/game/run'
 import { EVENTS as EVENTS_POOL } from '@/game/events'
 import { RELICS } from '@/game/relics'
+import { POTIONS } from '@/game/potions'
 
 export type SelectKind = 'armaments' | 'headbutt' | 'warcry' | 'trueGrit'
   | 'eventRemove' | 'eventUpgrade' | 'restSmith' | 'shopRemove' | 'sacrifice'
+  | 'nightmare' | 'seek' | 'omniscience' | 'hologram' | 'neowRemove' | 'neowUpgrade' | 'neowTransform' | 'neowDuplicate'
 
 export interface SelectState {
   kind: SelectKind
   title: string
   cardUids: string[]   // 可选的卡
-  source: 'deck' | 'hand' | 'discard'
+  source: 'deck' | 'hand' | 'discard' | 'draw'
+  remaining?: number    // 多选剩余次数（搜寻）
 }
 
 export interface FxItem extends FxEvent { ts: number }
@@ -40,9 +43,13 @@ interface GameStore {
   bossOptions: string[]
   toast: string | null
   endBanner: 'win' | 'lose' | null
+  selectedCharacter: CharacterId
 
-  startRun: () => void
+  selectCharacter: (c: CharacterId) => void
+  startRun: (c?: CharacterId) => void
+  chooseNeow: (idx: number) => void
   backToTitle: () => void
+  continueFromActTransition: () => void
   chooseNode: (nodeId: string) => void
   playCard: (uid: string, targetUid: string | null) => void
   endTurn: () => void
@@ -54,6 +61,7 @@ interface GameStore {
   cancelSelection: () => void
   resolveSelect: (cardUid: string) => void
   cancelSelect: () => void
+  resolveScry: (discardUids: string[]) => void
   openPile: (pile: 'draw' | 'discard' | 'exhaust' | 'deck') => void
   closePile: () => void
   takeGold: () => void
@@ -135,10 +143,55 @@ export const useGame = create<GameStore>((set, get) => {
     run.screen = 'combat'
   }
 
+  // 战斗中的引擎 pending 选择（含新增：噩梦/全知/全息/搜寻）
   function checkPendingSelect() {
     const run = get().run!
     const combat = run.combat
     if (!combat || combat.combatOver) return
+    const cf = combat.player.customFlags || {}
+    if (cf.pendingNightmareSelect) {
+      const n = cf.pendingNightmareSelect
+      delete cf.pendingNightmareSelect
+      if (combat.hand.length === 0) return
+      const r = clone(run)
+      set({ run: r, select: {
+        kind: 'nightmare', title: `噩梦：选择一张手牌（下回合获得 ${n} 张副本）`,
+        cardUids: combat.hand.map(c => c.uid), source: 'hand', remaining: n,
+      } })
+      return
+    }
+    if (cf.pendingOmniscience) {
+      const times = cf.pendingOmniscience
+      delete cf.pendingOmniscience
+      if (combat.hand.length === 0) return
+      const r = clone(run)
+      set({ run: r, select: {
+        kind: 'omniscience', title: `全知：选择一张手牌，将其打出 ${times} 次`,
+        cardUids: combat.hand.map(c => c.uid), source: 'hand', remaining: times,
+      } })
+      return
+    }
+    if (cf.pendingHologram) {
+      delete cf.pendingHologram
+      if (combat.discardPile.length === 0) return
+      const r = clone(run)
+      set({ run: r, select: {
+        kind: 'hologram', title: '全息影像：将弃牌堆中的一张牌返回手牌',
+        cardUids: combat.discardPile.map(c => c.uid), source: 'discard',
+      } })
+      return
+    }
+    if (cf.pendingSeek) {
+      const n = cf.pendingSeek
+      delete cf.pendingSeek
+      if (combat.drawPile.length === 0) return
+      const r = clone(run)
+      set({ run: r, select: {
+        kind: 'seek', title: `搜寻：从抽牌堆选择 ${n} 张牌加入手牌`,
+        cardUids: combat.drawPile.map(c => c.uid), source: 'draw', remaining: n,
+      } })
+      return
+    }
     if (combat.pendingArmaments === 'all') {
       const r = clone(run)
       r.combat!.hand.forEach(c => { c.upgraded = Math.max(1, c.upgraded) })
@@ -215,12 +268,101 @@ export const useGame = create<GameStore>((set, get) => {
     bossOptions: [],
     toast: null,
     endBanner: null,
+    selectedCharacter: 'ironclad',
 
-    startRun: () => {
+    selectCharacter: (c) => set({ selectedCharacter: c }),
+
+    startRun: (c) => {
+      const character = c || get().selectedCharacter
       set({
-        run: newRun(), screen: 'map', busy: false, fxList: [], select: null, pileView: null,
+        run: newRun(character), screen: 'neow', busy: false, fxList: [], select: null, pileView: null,
         selectedCardUid: null, selectedPotionIdx: null, eventMsg: null, bossOptions: [], toast: null, endBanner: null,
+        selectedCharacter: character,
       })
+    },
+
+    // ============ 涅奥祝福 ============
+    chooseNeow: (idx) => {
+      const { run, busy } = get()
+      if (!run || busy || !run.neow || run.neow.chosen) return
+      const opt = run.neow.options[idx]
+      if (!opt) return
+      const r = clone(run)
+      r.neow!.chosen = opt.id
+      let toast = ''
+      switch (opt.effect) {
+        case 'relic': {
+          const owned = new Set(r.relics)
+          const pool = ['vajra', 'anchor', 'bagOfMarbles', 'lantern', 'bagOfPreparation', 'bronzeScales', 'centennialPuzzle', 'warPaint', 'whetstone', 'smoothlyStone', 'preservedInsect', 'meatOnTheBone', 'bloodVial', 'tungstenRod']
+            .filter(id => !owned.has(id))
+          if (pool.length) {
+            gainRelic(r, pool[Math.floor(Math.random() * pool.length)])
+            toast = '获得了一件遗物！'
+          } else toast = '涅奥沉默了…'
+          break
+        }
+        case 'maxHp':
+          r.maxHp += opt.value || 8
+          r.hp += opt.value || 8
+          toast = `最大生命值 +${opt.value || 8}`
+          break
+        case 'heal':
+          r.hp = r.maxHp
+          toast = '生命值已完全恢复'
+          break
+        case 'gold':
+          r.gold += opt.value || 100
+          r.goldEarned += opt.value || 100
+          toast = `获得 ${opt.value || 100} 金币`
+          break
+        case 'potions': {
+          let added = 0
+          for (let i = 0; i < (opt.value || 3); i++) {
+            if (addPotion(r, ['firePotion', 'blockPotion', 'strengthPotion', 'energyPotion', 'swiftPotion', 'poisonPotion', 'weakPotion', 'fearPotion', 'explosivePotion'][Math.floor(Math.random() * 9)])) added++
+          }
+          toast = `获得了 ${added} 瓶药水`
+          break
+        }
+        case 'removeCard':
+          r.screen = 'map'
+          set({ run: r, screen: 'map', select: {
+            kind: 'neowRemove', title: '涅奥：选择要移除的牌',
+            cardUids: r.deck.map(c => c.uid), source: 'deck',
+          } })
+          return
+        case 'upgradeCard':
+          r.screen = 'map'
+          set({ run: r, screen: 'map', select: {
+            kind: 'neowUpgrade', title: '涅奥：选择要升级的牌',
+            cardUids: r.deck.map(c => c.uid), source: 'deck',
+          } })
+          return
+        case 'transformCard':
+          r.screen = 'map'
+          set({ run: r, screen: 'map', select: {
+            kind: 'neowTransform', title: '涅奥：选择要转化的牌',
+            cardUids: r.deck.map(c => c.uid), source: 'deck',
+          } })
+          return
+        case 'duplicateCard':
+          r.screen = 'map'
+          set({ run: r, screen: 'map', select: {
+            kind: 'neowDuplicate', title: '涅奥：选择要复制的牌',
+            cardUids: r.deck.map(c => c.uid), source: 'deck',
+          } })
+          return
+      }
+      r.screen = 'map'
+      set({ run: r, screen: 'map', toast: toast || null })
+      if (toast) setTimeout(() => { if (get().toast === toast) set({ toast: null }) }, 2400)
+    },
+
+    continueFromActTransition: () => {
+      const { run } = get()
+      if (!run) return
+      const r = clone(run)
+      r.screen = 'map'
+      set({ run: r, screen: 'map' })
     },
     backToTitle: () => set({
       run: null, screen: 'title', busy: false, fxList: [], select: null, pileView: null,
@@ -277,14 +419,23 @@ export const useGame = create<GameStore>((set, get) => {
       const check = canPlayCard(combat, run, card)
       if (!check.ok) { showToastSafe(check.reason || '无法打出'); return }
       const r = clone(run)
+      setCombatRunRef(r)
       engPlayCard(r.combat!, r, uid, targetUid)
       set({ run: r, selectedCardUid: null })
       drainFx(r)
       if (r.combat!.combatOver) {
         finishCombat()
-      } else {
-        checkPendingSelect()
+        return
       }
+      // 结案/穹顶：打牌后立即结束回合
+      if (r.combat!.player.customFlags?.endTurnNow) {
+        delete r.combat!.player.customFlags.endTurnNow
+        set({ run: r })
+        setTimeout(() => { get().endTurn() }, 450)
+        return
+      }
+      checkPendingSelect()
+      // 预见待处理（引擎 beginScry 已设置 pendingScry，UI 层弹出预见界面）
     },
 
     endTurn: async () => {
@@ -301,6 +452,17 @@ export const useGame = create<GameStore>((set, get) => {
         set({ run: r })
         drainFx(r)
         if (r.combat!.combatOver) { finishCombat(); return }
+
+        // 穹顶：跳过敌人回合
+        if (r.combat!.player.statuses.vaultS) {
+          delete r.combat!.player.statuses.vaultS
+          r = clone(get().run!)
+          startPlayerTurn(r.combat!, r)
+          set({ run: r })
+          drainFx(r)
+          showToastSafe('穹顶：跳过敌人回合')
+          return
+        }
 
         r = clone(get().run!)
         enemyTurnStart(r.combat!)
@@ -416,6 +578,96 @@ export const useGame = create<GameStore>((set, get) => {
       const { run, select } = get()
       if (!run || !select) return
       const r = clone(run)
+      setCombatRunRef(r)
+
+      // ---- 多选流程（搜寻）----
+      if (select.kind === 'seek') {
+        const i = r.combat?.drawPile.findIndex(x => x.uid === cardUid) ?? -1
+        if (i >= 0) {
+          const [c] = r.combat!.drawPile.splice(i, 1)
+          r.combat!.hand.push(c)
+        }
+        const left = (select.remaining || 1) - 1
+        if (left > 0 && r.combat && r.combat.drawPile.length > 0) {
+          set({ run: r, select: {
+            kind: 'seek', title: `搜寻：再选 ${left} 张`,
+            cardUids: r.combat.drawPile.map(c => c.uid), source: 'draw', remaining: left,
+          } })
+          return
+        }
+        set({ run: r, select: null })
+        return
+      }
+      // ---- 噩梦：选牌设 pendingNightmare ----
+      if (select.kind === 'nightmare') {
+        const c = r.combat?.hand.find(x => x.uid === cardUid)
+        if (c && r.combat) {
+          r.combat.pendingNightmare = { cardId: c.id, upgraded: c.upgraded, count: select.remaining || 3 }
+        }
+        set({ run: r, select: null })
+        return
+      }
+      // ---- 全知：将选中牌打出 N 次 ----
+      if (select.kind === 'omniscience') {
+        const times = select.remaining || 2
+        const combat = r.combat
+        if (combat) {
+          const living = combat.enemies.filter(e => !e.dying && e.hp > 0)
+          for (let t = 0; t < times; t++) {
+            const c = combat.hand.find(x => x.uid === cardUid)
+            if (!c) break
+            const targetUid = living[0]?.uid ?? null
+            engPlayCard(combat, r, cardUid, targetUid)
+          }
+        }
+        set({ run: r, select: null })
+        drainFx(r)
+        if (r.combat?.combatOver) finishCombat()
+        return
+      }
+      // ---- 全息影像：弃牌堆返回手牌 ----
+      if (select.kind === 'hologram') {
+        const i = r.combat?.discardPile.findIndex(x => x.uid === cardUid) ?? -1
+        if (i >= 0) {
+          const [c] = r.combat!.discardPile.splice(i, 1)
+          r.combat!.hand.push(c)
+        }
+        set({ run: r, select: null })
+        return
+      }
+      // ---- 涅奥祝福选牌 ----
+      if (select.kind === 'neowRemove') {
+        const i = r.deck.findIndex(x => x.uid === cardUid)
+        if (i >= 0) r.deck.splice(i, 1)
+        set({ run: r, select: null, toast: '涅奥净化了一张牌' })
+        setTimeout(() => { if (get().toast === '涅奥净化了一张牌') set({ toast: null }) }, 2200)
+        return
+      }
+      if (select.kind === 'neowUpgrade') {
+        const c = r.deck.find(x => x.uid === cardUid)
+        if (c) c.upgraded = Math.max(1, c.upgraded)
+        set({ run: r, select: null, toast: '涅奥锤炼了一张牌' })
+        setTimeout(() => { if (get().toast === '涅奥锤炼了一张牌') set({ toast: null }) }, 2200)
+        return
+      }
+      if (select.kind === 'neowTransform') {
+        const c = r.deck.find(x => x.uid === cardUid)
+        if (c) {
+          const newId = transformCardId(r, c.id)
+          c.id = newId
+          c.upgraded = 0
+        }
+        set({ run: r, select: null, toast: '涅奥改变了你的命运' })
+        setTimeout(() => { if (get().toast === '涅奥改变了你的命运') set({ toast: null }) }, 2200)
+        return
+      }
+      if (select.kind === 'neowDuplicate') {
+        const c = r.deck.find(x => x.uid === cardUid)
+        if (c) r.deck.push({ ...c, uid: `nd_${Date.now()}_${Math.random().toString(36).slice(2, 6)}` })
+        set({ run: r, select: null, toast: '涅奥复制了一张牌' })
+        setTimeout(() => { if (get().toast === '涅奥复制了一张牌') set({ toast: null }) }, 2200)
+        return
+      }
 
       if (select.kind === 'armaments') {
         const c = r.combat?.hand.find(x => x.uid === cardUid)
@@ -456,7 +708,32 @@ export const useGame = create<GameStore>((set, get) => {
       set({ run: r, select: null })
     },
 
-    cancelSelect: () => set({ select: null }),
+    cancelSelect: () => {
+      const { select } = get()
+      // 涅奥祝福与必选流程不可取消（否则流程卡住）
+      if (select && select.kind.startsWith('neow')) return
+      set({ select: null })
+    },
+
+    // 预见：确认弃牌
+    resolveScry: (discardUids: string[]) => {
+      const { run } = get()
+      const n0 = run?.combat?.pendingScry
+      if (!run || !run.combat || !n0) return
+      const r = clone(run)
+      const combat = r.combat!
+      const n = n0
+      // 抽牌堆末尾 n 张是即将抽到的
+      const top = combat.drawPile.slice(-n)
+      combat.drawPile = combat.drawPile.slice(0, -n)
+      top.forEach(c => {
+        if (discardUids.includes(c.uid)) combat.discardPile.push(c)
+        else combat.drawPile.push(c)
+      })
+      combat.pendingScry = null
+      combat.scryDiscarded = []
+      set({ run: r })
+    },
 
     openPile: (pile) => set({ pileView: pile }),
     closePile: () => set({ pileView: null }),
@@ -528,6 +805,13 @@ export const useGame = create<GameStore>((set, get) => {
       if (!run) return
       const r = clone(run)
       if (id) gainRelic(r, id)
+      // 第 1-3 幕：进入下一幕；第 4 幕：胜利
+      if (r.act < 4) {
+        advanceAct(r)
+        r.nextActInfo = r.act
+        set({ run: r, screen: 'actTransition', bossOptions: [] })
+        return
+      }
       r.gameOverInfo = {
         victory: true,
         floor: r.visitedNodes.length,
