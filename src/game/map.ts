@@ -118,15 +118,33 @@ export function generateMap(seed: number): GameMap {
     nodes[mkId(15, col)].edges.push(bossId)
   }
 
-  // 路径连接 row N → N+1（基于路径走向）
+  // 路径连接 row N → N+1（基于路径走向）+ StS 交叉规则
   for (let row = 0; row < 13; row++) {
     paths.forEach(path => {
       const fromCol = path[row]
       const toCol = path[row + 1]
       const from = nodes[mkId(row, fromCol)]
+      // 直接连接
       const toId = mkId(row + 1, toCol)
       if (!from.edges.includes(toId)) from.edges.push(toId)
-      // StS 路径交叉规则：允许连接相邻列的节点（简化：额外连接 toCol±0 已覆盖）
+      // 交叉规则：连接 fromCol 与 toCol 之间的所有节点（StS 原版行为）
+      const lo = Math.min(fromCol, toCol)
+      const hi = Math.max(fromCol, toCol)
+      for (let c = lo + 1; c < hi; c++) {
+        const crossId = mkId(row + 1, c)
+        if (nodes[crossId] && !from.edges.includes(crossId)) from.edges.push(crossId)
+      }
+    })
+  }
+
+  // 额外连通性：确保每个节点至少有 1 条出边（连向下一行最近节点）
+  for (let row = 0; row < 13; row++) {
+    rowCols[row].forEach(col => {
+      const node = nodes[mkId(row, col)]
+      if (node.edges.length === 0 && rowCols[row + 1].size > 0) {
+        const target = nearestCol(rowCols, row + 1, col, rng)
+        node.edges.push(mkId(row + 1, target))
+      }
     })
   }
 

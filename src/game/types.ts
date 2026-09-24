@@ -67,6 +67,8 @@ export interface CardInstance {
   uid: string
   id: string
   upgraded: number      // 0 = 未升级；>0 = 升级次数
+  freeThisTurn?: boolean // 药水墨牌：本回合 0 费
+  limitBreakExhaust?: boolean
 }
 
 // ============ 敌人 ============
@@ -178,6 +180,9 @@ export interface PlayerCombatState {
   maxEnergy: number
   hpLostThisCombat: number
   attacksThisTurn: number
+  tempStr?: number            // 屈伸临时力量
+  cardsPlayedThisTurn?: number
+  customFlags?: Record<string, number>
 }
 
 export interface CombatState {
@@ -199,6 +204,11 @@ export interface CombatState {
   combatOver: boolean
   playerWon: boolean
   combatEndTriggered: boolean
+  rampage?: Record<string, number>   // 暴走牌伤害成长
+  pendingArmaments?: 'one' | 'all' | null  // 武装升级选择
+  pendingHeadbutt?: boolean              // 头槌选牌
+  pendingTrueGrit?: boolean              // 坚毅升级版选牌
+  pendingWarcry?: boolean                // 战吼选牌
 }
 
 export interface FxEvent {
@@ -267,5 +277,6 @@ export interface RunState {
   monsterKilled: number
   goldEarned: number
   act: number
+  relicCounters: Record<string, number>
   gameOverInfo: { victory: boolean; floor: number; monstersSlain: number; elitesSlain: number; goldEarned: number } | null
 }

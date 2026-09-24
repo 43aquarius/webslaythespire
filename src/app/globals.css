@@ -120,3 +120,216 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ============ 杀戮尖塔游戏样式 ============ */
+:root {
+  --sts-font-title: var(--font-title), "LXGW WenKai", "Noto Serif SC", serif;
+  --sts-font-body: var(--font-body), "Noto Serif SC", serif;
+}
+
+.sts-title { font-family: var(--sts-font-title); }
+.sts-body { font-family: var(--sts-font-body); }
+
+/* 卡牌通用 */
+.sts-card { position: relative; user-select: none; }
+
+/* 卡牌 512 画布统一映射（卡体位于 (106,47)-(405,466)） */
+.sts-canvas512 {
+  position: absolute;
+  width: 171.24%;
+  height: 122.19%;
+  left: -35.47%;
+  top: -11.21%;
+  pointer-events: none;
+}
+
+/* 敌人受击闪白 */
+@keyframes sts-flash {
+  0% { filter: brightness(3) saturate(0); }
+  100% { filter: brightness(1) saturate(1); }
+}
+.sts-hit { animation: sts-flash 0.35s ease-out; }
+
+/* 敌人攻击前冲 */
+@keyframes sts-lunge {
+  0% { transform: translateY(0) scale(1); }
+  45% { transform: translateY(38px) scale(1.1); }
+  100% { transform: translateY(0) scale(1); }
+}
+.sts-lunge { animation: sts-lunge 0.55s ease-in-out; }
+
+/* 玩家受击震动 */
+@keyframes sts-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-10px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(4px); }
+}
+.sts-shake { animation: sts-shake 0.4s ease-in-out; }
+
+/* 伤害数字上飘 */
+@keyframes sts-float {
+  0% { transform: translateY(0) scale(0.6); opacity: 0; }
+  15% { transform: translateY(-8px) scale(1.15); opacity: 1; }
+  70% { transform: translateY(-46px) scale(1); opacity: 1; }
+  100% { transform: translateY(-72px) scale(0.9); opacity: 0; }
+}
+.sts-float {
+  animation: sts-float 1.1s ease-out forwards;
+  text-shadow: 0 0 4px #000, 2px 2px 0 #000, -1px -1px 0 #000;
+  pointer-events: none;
+  z-index: 60;
+}
+
+/* 敌人死亡淡出 */
+@keyframes sts-die {
+  0% { opacity: 1; filter: brightness(1); }
+  30% { filter: brightness(4); }
+  100% { opacity: 0; transform: translateY(10px) scale(0.9); filter: brightness(1); }
+}
+.sts-dying { animation: sts-die 0.9s ease-out forwards; }
+
+/* 手牌扇形排列由 JS 计算，悬浮效果 */
+.sts-hand-card { transition: transform 0.18s ease-out, box-shadow 0.18s; cursor: pointer; }
+.sts-hand-card:hover { z-index: 50 !important; }
+
+/* 可选目标提示 */
+@keyframes sts-target-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(255, 60, 40, 0.9), 0 0 22px rgba(255, 60, 40, 0.5); }
+  50% { box-shadow: 0 0 0 5px rgba(255, 90, 60, 1), 0 0 34px rgba(255, 60, 40, 0.8); }
+}
+.sts-targetable { animation: sts-target-pulse 1s infinite; border-radius: 12px; cursor: crosshair; }
+
+/* 地图节点 */
+@keyframes sts-node-pulse {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(255,220,120,0.8)); }
+  50% { filter: drop-shadow(0 0 16px rgba(255,220,120,1)); }
+}
+.sts-node-reach { animation: sts-node-pulse 1.2s infinite; cursor: pointer; }
+.sts-node-locked { filter: grayscale(0.9) brightness(0.55); }
+
+/* 按钮通用 */
+.sts-btn {
+  font-family: var(--sts-font-body);
+  background: linear-gradient(180deg, #7a2d21 0%, #521c14 100%);
+  border: 2px solid #2e120c;
+  border-radius: 8px;
+  color: #f5e5c8;
+  text-shadow: 1px 1px 0 #000;
+  box-shadow: inset 0 1px 0 rgba(255,200,140,0.25), 0 3px 0 #1c0a06, 0 5px 10px rgba(0,0,0,0.6);
+  padding: 10px 26px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.sts-btn:hover:not(:disabled) {
+  filter: brightness(1.18);
+  transform: translateY(-1px);
+}
+.sts-btn:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 #1c0a06; }
+.sts-btn:disabled { filter: grayscale(0.7) brightness(0.6); cursor: not-allowed; }
+.sts-btn-gold {
+  background: linear-gradient(180deg, #a8842e 0%, #6e5116 100%);
+  border-color: #3a2c0a;
+}
+
+/* 面板 */
+.sts-panel {
+  background: linear-gradient(180deg, rgba(38,24,18,0.96) 0%, rgba(24,14,10,0.97) 100%);
+  border: 2px solid #5a4030;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,210,150,0.12);
+}
+
+/* 血条 */
+.sts-hpbar-outer {
+  background: #1a0d08;
+  border: 2px solid #000;
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px #553b2a, inset 0 2px 4px rgba(0,0,0,0.8);
+  overflow: hidden;
+}
+.sts-hpbar-fill {
+  background: linear-gradient(180deg, #ff5a4a 0%, #c81e14 50%, #8f120c 100%);
+  height: 100%;
+  transition: width 0.35s ease-out;
+}
+
+/* 意图图标浮动 */
+@keyframes sts-intent-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+.sts-intent { animation: sts-intent-bob 1.6s ease-in-out infinite; }
+
+/* 药水/遗物提示 */
+.sts-slot {
+  position: relative;
+  transition: filter 0.15s;
+}
+.sts-slot:hover { filter: brightness(1.3); }
+
+/* 遗物栏 */
+.sts-relic {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  border: 2px solid #6b4a2e;
+  background: radial-gradient(circle at 35% 30%, #8a6a4a, #3a2818);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+}
+
+/* 滚动条 */
+.sts-scroll::-webkit-scrollbar { width: 8px; }
+.sts-scroll::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); border-radius: 4px; }
+.sts-scroll::-webkit-scrollbar-thumb { background: #6b4a2e; border-radius: 4px; }
+.sts-scroll::-webkit-scrollbar-thumb:hover { background: #8a6a4a; }
+
+/* Toast */
+.sts-toast {
+  position: fixed;
+  left: 50%;
+  top: 88px;
+  transform: translateX(-50%);
+  z-index: 200;
+  font-family: var(--sts-font-body);
+}
+
+/* 卡牌奖励出现动画 */
+@keyframes sts-card-in {
+  0% { transform: translateY(60px) scale(0.7); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+.sts-card-in { animation: sts-card-in 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.2) backwards; }
+
+/* 升级卡牌绿光 */
+.sts-upgraded-glow { filter: drop-shadow(0 0 6px rgba(120, 255, 140, 0.8)); }
+
+/* 屏幕震动容器 */
+@keyframes sts-screen-shake {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(-6px, 3px); }
+  50% { transform: translate(5px, -4px); }
+  75% { transform: translate(-3px, -2px); }
+}
+.sts-screen-shake { animation: sts-screen-shake 0.35s ease-out; }
+
+/* 呼吸光效（能量球） */
+@keyframes sts-energy-pulse {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(255, 120, 40, 0.6)); }
+  50% { filter: drop-shadow(0 0 18px rgba(255, 160, 60, 0.95)); }
+}
+.sts-energy { animation: sts-energy-pulse 2s ease-in-out infinite; }
+
+/* 遮罩 */
+.sts-overlay {
+  position: fixed; inset: 0;
+  background: rgba(8, 4, 2, 0.82);
+  backdrop-filter: blur(3px);
+  z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* 数字字体变体 */
+.sts-num { font-variant-numeric: tabular-nums; }
+

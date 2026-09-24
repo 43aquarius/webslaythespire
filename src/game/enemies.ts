@@ -45,7 +45,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     ],
   },
   acidSlimeS: {
-    id: 'acidSlimeS', name: '酸液史莱姆(小)', nameEn: 'Acid Slime (S)', minHp: 8, maxHp: 12, sprite: 'acidslime',
+    id: 'acidSlimeS', name: '酸液史莱姆(小)', nameEn: 'Acid Slime (S)', minHp: 8, maxHp: 12, sprite: 'acidslimeS',
     moveLogic: 'random', weights: [30, 30, 40],
     moves: [
       { name: '腐蚀唾液', intent: { type: 'attackDebuff', damage: 3, times: 1 }, dmg: 3, addCards: { cardId: 'slimed', count: 1, pile: 'discard' } },
@@ -54,7 +54,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     ],
   },
   spikeSlimeS: {
-    id: 'spikeSlimeS', name: '尖刺史莱姆(小)', nameEn: 'Spike Slime (S)', minHp: 8, maxHp: 12, sprite: 'spikeslime',
+    id: 'spikeSlimeS', name: '尖刺史莱姆(小)', nameEn: 'Spike Slime (S)', minHp: 8, maxHp: 12, sprite: 'spikeSlimeS',
     moveLogic: 'random', weights: [30, 30, 40],
     moves: [
       { name: '黏液飞溅', intent: { type: 'attackDebuff', damage: 5, times: 1 }, dmg: 5, status: { id: 'frail', amount: 1, target: 'player' } },
@@ -63,7 +63,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     ],
   },
   acidSlimeM: {
-    id: 'acidSlimeM', name: '酸液史莱姆(中)', nameEn: 'Acid Slime (M)', minHp: 28, maxHp: 32, sprite: 'acidslime',
+    id: 'acidSlimeM', name: '酸液史莱姆(中)', nameEn: 'Acid Slime (M)', minHp: 28, maxHp: 32, sprite: 'acidslimeM',
     moveLogic: 'random', weights: [30, 30, 40], onDeath: 'splitAcid',
     moves: [
       { name: '腐蚀唾液', intent: { type: 'attackDebuff', damage: 7, times: 1 }, dmg: 7, addCards: { cardId: 'slimed', count: 1, pile: 'discard' } },
@@ -72,7 +72,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     ],
   },
   spikeSlimeM: {
-    id: 'spikeSlimeM', name: '尖刺史莱姆(中)', nameEn: 'Spike Slime (M)', minHp: 28, maxHp: 32, sprite: 'spikeslime',
+    id: 'spikeSlimeM', name: '尖刺史莱姆(中)', nameEn: 'Spike Slime (M)', minHp: 28, maxHp: 32, sprite: 'spikeSlimeM',
     moveLogic: 'random', weights: [30, 30, 40], startStatuses: { thorns: 3 }, onDeath: 'splitSpike',
     moves: [
       { name: '黏液飞溅', intent: { type: 'attackDebuff', damage: 8, times: 1 }, dmg: 8, status: { id: 'frail', amount: 1, target: 'player' } },
@@ -93,7 +93,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   },
   lagavulin: {
     id: 'lagavulin', name: '拉格维林', nameEn: 'Lagavulin', minHp: 109, maxHp: 112, sprite: 'lagavulin', elite: true,
-    openingMove: -1, moveLogic: 'random', weights: [55, 45], startStatuses: { asleep: 8 },
+    openingMove: -1, moveLogic: 'random', weights: [55, 45], startStatuses: { asleep: 3, metallicizeE: 8 },
     moves: [
       { name: '攻击', intent: { type: 'attack', damage: 18, times: 1 }, dmg: 18 },
       { name: '虹吸灵魂', intent: { type: 'strongDebuff' }, status: { id: 'strength', amount: -1, target: 'player' }, status2: { id: 'dexterity', amount: -1, target: 'player' } },
@@ -111,7 +111,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   // ============ Boss ============
   slimeBoss: {
     id: 'slimeBoss', name: '史莱姆老大', nameEn: 'Slime Boss', minHp: 140, maxHp: 140, sprite: 'slimeboss', boss: true,
-    openingMove: 0, moveLogic: 'random', weights: [30, 0, 70],
+    openingMove: 0, moveLogic: 'random', weights: [30, 0, 70], onDeath: 'splitBoss',
     moves: [
       { name: '粘液喷射', intent: { type: 'attackDebuff', damage: 8, times: 1 }, dmg: 8, addCards: { cardId: 'slimed', count: 2, pile: 'discard' } },
       { name: '蓄力', intent: { type: 'unknown' }, custom: 'slimePreparing' },
