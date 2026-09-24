@@ -53,3 +53,19 @@ Stage Summary:
 - 「无法结束回合」根因 = 手牌容器遮挡按钮，已修复并实测验证
 - 共修复 16 项 bug + 3 项功能补全，两个版本(Next.js/单文件)同步更新
 - 产物：download/slay-the-spire-standalone.html (4.03MB，实测可玩)
+
+---
+Task ID: 4
+Agent: main
+Task: 原版BGM + 地图bug修复 + 连线可见性 + GitHub提交
+
+Work Log:
+- 地图重写(map.ts)：对齐原版16层结构(第1层战斗/第9层宝箱/第15层篝火/第16层Boss)；6路径±1/0步进+交叉检测(垂直边永不相交)；修复3个bug——14/15层死节点(原版每图2-6个永远点不到的宝箱/篝火)、边X交叉(原每图2-5处)、连线穿过节点；类型权重对齐原版(战斗45%/事件22%/精英16%≥5层/篝火12%≥5层/商店5%，非同类连续)；前3路径固定不同起始列保证≥3起点
+- 连线可见性修复：原 rgba(60,40,28,0.65)+dasharray"1 12" 在暗背景上不可见(用户反馈"没有连线")→ 改为原版风格亮米色圆点 #cfc2a4/#f0e6cc dasharray"0.5 13" width5 + 走过金色 #ffd97a 实线；像素实测可见性提升7倍
+- BGM：从 GitHub 反编译源码仓库下载原版OST 9首(ogg)，按原版 MusicMaster/MainMusic.java 映射场景(标题=MenuTheme/地图&普战=Level1/精英=EliteBoss/Boss=Boss1/商店=Merchant/事件=Shrine/结算=Credits/胜死=Stinger)；ffmpeg转码(Next.js q4 ~113k / 单文件 q0 ~55k)
+- 音乐引擎(两版本同构)：双Audio交叉淡入淡出、autoplay手势解锁、音量/静音localStorage持久化、右上角音量UI；修复同手势连续切歌竞态(旧fading标志会误停新曲目→改目标音量驱动循环)
+- 测试：地图200种子0问题(无死节点/无交叉/无穿节点/≥3起点)；映射12用例全过；全流程胜利/失败各1局正常；16项回归全过；tsc无错；生产构建通过；浏览器实测两版本音乐播放/场景切换/音量UI正常
+
+Stage Summary:
+- 产物：Next.js版含BGM+新地图；单文件版10.89MB(含音乐base64)已重建同步download/
+- 修复地图bug 3项+连线可见性，新增完整BGM系统(9首原版曲目)

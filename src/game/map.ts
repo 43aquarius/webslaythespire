@@ -1,8 +1,15 @@
-// ============ StS 式地图生成算法 ============
+// ============ StS 式地图生成算法（对齐原版结构） ============
+// 原版第一幕：16 层 —— 第 1 层(lay 0)战斗、第 9 层(row 8)宝箱、
+// 第 15 层(row 14)篝火、第 16 层 Boss；其余层随机（5 层后可出精英/篝火）。
+// 规则：6 条路径向上爬；边不允许交叉；步进限制 ±1/0（垂直边永不相交，
+// 且不会从节点中间穿过）；所有 row14 节点直连 Boss。
 import { GameMap, MapNode, NodeType } from './types'
 
-export const MAP_ROWS = 17       // 0-13 随机层, 14 宝箱, 15 篝火, 16 Boss
+export const MAP_ROWS = 16       // 0-13 随机层, 8 宝箱, 14 篝火, 15 Boss
 export const MAP_COLS = 7
+export const TREASURE_ROW = 8
+export const REST_ROW = 14
+export const BOSS_ROW = 15
 
 // RNG (可播种)
 export function mulberry32(seed: number) {
@@ -15,185 +22,150 @@ export function mulberry32(seed: number) {
   }
 }
 
-// StS 权重表（近似原版）
-function nodeTypeForRow(row: number, rng: () => number, lastOnPath: MapNode | null): NodeType {
-  if (row === 0) return 'monster'
-  if (row === 14) return 'treasure'
-  if (row === 15) return 'rest'
-  if (row === 16) return 'boss'
-
-  const roll = rng()
-  if (row <= 3) {
-    // 前几层：无精英
-    if (roll < 0.45) return 'monster'
-    if (roll < 0.85) return 'event'
-    if (roll < 0.95) return 'shop'
-    return 'treasure'
-  }
-  // 4-13 层
-  if (roll < 0.40) return 'monster'
-  if (roll < 0.70) return 'event'
-  if (roll < 0.90) return 'elite'
-  if (roll < 0.95) return 'shop'
-  return 'treasure'
-}
-
-// 约束：避免连续同类型（路径上）
-function adjustType(type: NodeType, parent: MapNode | null): NodeType {
-  if (!parent) return type
-  if (type === parent.type) {
-    // 简单避让
-    if (type === 'elite' || type === 'shop' || type === 'treasure' || type === 'rest') return 'monster'
-    if (type === 'monster') return 'event'
-    if (type === 'event') return 'monster'
-  }
-  return type
+// 两条边是否几何相交（同一行间隙内的两条边）
+// new: (c -> d)，old: (a -> b)；相交 iff 一条向右一条向左且列区间重叠
+function edgesCross(c: number, d: number, a: number, b: number): boolean {
+  return (c < a && d > b) || (c > a && d < b)
 }
 
 export function generateMap(seed: number): GameMap {
   const rng = mulberry32(seed)
   const nodes: Record<string, MapNode> = {}
-
   const mkId = (row: number, col: number) => `r${row}c${col}`
 
-  // 生成路径（模拟 StS：6 条路径从底部向上爬）
+  // 已有的行间隙边：edgesBetween[r] = Set<"c>d">
+  const edgesBetween: Array<Set<number>> = []
+  for (let r = 0; r < REST_ROW; r++) edgesBetween.push(new Set())
+
+  const addEdge = (row: number, fromCol: number, toCol: number) => {
+    const key = fromCol * 100 + toCol
+    if (!edgesBetween[row].has(key)) edgesBetween[row].add(key)
+  }
+  const wouldCross = (row: number, fromCol: number, toCol: number): boolean => {
+    for (const key of edgesBetween[row]) {
+      const a = Math.floor(key / 100), b = key % 100
+      if (edgesCross(fromCol, toCol, a, b)) return true
+    }
+    return false
+  }
+
+  // ---- 1. 生成 6 条路径（row 0 -> row 14），步进 ±1/0，禁止交叉 ----
   const pathCount = 6
-  const paths: number[][] = []   // 每条路径: [row0 的列, row1 的列, ...]
+  const paths: number[][] = []
+  // 前 3 条路径从互不相同的列出发（保证起始节点 >= 3，对齐原版）
+  const startOrder = Array.from({ length: MAP_COLS }, (_, i) => i)
+  for (let i = startOrder.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1))
+    ;[startOrder[i], startOrder[j]] = [startOrder[j], startOrder[i]]
+  }
   for (let p = 0; p < pathCount; p++) {
-    const path: number[] = []
-    let col = Math.floor(rng() * MAP_COLS)
-    path.push(col)
-    for (let row = 1; row < 14; row++) {
-      // 随机 -1/0/+1 偏移
-      const r = rng()
-      if (r < 0.35) col = Math.max(0, col - 1)
-      else if (r < 0.70) col = col
-      else col = Math.min(MAP_COLS - 1, col + 1)
-      path.push(col)
+    const path: number[] = [p < 3 ? startOrder[p] : Math.floor(rng() * MAP_COLS)]
+    for (let row = 1; row <= REST_ROW; row++) {
+      const cur = path[row - 1]
+      // 随机选择步进：-1 / 0 / +1（带边界钳制）
+      const roll = rng()
+      let step = 0
+      if (roll < 0.38) step = -1
+      else if (roll > 0.62) step = 1
+      let next = Math.max(0, Math.min(MAP_COLS - 1, cur + step))
+      if (next !== cur && wouldCross(row - 1, cur, next)) {
+        // 会与已有边交叉 → 回退为垂直步进（垂直边永不相交，安全）
+        next = cur
+      }
+      path.push(next)
+      addEdge(row - 1, cur, next)
     }
     paths.push(path)
   }
 
-  // 收集每行的节点（去重）
-  const rowCols: Set<number>[] = []
-  for (let row = 0; row < 14; row++) {
-    rowCols[row] = new Set()
-    paths.forEach(p => rowCols[row].add(p[row]))
-  }
+  // ---- 2. 依据路径落点建节点（天然去重） ----
+  const rowCols: Array<Set<number>> = []
+  for (let row = 0; row <= REST_ROW; row++) rowCols.push(new Set())
+  for (const p of paths) p.forEach((col, row) => rowCols[row].add(col))
 
-  // 创建节点
-  for (let row = 0; row < 14; row++) {
+  for (let row = 0; row <= REST_ROW; row++) {
     rowCols[row].forEach(col => {
       const id = mkId(row, col)
-      nodes[id] = {
-        id, row, col, type: 'monster', edges: [],
-        x: 0, y: 0,
-      }
+      nodes[id] = { id, row, col, type: 'monster', edges: [], x: 0, y: 0 }
     })
   }
 
-  // 宝箱/篝火/Boss 行（单行）
-  for (let col = 0; col < MAP_COLS; col++) {
-    const tId = mkId(14, col)
-    nodes[tId] = { id: tId, row: 14, col, type: 'treasure', edges: [], x: 0, y: 0 }
-    const rId = mkId(15, col)
-    nodes[rId] = { id: rId, row: 15, col, type: 'rest', edges: [], x: 0, y: 0 }
+  // ---- 3. 建边：路径的每一步 + 合并多父节点 ----
+  const edgeSet = new Set<string>() // "fromId>toId"
+  const addNodeEdge = (fromId: string, toId: string) => {
+    const key = `${fromId}>${toId}`
+    if (!edgeSet.has(key) && nodes[fromId] && nodes[toId]) {
+      edgeSet.add(key)
+      nodes[fromId].edges.push(toId)
+    }
   }
-  const bossId = mkId(16, 3)
-  nodes[bossId] = { id: bossId, row: 16, col: 3, type: 'boss', edges: [], x: 0, y: 0 }
-
-  // 连接边：row13 → row14 (treasure), row14 → row15 (rest), row15 → boss
-  // 13 层每个节点连到最近的 14 层节点
-  rowCols[13].forEach(col => {
-    const from = nodes[mkId(13, col)]
-    // 连接到 14 行：优先同列，否则最近
-    const target = nearestCol(rowCols, 14, col, rng)
-    from.edges.push(mkId(14, target))
-  })
-  // 14→15, 15→16
-  for (let col = 0; col < MAP_COLS; col++) {
-    nodes[mkId(14, col)].edges.push(mkId(15, col))
-  }
-  for (let col = 0; col < MAP_COLS; col++) {
-    nodes[mkId(15, col)].edges.push(bossId)
-  }
-
-  // 路径连接 row N → N+1（基于路径走向）+ StS 交叉规则
-  for (let row = 0; row < 13; row++) {
-    paths.forEach(path => {
-      const fromCol = path[row]
-      const toCol = path[row + 1]
-      const from = nodes[mkId(row, fromCol)]
-      // 直接连接
-      const toId = mkId(row + 1, toCol)
-      if (!from.edges.includes(toId)) from.edges.push(toId)
-      // 交叉规则：连接 fromCol 与 toCol 之间的所有节点（StS 原版行为）
-      const lo = Math.min(fromCol, toCol)
-      const hi = Math.max(fromCol, toCol)
-      for (let c = lo + 1; c < hi; c++) {
-        const crossId = mkId(row + 1, c)
-        if (nodes[crossId] && !from.edges.includes(crossId)) from.edges.push(crossId)
-      }
-    })
-  }
-
-  // 额外连通性：确保每个节点至少有 1 条出边（连向下一行最近节点）
-  for (let row = 0; row < 13; row++) {
-    rowCols[row].forEach(col => {
-      const node = nodes[mkId(row, col)]
-      if (node.edges.length === 0 && rowCols[row + 1].size > 0) {
-        const target = nearestCol(rowCols, row + 1, col, rng)
-        node.edges.push(mkId(row + 1, target))
-      }
-    })
-  }
-
-  // 分配节点类型
-  for (let row = 0; row < 14; row++) {
-    rowCols[row].forEach(col => {
-      const node = nodes[mkId(row, col)]
-      let type = nodeTypeForRow(row, rng, null)
-      // 避免与父节点同类型连续
-      const parents = Object.values(nodes).filter(n => n.row === row - 1 && n.edges.includes(node.id))
-      for (const p of parents) {
-        type = adjustType(type, p)
-      }
-      node.type = type
-    })
-  }
-
-  // 保证第 4+ 行至少有 1 个精英；若无则强制替换一个怪节点
-  const eliteCount = Object.values(nodes).filter(n => n.row >= 4 && n.row <= 13 && n.type === 'elite').length
-  if (eliteCount === 0) {
-    const candidates = Object.values(nodes).filter(n => n.row >= 5 && n.row <= 10 && n.type === 'monster')
-    if (candidates.length > 0) {
-      candidates[Math.floor(rng() * candidates.length)].type = 'elite'
+  for (const p of paths) {
+    for (let row = 0; row < REST_ROW; row++) {
+      addNodeEdge(mkId(row, p[row]), mkId(row + 1, p[row + 1]))
     }
   }
 
-  // 计算坐标（像素）— 上层在下（StS 地图从下往上走，我们渲染为 Boss 在顶部）
+  // Boss 节点与连线
+  const bossId = mkId(BOSS_ROW, 3)
+  nodes[bossId] = { id: bossId, row: BOSS_ROW, col: 3, type: 'boss', edges: [], x: 0, y: 0 }
+  for (const col of rowCols[REST_ROW]) {
+    nodes[mkId(REST_ROW, col)].edges.push(bossId)
+  }
+
+  // ---- 4. 节点类型 ----
+  // 固定行
+  for (const col of rowCols[0]) nodes[mkId(0, col)].type = 'monster'
+  for (const col of rowCols[TREASURE_ROW]) nodes[mkId(TREASURE_ROW, col)].type = 'treasure'
+  for (const col of rowCols[REST_ROW]) nodes[mkId(REST_ROW, col)].type = 'rest'
+
+  // 随机行权重（近似原版）：战斗 45% / 事件 22% / 精英 16%(row>=5) / 篝火 12%(row>=5) / 商店 5%
+  const parentOf = (row: number, col: number): MapNode[] =>
+    Object.values(nodes).filter(n => n.row === row - 1 && n.edges.includes(mkId(row, col)))
+
+  const randomType = (row: number, parents: MapNode[]): NodeType => {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const roll = rng()
+      let t: NodeType
+      if (roll < 0.45) t = 'monster'
+      else if (roll < 0.67) t = 'event'
+      else if (roll < 0.83) t = row >= 5 ? 'elite' : 'monster'
+      else if (roll < 0.95) t = row >= 5 ? 'rest' : 'event'
+      else t = 'shop'
+      // 原版约束：路径上不与父节点连续同类（战斗/事件可以连续）
+      if (t === 'elite' || t === 'shop' || t === 'rest') {
+        if (parents.some(p => p.type === t)) continue
+      }
+      return t
+    }
+    return 'monster'
+  }
+
+  for (let row = 1; row < REST_ROW; row++) {
+    if (row === TREASURE_ROW) continue
+    rowCols[row].forEach(col => {
+      nodes[mkId(row, col)].type = randomType(row, parentOf(row, col))
+    })
+  }
+
+  // 保底：若全图没有精英（概率极低），强制放一个
+  const hasElite = Object.values(nodes).some(n => n.type === 'elite')
+  if (!hasElite) {
+    const candidates = Object.values(nodes).filter(n => n.row >= 6 && n.row <= 12 && n.type === 'monster')
+    if (candidates.length > 0) candidates[Math.floor(rng() * candidates.length)].type = 'elite'
+  }
+
+  // ---- 5. 坐标（Boss 在顶部，row 0 在底部） ----
   const width = 1100
   const height = 1450
   const colW = width / (MAP_COLS + 1)
   const rowH = height / (MAP_ROWS + 0.5)
   Object.values(nodes).forEach(node => {
     node.x = (node.col + 1) * colW - colW / 2
-    // row 0 在底部
     node.y = height - (node.row + 1) * rowH + rowH / 2
   })
 
-  // 起始节点 = row 0 全部
   const startNodes = [...rowCols[0]].map(col => mkId(0, col))
-
   return { nodes, startNodes, bossNodeId: bossId }
-}
-
-function nearestCol(rowCols: Set<number>[], row: number, col: number, rng: () => number): number {
-  const cols = [...rowCols[row] ?? []]
-  if (cols.length === 0) return col
-  cols.sort((a, b) => Math.abs(a - col) - Math.abs(b - col))
-  const best = cols[0]
-  return best
 }
 
 // 可达节点（从当前节点出发）

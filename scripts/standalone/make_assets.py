@@ -62,6 +62,20 @@ for d, (maxside, fmt, quality) in PLANS.items():
         total += len(data)
         print(f'{key:40s} {orig_size//1024:5d}KB -> {len(data)//1024:5d}KB')
 
+# 音频（低码率 ogg，来自原版原声带）
+AUDIO_DIR = '/home/z/my-project/scripts/standalone/audio'
+if os.path.isdir(AUDIO_DIR):
+    for f in sorted(os.listdir(AUDIO_DIR)):
+        if not f.endswith('.ogg'):
+            continue
+        path = os.path.join(AUDIO_DIR, f)
+        with open(path, 'rb') as fp:
+            data = fp.read()
+        b64 = base64.b64encode(data).decode()
+        manifest[f'audio/{f}'] = f'data:audio/ogg;base64,{b64}'
+        total += len(data)
+        print(f'{"audio/"+f:40s} {len(data)//1024:5d}KB (audio)')
+
 with open(OUT, 'w') as f:
     json.dump(manifest, f, separators=(',', ':'))
 

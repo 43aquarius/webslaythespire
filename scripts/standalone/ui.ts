@@ -57,6 +57,198 @@ const STATUS_INFO: Record<string, { name: string; desc: string; buff?: boolean }
 const esc = (s: string) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 const g = () => useGame.getState()
 
+// ============ BGM 引擎（曲目映射自原版反编译源码） ============
+type TrackKey = 'menu' | 'level' | 'elite' | 'boss' | 'merchant' | 'shrine' | 'credits' | 'victory' | 'death'
+const MUSIC_SRC: Record<TrackKey, string> = {
+  menu: A('audio/menu.ogg'),
+  level: A('audio/level.ogg'),
+  elite: A('audio/elite.ogg'),
+  boss: A('audio/boss.ogg'),
+  merchant: A('audio/merchant.ogg'),
+  shrine: A('audio/shrine.ogg'),
+  credits: A('audio/credits.ogg'),
+  victory: A('audio/victory.ogg'),
+  death: A('audio/death.ogg'),
+}
+
+class MusicEngine {
+  private a = new Audio()
+  private b = new Audio()
+  private active: HTMLAudioElement
+  private fadeTargets: Array<{ el: HTMLAudioElement; target: number }> = []
+  private fadeTimer: ReturnType<typeof setInterval> | null = null
+  private currentKey: TrackKey | null = null
+  private pendingKey: TrackKey | null = null
+  private unlocked = false
+  private unlockBound = false
+  volume = 0.55
+  muted = false
+
+  constructor() {
+    try {
+      this.volume = Number(localStorage.getItem('sts-music-vol') ?? 0.55)
+      this.muted = localStorage.getItem('sts-music-muted') === '1'
+    } catch { /* file:// 或隐私模式 */ }
+    for (const el of [this.a, this.b]) { el.preload = 'auto'; el.volume = this.effVol() }
+    this.active = this.a
+  }
+  private effVol() { return this.muted ? 0 : this.volume }
+
+  unlock() {
+    if (this.unlocked) return
+    this.unlocked = true
+    if (this.pendingKey) { const k = this.pendingKey; this.pendingKey = null; this.play(k) }
+  }
+  private ensureUnlock() {
+    if (this.unlocked) return
+    if (!this.unlockBound) {
+      this.unlockBound = true
+      const handler = () => {
+        this.unlock()
+        window.removeEventListener('pointerdown', handler)
+        window.removeEventListener('keydown', handler)
+      }
+      window.addEventListener('pointerdown', handler)
+      window.addEventListener('keydown', handler)
+    }
+  }
+
+  play(key: TrackKey) {
+    this.ensureUnlock()
+    if (!this.unlocked) { this.pendingKey = key; return }
+    if (this.currentKey === key && !this.active.paused) return
+    this.currentKey = key
+    this.crossfade(MUSIC_SRC[key], true, 1.6)
+  }
+
+  stinger(key: TrackKey, follow?: TrackKey) {
+    this.ensureUnlock()
+    if (!this.unlocked) { this.pendingKey = key; return }
+    this.currentKey = key
+    this.crossfade(MUSIC_SRC[key], false, 0.8, () => {
+      if (follow) { this.currentKey = follow; this.crossfade(MUSIC_SRC[follow], true, 2) }
+    })
+  }
+
+  private crossfade(src: string, loop: boolean, fadeSec: number, onEnded?: () => void) {
+    const from = this.active
+    const to = from === this.a ? this.b : this.a
+    this.active = to
+    to.src = src
+    to.loop = loop
+    to.volume = 0
+    if (onEnded) { to.onended = () => { to.onended = null; onEnded() } } else { to.onended = null }
+    to.play().catch(() => { })
+    // 目标音量驱动：from→0 后暂停，to→目标音量（连续切歌安全）
+    this.fadeTargets = [
+      { el: from, target: 0 },
+      { el: to, target: this.effVol() },
+    ]
+    if (this.fadeTimer) return
+    const step = Math.max(0.02, 1 / Math.max(1, Math.round(fadeSec * 30)))
+    this.fadeTimer = setInterval(() => {
+      let done = true
+      for (const t of this.fadeTargets) {
+        const el = t.el, goal = t.target, cur = el.volume
+        if (Math.abs(cur - goal) <= step) {
+          el.volume = goal
+          if (goal === 0 && el !== this.active && !el.paused) {
+            try { el.pause(); el.currentTime = 0 } catch { }
+          }
+        } else {
+          el.volume = cur + Math.sign(goal - cur) * step
+          done = false
+        }
+      }
+      if (done) { if (this.fadeTimer) { clearInterval(this.fadeTimer); this.fadeTimer = null } }
+    }, 1000 / 30)
+  }
+
+  setVolume(v: number) {
+    this.volume = v
+    try { localStorage.setItem('sts-music-vol', String(v)) } catch { }
+    this.active.volume = this.effVol()
+    for (const t of this.fadeTargets) if (t.el === this.active) t.target = this.effVol()
+  }
+  setMuted(m: boolean) {
+    this.muted = m
+    try { localStorage.setItem('sts-music-muted', m ? '1' : '0') } catch { }
+    this.active.volume = this.effVol()
+    for (const t of this.fadeTargets) if (t.el === this.active) t.target = this.effVol()
+  }
+}
+const music = new MusicEngine()
+;(window as any).__music = music
+
+let musicLastStinger: string | null = null
+function updateMusic(st: ReturnType<typeof g>) {
+  const run = st.run
+  const scr = run ? run.screen : 'title'
+  if (!run) { music.play('menu'); return }
+  if (scr === 'victory') {
+    if (musicLastStinger !== 'victory') { musicLastStinger = 'victory'; music.stinger('victory', 'credits') }
+    return
+  }
+  if (scr === 'gameover') {
+    if (musicLastStinger !== 'gameover') { musicLastStinger = 'gameover'; music.stinger('death') }
+    return
+  }
+  musicLastStinger = null
+  let key: TrackKey = 'level'
+  if (scr === 'shop') key = 'merchant'
+  else if (scr === 'event') key = 'shrine'
+  else if (scr === 'bossRelic') key = 'credits'
+  else if (scr === 'combat') {
+    const c = run.combat
+    key = c?.isBoss ? 'boss' : c?.isElite ? 'elite' : 'level'
+  }
+  music.play(key)
+}
+
+// 音量控制（固定右上角，独立于渲染循环）
+;(function () {
+  const wrap = document.createElement('div')
+  wrap.style.cssText = 'position:fixed;top:8px;right:8px;z-index:9999;display:flex;gap:6px;align-items:center'
+  const btn = document.createElement('button')
+  btn.className = 'sts-btn'
+  btn.style.cssText = 'font-size:15px;padding:4px 10px;min-width:38px'
+  btn.textContent = music.muted || music.volume === 0 ? '🔇' : '🎵'
+  btn.title = '音乐音量'
+  const panel = document.createElement('div')
+  panel.style.cssText = 'display:none;align-items:center;gap:8px;background:rgba(12,8,5,.92);border:1px solid #6b4a2e;border-radius:8px;padding:8px 12px;box-shadow:0 4px 16px rgba(0,0,0,.6)'
+  const slider = document.createElement('input')
+  slider.type = 'range'; slider.min = '0'; slider.max = '1'; slider.step = '0.05'; slider.value = String(music.volume)
+  slider.style.cssText = 'width:110px;accent-color:#c8a060'
+  const vlabel = document.createElement('span')
+  vlabel.className = 'sts-body'
+  vlabel.style.cssText = 'color:#d8c8a8;font-size:12px;width:30px'
+  vlabel.textContent = String(music.muted ? 0 : Math.round(music.volume * 100))
+  const muteBtn = document.createElement('button')
+  muteBtn.className = 'sts-btn'
+  muteBtn.style.cssText = 'font-size:15px;padding:4px 10px;min-width:38px'
+  muteBtn.textContent = music.muted ? '🔇' : '🔊'
+  muteBtn.title = '静音'
+  panel.appendChild(slider); panel.appendChild(vlabel); panel.appendChild(muteBtn)
+  wrap.appendChild(btn); wrap.appendChild(panel)
+  document.body.appendChild(wrap)
+  btn.addEventListener('click', () => {
+    panel.style.display = panel.style.display === 'none' ? 'flex' : 'none'
+  })
+  slider.addEventListener('input', () => {
+    const v = Number(slider.value)
+    music.setVolume(v)
+    vlabel.textContent = String(Math.round(v * 100))
+    if (v > 0 && music.muted) { music.setMuted(false); muteBtn.textContent = '🔊' }
+    btn.textContent = v === 0 ? '🔇' : '🎵'
+  })
+  muteBtn.addEventListener('click', () => {
+    music.setMuted(!music.muted)
+    muteBtn.textContent = music.muted ? '🔇' : '🔊'
+    btn.textContent = music.muted ? '🔇' : '🎵'
+    vlabel.textContent = String(music.muted ? 0 : Math.round(music.volume * 100))
+  })
+})()
+
 // ============ 卡牌 HTML ============
 function raritySuffix(rarity: string): string {
   if (rarity === 'rare') return 'Rare'
@@ -153,8 +345,13 @@ function rMap(run: RunState): string {
     n.edges.map(toId => {
       const to = map.nodes[toId]
       if (!to) return ''
-      const visitedEdge = run.visitedNodes.includes(toId) && run.currentNodeId === n.id
-      return `<line x1="${(n.x / W) * 100}%" y1="${(n.y / H) * 100}%" x2="${(to.x / W) * 100}%" y2="${(to.y / H) * 100}%" stroke="${visitedEdge ? '#e8c880' : 'rgba(60,40,28,0.65)'}" stroke-width="${visitedEdge ? 5 : 3}" ${visitedEdge ? '' : 'stroke-dasharray="1 12"'} stroke-linecap="round"/>`
+      const visitedEdge = run.visitedNodes.includes(toId) && run.visitedNodes.includes(n.id)
+      const fromCurrent = run.currentNodeId === n.id
+      const stroke = visitedEdge ? '#ffd97a' : (fromCurrent ? '#f0e6cc' : '#cfc2a4')
+      const sw = visitedEdge ? 6 : 5
+      const dots = visitedEdge ? '' : 'stroke-dasharray="0.5 13" '
+      const op = visitedEdge || fromCurrent ? 0.95 : 0.75
+      return `<line x1="${(n.x / W) * 100}%" y1="${(n.y / H) * 100}%" x2="${(to.x / W) * 100}%" y2="${(to.y / H) * 100}%" stroke="${stroke}" stroke-width="${sw}" ${dots}stroke-linecap="round" opacity="${op}"/>`
     })
   ).join('')
 
@@ -469,6 +666,7 @@ function render() {
   const st = g()
   const run = st.run
   const scr = run ? run.screen : 'title'
+  updateMusic(st)
   let html = ''
   if (scr === 'title') html = rTitle()
   else if (scr === 'map') html = rMap(run!)
@@ -499,7 +697,7 @@ function render() {
   const sc = document.getElementById('mapScroll')
   if (sc && run && scr === 'map') {
     const cur = run.currentNodeId ? run.map.nodes[run.currentNodeId] : null
-    const y = cur ? cur.y : 1350
+    const y = cur ? cur.y : 1380
     const target = Math.max(0, sc.scrollHeight * (y / 1450) - sc.clientHeight * 0.55)
     sc.scrollTo({ top: target, behavior: 'smooth' })
   }

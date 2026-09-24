@@ -7,6 +7,7 @@ import { CombatScreen } from '@/components/game/CombatScreen'
 import { RewardScreen, BossRelicScreen, RestScreen, TreasureScreen, GameOverScreen } from '@/components/game/RewardScreen'
 import { ShopScreen, EventScreen } from '@/components/game/ShopScreen'
 import { PileViewOverlay, CardSelectOverlay, ToastView } from '@/components/game/Overlays'
+import { MusicPlayer } from '@/components/game/MusicPlayer'
 
 export default function Home() {
   const run = useGame(s => s.run)
@@ -32,6 +33,8 @@ export default function Home() {
         {run && <PileViewOverlay />}
         {run && <CardSelectOverlay />}
         <ToastView />
+        {/* BGM 控制 */}
+        <MusicPlayer />
       </div>
     </main>
   )

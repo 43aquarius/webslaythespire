@@ -29,7 +29,7 @@ export function MapScreen() {
   useEffect(() => {
     if (!run || !scrollRef.current) return
     const cur = run.currentNodeId ? run.map.nodes[run.currentNodeId] : null
-    const y = cur ? cur.y : 1350
+    const y = cur ? cur.y : 1380
     const el = scrollRef.current
     const target = Math.max(0, (el.scrollHeight * (y / 1450)) - el.clientHeight * 0.55)
     el.scrollTo({ top: target, behavior: 'smooth' })
@@ -68,7 +68,7 @@ export function MapScreen() {
         <button className="sts-btn" style={{ fontSize: 13, padding: '4px 14px' }} onClick={() => openPile('deck')}>
           查看牌组
         </button>
-        <div className="ml-auto sts-body" style={{ color: '#a89070', fontSize: 13 }}>
+        <div className="ml-auto sts-body" style={{ color: '#a89070', fontSize: 13, marginRight: 96 }}>
           第 1 幕 · 层 {run.visitedNodes.length}
         </div>
       </div>
@@ -84,7 +84,7 @@ export function MapScreen() {
               filter: 'brightness(0.85)',
             }}
           />
-          {/* 边 */}
+          {/* 边 —— 原版风格：亮色圆点虚线，走过的路变金色实线 */}
           <svg className="absolute inset-0 w-full h-full" style={{ zIndex: 5 }}>
             {Object.values(map.nodes).flatMap(node =>
               node.edges.map(toId => {
@@ -92,16 +92,18 @@ export function MapScreen() {
                 if (!to) return null
                 const visitedEdge = run.visitedNodes.includes(toId) &&
                   (run.currentNodeId === node.id || run.visitedNodes.includes(node.id))
-                const onPath = run.currentNodeId === node.id
+                const fromCurrent = run.currentNodeId === node.id
                 return (
                   <line
                     key={`${node.id}-${toId}`}
                     x1={`${(node.x / W) * 100}%`} y1={`${(node.y / H) * 100}%`}
                     x2={`${(to.x / W) * 100}%`} y2={`${(to.y / H) * 100}%`}
-                    stroke={visitedEdge ? '#e8c880' : 'rgba(60,40,28,0.65)'}
-                    strokeWidth={visitedEdge ? 5 : 3}
-                    strokeDasharray={visitedEdge ? undefined : '1 12'}
+                    stroke={visitedEdge ? '#ffd97a' : fromCurrent ? '#f0e6cc' : '#cfc2a4'}
+                    strokeWidth={visitedEdge ? 6 : 5}
+                    strokeDasharray={visitedEdge ? undefined : '0.5 13'}
                     strokeLinecap="round"
+                    opacity={visitedEdge ? 0.95 : fromCurrent ? 0.95 : 0.75}
+                    style={{ filter: 'drop-shadow(0 0 2px rgba(0,0,0,0.9))' }}
                   />
                 )
               })
