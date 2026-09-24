@@ -33,3 +33,23 @@ Stage Summary:
 - Next.js 版与单文件 HTML 版均完整可玩
 - 产物：/home/z/my-project/download/slay-the-spire-standalone.html
 - 已知限制：仅第一幕(铁甲战士)；单文件版无字体包(用系统衬线字体)
+
+---
+Task ID: 3
+Agent: main
+Task: 彻底检查全部 bug 并修复（用户反馈：没法结束回合等多项问题）
+
+Work Log:
+- 复现核心 bug：手牌容器(全宽 300px 高 z-index:45 的透明 div)遮挡「结束回合」「抽/弃牌堆」按钮 → elementFromPoint 实测 hitBtn:false
+- UI 修复(CombatScreen)：手牌容器 pointer-events:none + 卡牌恢复 auto、按钮 z-46、取消选牌改 closest 判定、FloatFx 按 id 追踪计时、statusImg 裂图映射(angry→anger/asleep→intent-sleep/metallicizeE→metallicize)
+- 逻辑修复(engine)：金币双倍入账、freeThisTurn 扣费顺序、Artifact 反制正值 debuff 失效、意图伤害预计算过时(改实时)、敌人行动后清意图、Boss必掉/精英60%药水、splitEnemy null 类型错误
+- 逻辑修复(gameStore)：endTurn try/finally 防 busy 永久锁死+异常自动恢复回合、chooseEvent 先 clone 再 apply、takeCard 单卡锁定、startRun/backToTitle 重置 busy、新增 usePotionMap
+- 功能补全：地图使用血瓶/果汁(usePotionOutOfCombat)、地图「查看牌组」按钮、Overlays deck 模式放开 combat 限制
+- 单文件版同步：style.css pointer-events/z-46、ui.ts 状态图标映射+地图药水+查看牌组，重建 4.03MB
+- 测试：16 项专项回归(regression.ts) 全过、多局全流程(victory/gameover 正常)、浏览器实测按钮 CLICKABLE、VLM 验收两个版本「全部正常」
+- 生产构建通过，推送 GitHub (ee7eba7)
+
+Stage Summary:
+- 「无法结束回合」根因 = 手牌容器遮挡按钮，已修复并实测验证
+- 共修复 16 项 bug + 3 项功能补全，两个版本(Next.js/单文件)同步更新
+- 产物：download/slay-the-spire-standalone.html (4.03MB，实测可玩)
