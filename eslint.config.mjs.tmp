@@ -1,3 +1,0 @@
-timeout 60 bun run lint 2>&1 | tail -3
-__workspace_agent_exit_code=$?
-printf "\n<<workspace_agent_exit_code:1790229869946:%s>>\n" "$__workspace_agent_exit_code"
