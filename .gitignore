@@ -62,3 +62,5 @@ server.log
 /scripts/*.json
 /scripts/shot_*.png
 agent-browser*
+scripts/standalone/bundle.js
+scripts/standalone/assets.json
