@@ -117,8 +117,11 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
+    background: #050302;
+    overflow: hidden;
   }
+  img { -webkit-user-drag: none; }
 }
 
 /* ============ 杀戮尖塔游戏样式 ============ */
@@ -193,6 +196,14 @@
 /* 手牌扇形排列由 JS 计算，悬浮效果 */
 .sts-hand-card { transition: transform 0.18s ease-out, box-shadow 0.18s; cursor: pointer; }
 .sts-hand-card:hover { z-index: 50 !important; }
+.sts-hand-card .hand-inner { transition: transform .16s ease-out; }
+.sts-hand-card:hover .hand-inner { transform: translateY(-100px) scale(1.28) !important; }
+
+/* 触屏设备：关闭 hover 位移效果，避免粘滞态 */
+@media (hover: none) {
+  .sts-hand-card:hover .hand-inner { transform: none !important; }
+  .sts-btn:hover:not(:disabled) { transform: none; }
+}
 
 /* 可选目标提示 */
 @keyframes sts-target-pulse {
@@ -285,14 +296,15 @@
 .sts-scroll::-webkit-scrollbar-thumb { background: #6b4a2e; border-radius: 4px; }
 .sts-scroll::-webkit-scrollbar-thumb:hover { background: #8a6a4a; }
 
-/* Toast */
+/* Toast（舞台内） */
 .sts-toast {
-  position: fixed;
+  position: absolute;
   left: 50%;
-  top: 88px;
+  top: 100px;
   transform: translateX(-50%);
   z-index: 200;
   font-family: var(--sts-font-body);
+  animation: sts-fade .2s ease-out;
 }
 
 /* 卡牌奖励出现动画 */
@@ -321,13 +333,40 @@
 }
 .sts-energy { animation: sts-energy-pulse 2s ease-in-out infinite; }
 
-/* 遮罩 */
+/* 遮罩（舞台内绝对定位，随舞台缩放） */
 .sts-overlay {
-  position: fixed; inset: 0;
+  position: absolute; inset: 0;
   background: rgba(8, 4, 2, 0.82);
   backdrop-filter: blur(3px);
   z-index: 100;
   display: flex; align-items: center; justify-content: center;
+  animation: sts-fade .22s ease-out;
+}
+
+/* 屏幕切换淡入（防止硬切闪屏） */
+@keyframes sts-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.sts-screen-fade { animation: sts-fade .28s ease-out; }
+
+/* 竖屏提示手机图标 */
+@keyframes sts-rotate-phone {
+  0%, 25% { transform: rotate(0deg); }
+  55%, 100% { transform: rotate(90deg); }
+}
+.sts-rotate-phone {
+  width: 74px; height: 120px;
+  border: 5px solid #8a6a3e;
+  border-radius: 12px;
+  box-shadow: 0 0 24px rgba(255, 200, 100, 0.25), inset 0 0 12px rgba(0,0,0,0.6);
+  position: relative;
+  animation: sts-rotate-phone 1.8s ease-in-out infinite;
+}
+.sts-rotate-phone::after {
+  content: '';
+  position: absolute; left: 50%; bottom: 7px; transform: translateX(-50%);
+  width: 22px; height: 5px; border-radius: 3px; background: #8a6a3e;
 }
 
 /* 数字字体变体 */

@@ -378,18 +378,28 @@ export const useGame = create<GameStore>((set, get) => {
       if (!run?.combat) return
       const combat = run.combat
       if (combat.phase !== 'player' || combat.combatOver || get().busy) return
-      if (selectedCardUid === uid) { set({ selectedCardUid: null }); return }
       const card = combat.hand.find(c => c.uid === uid)
       if (!card) return
       const def = CARDS[card.id]
+      const living = combat.enemies.filter(e => !e.dying && e.hp > 0)
+
+      // 已选中同一张牌 → 确认打出（触屏两段式：先预览再打出）
+      if (selectedCardUid === uid) {
+        if (def.target === 'enemy' && living.length > 1) return  // 多目标仍需点敌人
+        get().playCard(uid, def.target === 'enemy' ? living[0]?.uid ?? null : null)
+        return
+      }
+
       const check = canPlayCard(combat, run, card)
       if (!check.ok) { showToastSafe(check.reason || '无法打出'); return }
-      const living = combat.enemies.filter(e => !e.dying && e.hp > 0)
+      // 触屏设备无 hover 预览：第一次点选中放大，第二次点确认
+      const isTouch = typeof matchMedia !== 'undefined' && matchMedia('(hover: none)').matches
       if (def.target === 'enemy') {
-        if (living.length === 1) { get().playCard(uid, living[0].uid); return }
+        if (living.length === 1 && !isTouch) { get().playCard(uid, living[0].uid); return }
         set({ selectedCardUid: uid })
         return
       }
+      if (isTouch) { set({ selectedCardUid: uid }); return }
       get().playCard(uid, null)
     },
 

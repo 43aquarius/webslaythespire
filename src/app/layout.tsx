@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Ma_Shan_Zheng, Noto_Serif_SC } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
@@ -25,6 +25,15 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: "#0a0604",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -33,7 +42,8 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <body
-        className={`${titleFont.variable} ${bodyFont.variable} antialiased bg-background text-foreground`}
+        className={`${titleFont.variable} ${bodyFont.variable} antialiased`}
+        style={{ background: "#050302", overflow: "hidden" }}
       >
         {children}
         <Toaster />

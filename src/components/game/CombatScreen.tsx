@@ -1,13 +1,16 @@
 'use client'
-// ============ 战斗界面 ============
+// ============ 战斗界面（参照原版布局） ============
+// 布局：左上 牌组+血条 / 右上 金币+药水+遗物（TopHud）
+//       玩家左下、敌人中偏右、手牌底部扇形、能量球左下、结束回合右下
+// 闪动修复：震动/受击动画改用 Web Animations API，不再重挂载 DOM
 import { useEffect, useRef, useState } from 'react'
 import { useGame, FxItem } from '@/store/gameStore'
-import { CardInstance, EnemyInstance } from '@/game/types'
-import { CARDS, cardCost, cardDesc } from '@/game/cards'
+import { EnemyInstance } from '@/game/types'
+import { CARDS, cardCost } from '@/game/cards'
 import { ENEMIES } from '@/game/enemies'
 import { enemyDisplayDamage } from '@/game/engine'
 import { CardView } from './CardView'
-import { StatusRow, HpBar, Tip, RelicIcon, PotionSlot, STATUS_INFO, statusImg } from './Shared'
+import { StatusRow, HpBar, Tip, TopHud, STATUS_INFO, statusImg } from './Shared'
 
 const A = '/assets'
 
@@ -29,16 +32,16 @@ function IntentView({ enemy, targetable }: { enemy: EnemyInstance; targetable: b
   return (
     <Tip tip={<b>{mvName}</b>}>
       <div className="sts-intent flex items-center gap-1" style={{ filter: 'drop-shadow(0 2px 4px #000)' }}>
-        {isAttack && <img src={icon} alt="" width={38} height={38} draggable={false} />}
+        {isAttack && <img src={icon} alt="" width={40} height={40} draggable={false} />}
         {isAttack && (
-          <span className="sts-num sts-body font-black" style={{ fontSize: 24, color: '#ffdf9a', textShadow: '1px 1px 0 #000, 0 0 8px #300' }}>
+          <span className="sts-num sts-body font-black" style={{ fontSize: 26, color: '#ffdf9a', textShadow: '1px 1px 0 #000, 0 0 8px #300' }}>
             {dmg}
-            {times > 1 && <span style={{ fontSize: 16 }}>x{times}</span>}
+            {times > 1 && <span style={{ fontSize: 17 }}>x{times}</span>}
           </span>
         )}
-        {!isAttack && <img src={icon} alt="" width={40} height={40} draggable={false} />}
+        {!isAttack && <img src={icon} alt="" width={42} height={42} draggable={false} />}
         {(it.type === 'attackDebuff' || it.type === 'attackDefend') && (
-          <img src={`${A}/intent/${it.type === 'attackDebuff' ? 'debuff' : 'defend'}.png`} alt="" width={26} height={26} draggable={false} />
+          <img src={`${A}/intent/${it.type === 'attackDebuff' ? 'debuff' : 'defend'}.png`} alt="" width={28} height={28} draggable={false} />
         )}
         {targetable && <span className="sts-body text-xs font-bold" style={{ color: '#ff6a50' }}>点击目标</span>}
       </div>
@@ -72,7 +75,7 @@ function FloatFx({ items, removeFx }: { items: FxItem[]; removeFx: (id: number) 
           const info = STATUS_INFO[it.text || '']
           content = (
             <span className="flex items-center gap-1">
-              <img src={statusImg(it.text || '')} alt="" width={26} height={26} />
+              <img src={statusImg(it.text || '')} alt="" width={28} height={28} />
               <span style={{ color: (it.value || 0) > 0 ? '#7fe08a' : '#ff8a7a' }}>{(it.value || 0) > 0 ? '+' : ''}{it.value}</span>
             </span>
           )
@@ -83,7 +86,7 @@ function FloatFx({ items, removeFx }: { items: FxItem[]; removeFx: (id: number) 
             className="sts-float absolute sts-num font-black sts-body"
             style={{
               left: '50%', top: -14 - i * 10, transform: 'translateX(-50%)',
-              fontSize: it.kind === 'dmg' ? 34 : 22, color, whiteSpace: 'nowrap',
+              fontSize: it.kind === 'dmg' ? 38 : 24, color, whiteSpace: 'nowrap',
             }}
           >
             {content}
@@ -95,7 +98,7 @@ function FloatFx({ items, removeFx }: { items: FxItem[]; removeFx: (id: number) 
 }
 
 // ============ 敌人视图 ============
-function EnemyView({ enemy, index, total }: { enemy: EnemyInstance; index: number; total: number }) {
+function EnemyView({ enemy }: { enemy: EnemyInstance }) {
   const run = useGame(s => s.run)
   const combat = useGame(s => s.run?.combat)
   const clickEnemy = useGame(s => s.clickEnemy)
@@ -105,31 +108,45 @@ function EnemyView({ enemy, index, total }: { enemy: EnemyInstance; index: numbe
   const fxList = useGame(s => s.fxList)
   const def = ENEMIES[enemy.id]
 
-  // 受击闪烁：用最新伤害事件 id 作为 key，事件到来时重挂载重播动画
+  // 受击闪白：Web Animations API 播放，不重挂载（修复闪动）
+  const spriteRef = useRef<HTMLDivElement>(null)
+  const lastFlashRef = useRef(0)
   const dmgEvents = fxList.filter(f => (f.kind === 'dmg' || f.kind === 'shake') && f.target === enemy.uid)
-  const flashKey = dmgEvents.length > 0 ? dmgEvents[dmgEvents.length - 1].id : 0
+  const flashId = dmgEvents.length > 0 ? dmgEvents[dmgEvents.length - 1].id : 0
+  useEffect(() => {
+    if (flashId > lastFlashRef.current && spriteRef.current) {
+      spriteRef.current.animate(
+        [
+          { filter: 'brightness(3) saturate(0)' },
+          { filter: 'brightness(1) saturate(1)' },
+        ],
+        { duration: 350, easing: 'ease-out' }
+      )
+    }
+    lastFlashRef.current = Math.max(lastFlashRef.current, flashId)
+  }, [flashId])
 
   if (!combat || !run) return null
   const targetable = !!selectedCard || selectedPotion !== null
   const myFx = fxList.filter(f => f.target === enemy.uid)
-  const spriteW = def.boss ? 300 : def.elite ? 240 : 190
+  const spriteW = def.boss ? 340 : def.elite ? 260 : 210
 
   return (
     <div
       className={`relative flex flex-col items-center ${enemy.dying ? 'sts-dying' : ''} ${targetable ? 'sts-targetable' : ''}`}
-      style={{ minWidth: spriteW * 0.8 }}
+      style={{ minWidth: spriteW * 0.8, borderRadius: 14, padding: '6px 10px' }}
       onClick={() => targetable && clickEnemy(enemy.uid)}
     >
       {/* 意图 */}
-      <div className="mb-1" style={{ height: 46 }}>
-        <IntentView enemy={enemy} targetable={!!selectedCard || selectedPotion !== null} />
+      <div className="mb-1" style={{ height: 50 }}>
+        <IntentView enemy={enemy} targetable={targetable} />
       </div>
       {/* 浮动特效 */}
-      <div className="absolute" style={{ top: 90, left: '50%', marginLeft: -60, width: 120, height: 40, zIndex: 60 }}>
+      <div className="absolute" style={{ top: 100, left: '50%', marginLeft: -60, width: 120, height: 40, zIndex: 60 }}>
         <FloatFx items={myFx} removeFx={removeFx} />
       </div>
       {/* 精灵图 */}
-      <div key={flashKey} className={flashKey > 0 ? 'sts-hit' : ''}>
+      <div ref={spriteRef}>
         <img
           src={`${A}/enemies/${def.sprite}.png`}
           alt={def.name}
@@ -141,13 +158,13 @@ function EnemyView({ enemy, index, total }: { enemy: EnemyInstance; index: numbe
           }}
         />
       </div>
-      {/* 名字 + 血条 */}
-      <div className="flex flex-col items-center gap-1" style={{ marginTop: -26 }}>
-        <div className="sts-body font-bold" style={{ fontSize: 14, color: '#f5e5c8', textShadow: '1px 1px 0 #000' }}>
+      {/* 名字 + 血条 + 状态 */}
+      <div className="flex flex-col items-center gap-1" style={{ marginTop: -28 }}>
+        <div className="sts-body font-bold" style={{ fontSize: 15, color: '#f5e5c8', textShadow: '1px 1px 0 #000' }}>
           {def.name}
         </div>
-        <HpBar hp={enemy.hp} maxHp={enemy.maxHp} block={enemy.block} width={def.boss ? 260 : 160} />
-        <StatusRow statuses={enemy.statuses} size={26} />
+        <HpBar hp={enemy.hp} maxHp={enemy.maxHp} block={enemy.block} width={def.boss ? 280 : 170} />
+        <StatusRow statuses={enemy.statuses} size={28} />
       </div>
     </div>
   )
@@ -167,14 +184,34 @@ export function CombatScreen() {
   const openPile = useGame(s => s.openPile)
   const removeFx = useGame(s => s.removeFx)
   const fxList = useGame(s => s.fxList)
-  const discardPotion = useGame(s => s.discardPotion)
 
-  // 屏幕震动：用最新 shake 事件的 id 作为 key，事件到来时重挂载重播动画
+  // 屏幕震动：Web Animations API 播放，不重挂载整个画面（修复闪动）
+  const rootRef = useRef<HTMLDivElement>(null)
+  const lastShakeRef = useRef(0)
   const shakeEvents = fxList.filter(f => f.kind === 'shake' && f.target === 'player')
-  const shakeKey = shakeEvents.length > 0 ? shakeEvents[shakeEvents.length - 1].id : 0
+  const shakeId = shakeEvents.length > 0 ? shakeEvents[shakeEvents.length - 1].id : 0
+  useEffect(() => {
+    if (shakeId > lastShakeRef.current && rootRef.current) {
+      rootRef.current.animate(
+        [
+          { transform: 'translate(0, 0)' },
+          { transform: 'translate(-7px, 4px)' },
+          { transform: 'translate(6px, -5px)' },
+          { transform: 'translate(-4px, -2px)' },
+          { transform: 'translate(0, 0)' },
+        ],
+        { duration: 350, easing: 'ease-out' }
+      )
+    }
+    lastShakeRef.current = Math.max(lastShakeRef.current, shakeId)
+  }, [shakeId])
 
   const playerFx = fxList.filter(f => f.target === 'player')
   const hand = combat?.hand ?? []
+
+  // 触屏设备提示文案（触屏为两段式打出）
+  const [isTouch, setIsTouch] = useState(false)
+  useEffect(() => { setIsTouch(window.matchMedia('(hover: none)').matches) }, [])
 
   // 手牌扇形布局（计算量小，直接计算）
   const handLayout = (() => {
@@ -182,9 +219,9 @@ export function CombatScreen() {
     return hand.map((_, i) => {
       const mid = (n - 1) / 2
       const offset = i - mid
-      const spread = Math.min(62, 580 / Math.max(n, 1))
-      const rot = n > 1 ? (offset / mid) * (n > 5 ? 13 : 8) : 0
-      const ty = Math.abs(offset) * Math.min(7, 40 / Math.max(n, 1)) * 0.9
+      const spread = Math.min(78, 700 / Math.max(n, 1))
+      const rot = n > 1 ? (offset / mid) * (n > 5 ? 14 : 8) : 0
+      const ty = Math.abs(offset) * Math.min(8, 44 / Math.max(n, 1)) * 0.9
       return { x: offset * spread, rot, ty }
     })
   })()
@@ -192,17 +229,10 @@ export function CombatScreen() {
   if (!run || !combat) return null
   const p = combat.player
 
-  const onPotionClick = (idx: number) => {
-    // 简化：需要目标的药水（单体敌人）在选择后点击敌人
-    const pid = run.potions[idx]
-    if (!pid) return
-    useGame.setState(s => ({ selectedPotionIdx: s.selectedPotionIdx === idx ? null : idx }))
-  }
-
   return (
     <div
-      key={shakeKey}
-      className={`${shakeKey > 0 ? 'sts-screen-shake' : ''} w-full h-full relative overflow-hidden select-none`}
+      ref={rootRef}
+      className="w-full h-full relative overflow-hidden select-none sts-screen-fade"
       style={{
         backgroundImage: `url(${A}/bg/combat.jpg)`,
         backgroundSize: 'cover',
@@ -213,97 +243,76 @@ export function CombatScreen() {
         const t = e.target as HTMLElement
         if (!t.closest('button, .sts-card, .sts-slot, .sts-relic, .sts-targetable')) cancelSelection()
       }}
-      data-bg="1"
     >
-      {/* ===== 左侧：玩家信息 ===== */}
-      <div className="absolute left-3 bottom-32 flex flex-col items-center gap-1" style={{ zIndex: 40 }}>
-        <div className="relative">
+      {/* ===== 顶部 HUD（原版：左上牌组+血条，右上金币+药水+遗物） ===== */}
+      <TopHud combat />
+
+      {/* ===== 玩家（左下，原版：状态在角色上方） ===== */}
+      <div className="absolute flex flex-col items-center gap-1.5" style={{ left: 44, bottom: 96, zIndex: 40 }}>
+        <div className="relative" style={{ width: 240, height: 60 }}>
           <FloatFx items={playerFx} removeFx={removeFx} />
         </div>
+        <StatusRow statuses={p.statuses} size={30} />
         <img
           src={`${A}/hero/ironclad.png`}
           alt="铁甲战士"
           draggable={false}
-          style={{ width: 200, height: 143, objectFit: 'contain', filter: 'drop-shadow(0 8px 10px rgba(0,0,0,0.5))' }}
+          style={{ width: 240, height: 171, objectFit: 'contain', filter: 'drop-shadow(0 8px 10px rgba(0,0,0,0.5))' }}
         />
-        <HpBar hp={run.hp} maxHp={run.maxHp} block={p.block} width={200} />
-        <StatusRow statuses={p.statuses} size={28} />
-        {/* 遗物 */}
-        <div className="flex gap-1 mt-1 flex-wrap justify-center" style={{ maxWidth: 220 }}>
-          {run.relics.map(id => <RelicIcon key={id} id={id} size={30} />)}
-        </div>
       </div>
 
-      {/* ===== 敌人区 ===== */}
-      <div className="absolute inset-x-0 flex items-start justify-center gap-8" style={{ top: 70 }}>
-        {combat.enemies.map((e, i) => (
-          <EnemyView key={e.uid} enemy={e} index={i} total={combat.enemies.length} />
-        ))}
-      </div>
-
-      {/* ===== 顶部遭遇名 ===== */}
-      <div className="absolute top-2 left-1/2 -translate-x-1/2 sts-title"
-        style={{ fontSize: 20, color: '#e8d5b0', textShadow: '2px 2px 0 #000' }}>
-        {combat.encounterName}
-      </div>
-
-      {/* ===== 金币 ===== */}
-      <div className="absolute top-2 right-3 sts-body font-bold sts-num flex items-center gap-1"
-        style={{ color: '#ffd980', textShadow: '1px 1px 0 #000', fontSize: 16 }}>
-        <span>💰</span>{run.gold}
-      </div>
-
-      {/* ===== 药水栏（右上） ===== */}
-      <div className="absolute right-3 flex gap-1.5" style={{ top: 34 }}>
-        {run.potions.map((pid, i) => (
-          <PotionSlot
-            key={i} potionId={pid}
-            onClick={() => onPotionClick(i)}
-            onDiscard={() => discardPotion(i)}
-          />
+      {/* ===== 敌人区（中偏右，参照原版站位） ===== */}
+      <div className="absolute flex items-start justify-center gap-10"
+        style={{ left: '31%', right: 12, top: 118, bottom: 300, zIndex: 30 }}>
+        {combat.enemies.map(e => (
+          <EnemyView key={e.uid} enemy={e} />
         ))}
       </div>
 
       {/* ===== 选中提示 ===== */}
       {(selectedCardUid || selectedPotionIdx !== null) && (
         <div className="absolute left-1/2 -translate-x-1/2 sts-body font-bold"
-          style={{ bottom: 320, color: '#ff9a80', fontSize: 15, textShadow: '1px 1px 0 #000', zIndex: 55 }}>
-          {selectedPotionIdx !== null ? '选择药水目标（点击敌人）' : '选择目标（点击敌人，点击空白处取消）'}
+          style={{ bottom: 350, color: '#ff9a80', fontSize: 16, textShadow: '1px 1px 0 #000', zIndex: 55 }}>
+          {selectedPotionIdx !== null
+            ? '选择药水目标（点击敌人，点击空白处取消）'
+            : isTouch
+              ? '点击敌人打出 · 再点一次卡牌确认 · 点空白取消'
+              : '选择目标（点击敌人，点击空白处取消）'}
         </div>
       )}
 
-      {/* ===== 抽牌堆 ===== */}
+      {/* ===== 抽牌堆（左下角） ===== */}
       <PileButton
-        label="抽牌堆" count={combat.drawPile.length} style={{ left: 14, bottom: 200 }}
+        label="抽牌堆" count={combat.drawPile.length} style={{ left: 26, bottom: 158 }}
         onClick={() => openPile('draw')} shuffled
       />
-      {/* ===== 弃牌堆 ===== */}
+      {/* ===== 弃牌堆（右下角） ===== */}
       <PileButton
-        label="弃牌堆" count={combat.discardPile.length} style={{ right: 14, bottom: 200 }}
+        label="弃牌堆" count={combat.discardPile.length} style={{ right: 26, bottom: 158 }}
         onClick={() => openPile('discard')}
       />
       {/* ===== 消耗堆 ===== */}
       {combat.exhaustPile.length > 0 && (
         <PileButton
-          label="消耗堆" count={combat.exhaustPile.length} style={{ right: 14, bottom: 130 }}
+          label="消耗堆" count={combat.exhaustPile.length} style={{ right: 26, bottom: 88 }}
           onClick={() => openPile('exhaust')} small
         />
       )}
 
-      {/* ===== 能量球 ===== */}
-      <div className="absolute sts-energy" style={{ left: 40, bottom: 118, width: 88, height: 88 }}>
+      {/* ===== 能量球（左下，手牌左侧） ===== */}
+      <div className="absolute sts-energy" style={{ left: 118, bottom: 116, width: 104, height: 104, zIndex: 44 }}>
         <img src={`${A}/frames/redEnergy.png`} alt="能量" className="w-full h-full object-contain" draggable={false} />
         <div className="absolute inset-0 flex items-center justify-center sts-num font-black"
-          style={{ fontSize: 34, color: '#fff', textShadow: '2px 2px 0 #802000, 0 0 12px #ff5000' }}>
+          style={{ fontSize: 40, color: '#fff', textShadow: '2px 2px 0 #802000, 0 0 12px #ff5000' }}>
           {p.energy}
         </div>
       </div>
 
-      {/* ===== 结束回合按钮 ===== */}
+      {/* ===== 结束回合按钮（右下，弃牌堆上方） ===== */}
       <button
         className="sts-btn absolute sts-title"
         style={{
-          right: 28, bottom: 118, fontSize: 22, padding: '12px 30px', zIndex: 46,
+          right: 108, bottom: 116, fontSize: 24, padding: '13px 34px', zIndex: 46,
           opacity: combat.phase !== 'player' || busy ? 0.5 : 1,
         }}
         disabled={combat.phase !== 'player' || busy || combat.combatOver}
@@ -313,10 +322,9 @@ export function CombatScreen() {
       </button>
 
       {/* ===== 手牌（容器不拦截点击，只有卡牌本身可点） ===== */}
-      <div className="absolute inset-x-0 flex justify-center items-end" style={{ bottom: -34, height: 300, zIndex: 45, pointerEvents: 'none' }}>
+      <div className="absolute inset-x-0 flex justify-center items-end" style={{ bottom: -40, height: 320, zIndex: 45, pointerEvents: 'none' }}>
         {hand.map((card, i) => {
           const layout = handLayout[i]
-          const def = CARDS[card.id]
           const isPlayable = combat.phase === 'player' && !busy && !combat.combatOver
           const isSelected = selectedCardUid === card.uid
           const cost = cardCost(card, p.hpLostThisCombat)
@@ -333,11 +341,11 @@ export function CombatScreen() {
                 pointerEvents: 'auto',
               }}
             >
-              <div className="hand-inner transition-all duration-150"
-                style={{ transform: isSelected ? 'translateY(-96px) scale(1.32)' : undefined }}>
+              <div className="hand-inner"
+                style={{ transform: isSelected ? 'translateY(-110px) scale(1.3)' : undefined }}>
                 <CardView
                   card={card}
-                  width={148}
+                  width={168}
                   ctx={{ hpLost: p.hpLostThisCombat, rampageBonus: combat.rampage?.[card.uid] || 0 }}
                   dimmed={!isPlayable || !enough}
                   selected={isSelected}
@@ -350,19 +358,13 @@ export function CombatScreen() {
         })}
       </div>
 
-      {/* 悬浮放大效果需要 CSS */}
-      <style>{`
-        .sts-hand-card .hand-inner { transition: transform .16s ease-out; }
-        .sts-hand-card:hover .hand-inner { transform: translateY(-90px) scale(1.3) !important; }
-      `}</style>
-
       {/* ===== 战斗结束横幅 ===== */}
       {endBanner && (
         <div className="absolute inset-0 flex items-center justify-center" style={{ zIndex: 90, background: 'rgba(0,0,0,0.35)' }}>
           <div
             className="sts-title"
             style={{
-              fontSize: 74,
+              fontSize: 84,
               color: endBanner === 'win' ? '#ffd980' : '#ff6a50',
               textShadow: '3px 3px 0 #000, 0 0 40px rgba(0,0,0,0.9)',
               animation: 'sts-card-in .5s cubic-bezier(.2,.9,.3,1.2)',
@@ -380,7 +382,7 @@ export function CombatScreen() {
 function PileButton({ label, count, style, onClick, small, shuffled }: {
   label: string; count: number; style: React.CSSProperties; onClick: () => void; small?: boolean; shuffled?: boolean
 }) {
-  const w = small ? 46 : 62
+  const w = small ? 50 : 66
   return (
     <button className="absolute flex flex-col items-center gap-0.5" style={{ ...style, zIndex: 40 }} onClick={onClick}>
       <div
@@ -393,9 +395,9 @@ function PileButton({ label, count, style, onClick, small, shuffled }: {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}
       >
-        <span className="sts-num font-black" style={{ fontSize: 20, color: '#f5e5c8', textShadow: '1px 1px 0 #000' }}>{count}</span>
+        <span className="sts-num font-black" style={{ fontSize: 22, color: '#f5e5c8', textShadow: '1px 1px 0 #000' }}>{count}</span>
       </div>
-      <span className="sts-body" style={{ fontSize: 12, color: '#c8b090', textShadow: '1px 1px 0 #000' }}>{label}</span>
+      <span className="sts-body" style={{ fontSize: 13, color: '#c8b090', textShadow: '1px 1px 0 #000' }}>{label}</span>
     </button>
   )
 }

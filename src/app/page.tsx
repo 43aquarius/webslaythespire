@@ -1,6 +1,7 @@
 'use client'
 // ============ 主入口：界面路由 ============
 import { useGame } from '@/store/gameStore'
+import { Stage } from '@/components/game/Stage'
 import { TitleScreen } from '@/components/game/TitleScreen'
 import { MapScreen } from '@/components/game/MapScreen'
 import { CombatScreen } from '@/components/game/CombatScreen'
@@ -17,7 +18,7 @@ export default function Home() {
   const cur = run ? run.screen : 'title'
 
   return (
-    <main className="w-screen h-screen overflow-hidden" style={{ background: '#0a0604' }}>
+    <Stage>
       <div className="w-full h-full relative">
         {cur === 'title' && <TitleScreen />}
         {cur === 'map' && <MapScreen />}
@@ -33,9 +34,9 @@ export default function Home() {
         {run && <PileViewOverlay />}
         {run && <CardSelectOverlay />}
         <ToastView />
-        {/* BGM 控制 */}
+        {/* BGM 控制（舞台内右上角，全屏按钮左侧） */}
         <MusicPlayer />
       </div>
-    </main>
+    </Stage>
   )
 }

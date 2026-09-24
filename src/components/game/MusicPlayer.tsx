@@ -40,7 +40,7 @@ export function MusicPlayer() {
   }, [cur, run?.combat?.isBoss, run?.combat?.isElite])
 
   return (
-    <div className="fixed top-2 right-2 z-[9999] select-none" style={{ pointerEvents: 'auto' }}>
+    <div className="absolute flex gap-1.5 items-center select-none" style={{ top: 10, right: 56, zIndex: 500, pointerEvents: 'auto' }}>
       {open && (
         <div
           className="absolute right-0 top-10 rounded-lg px-3 py-3 flex items-center gap-2"

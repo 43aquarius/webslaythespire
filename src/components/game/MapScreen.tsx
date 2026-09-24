@@ -1,9 +1,9 @@
 'use client'
-// ============ 地图界面 ============
-import { useEffect, useRef, useState } from 'react'
+// ============ 地图界面（顶部 HUD 与战斗一致，参照原版） ============
+import { useEffect, useRef } from 'react'
 import { useGame } from '@/store/gameStore'
 import { MapNode } from '@/game/types'
-import { Tip, RelicIcon, PotionSlot } from './Shared'
+import { Tip, TopHud } from './Shared'
 
 const A = '/assets'
 
@@ -20,10 +20,7 @@ const NODE_NAME: Record<string, string> = {
 export function MapScreen() {
   const run = useGame(s => s.run)
   const chooseNode = useGame(s => s.chooseNode)
-  const usePotionMap = useGame(s => s.usePotionMap)
-  const openPile = useGame(s => s.openPile)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [tipNode, setTipNode] = useState<string | null>(null)
 
   // 自动滚动到当前节点
   useEffect(() => {
@@ -44,38 +41,13 @@ export function MapScreen() {
   const W = 1100, H = 1450
 
   return (
-    <div className="w-full h-full relative overflow-hidden select-none">
-      {/* 顶部状态栏 */}
-      <div className="absolute top-0 inset-x-0 z-30 flex items-center gap-3 px-4 py-2 flex-wrap"
-        style={{ background: 'linear-gradient(180deg, rgba(10,6,4,0.92) 0%, rgba(10,6,4,0.75) 70%, transparent 100%)' }}>
-        <div className="sts-body font-bold" style={{ color: '#ff8a70', fontSize: 16, textShadow: '1px 1px 0 #000' }}>
-          ❤ {run.hp}/{run.maxHp}
-        </div>
-        <div className="sts-body font-bold" style={{ color: '#ffd980', fontSize: 16, textShadow: '1px 1px 0 #000' }}>
-          💰 {run.gold}
-        </div>
-        <div className="flex gap-1 items-center">
-          {run.relics.map(id => <RelicIcon key={id} id={id} size={34} />)}
-        </div>
-        <div className="flex gap-1 items-center">
-          {run.potions.map((pid, i) => (
-            <PotionSlot
-              key={i} potionId={pid} size={32}
-              onClick={() => usePotionMap(i)}
-            />
-          ))}
-        </div>
-        <button className="sts-btn" style={{ fontSize: 13, padding: '4px 14px' }} onClick={() => openPile('deck')}>
-          查看牌组
-        </button>
-        <div className="ml-auto sts-body" style={{ color: '#a89070', fontSize: 13, marginRight: 96 }}>
-          第 1 幕 · 层 {run.visitedNodes.length}
-        </div>
-      </div>
+    <div className="w-full h-full relative overflow-hidden select-none sts-screen-fade">
+      {/* 顶部 HUD（原版：左上牌组+血条+层数，右上金币+药水+遗物） */}
+      <TopHud floor={run.visitedNodes.length} />
 
       {/* 地图画布 */}
       <div ref={scrollRef} className="w-full h-full overflow-y-auto sts-scroll">
-        <div className="relative mx-auto" style={{ width: '100%', maxWidth: 900, height: H }}>
+        <div className="relative mx-auto" style={{ width: '100%', maxWidth: 940, height: H }}>
           <div
             className="absolute inset-0"
             style={{
@@ -132,7 +104,7 @@ function MapNodeView({ node, isCurrent, isReachable, visited, onPick }: {
   node: MapNode; isCurrent: boolean; isReachable: boolean; visited: boolean; onPick: () => void
 }) {
   const W = 1100, H = 1450
-  const size = node.type === 'boss' ? 92 : node.type === 'elite' ? 56 : 48
+  const size = node.type === 'boss' ? 96 : node.type === 'elite' ? 60 : 52
   const icon = `${A}/mapicons/${NODE_ICON[node.type]}.png`
   return (
     <div

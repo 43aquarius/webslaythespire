@@ -27,12 +27,12 @@ export function PileViewOverlay() {
 
   return (
     <div className="sts-overlay" onClick={closePile}>
-      <div className="sts-panel p-6 flex flex-col items-center gap-4" style={{ maxWidth: '92vw', maxHeight: '88vh' }}
+      <div className="sts-panel p-6 flex flex-col items-center gap-4" style={{ maxWidth: 1440, maxHeight: 800 }}
         onClick={e => e.stopPropagation()}>
         <div className="sts-title" style={{ fontSize: 26, color: '#ffd980' }}>
           {titles[pileView]} <span style={{ fontSize: 16, color: '#a89070' }}>({cards.length})</span>
         </div>
-        <div className="flex flex-wrap gap-3 justify-center overflow-y-auto sts-scroll" style={{ maxHeight: '68vh', padding: 4 }}>
+        <div className="flex flex-wrap gap-3 justify-center overflow-y-auto sts-scroll" style={{ maxHeight: 620, padding: 4 }}>
           {cards.length === 0 && (
             <div className="sts-body" style={{ color: '#a89070', fontSize: 15 }}>空空如也</div>
           )}
@@ -72,12 +72,12 @@ export function CardSelectOverlay() {
 
   return (
     <div className="sts-overlay">
-      <div className="flex flex-col items-center gap-5" style={{ maxWidth: '94vw', maxHeight: '92vh' }}
+      <div className="flex flex-col items-center gap-5" style={{ maxWidth: 1480, maxHeight: 840 }}
         onClick={e => e.stopPropagation()}>
         <div className="sts-title" style={{ fontSize: 28, color: '#ffd980', textShadow: '2px 2px 0 #000' }}>
           {select.title}
         </div>
-        <div className="flex flex-wrap gap-3 justify-center overflow-y-auto sts-scroll" style={{ maxHeight: '70vh', padding: 8 }}>
+        <div className="flex flex-wrap gap-3 justify-center overflow-y-auto sts-scroll" style={{ maxHeight: 640, padding: 8 }}>
           {cards.map((c, i) => (
             <div key={c.uid} className="sts-card-in transition-transform hover:-translate-y-2" style={{ animationDelay: `${Math.min(i, 8) * 0.05}s`, cursor: 'pointer' }}
               onClick={() => resolveSelect(c.uid)}>

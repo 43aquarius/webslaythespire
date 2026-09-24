@@ -9,7 +9,7 @@ export function TitleScreen() {
 
   return (
     <div
-      className="w-full h-full relative flex flex-col items-center justify-center gap-6 select-none overflow-hidden"
+      className="w-full h-full relative flex flex-col items-center justify-center gap-6 select-none overflow-hidden sts-screen-fade"
       style={{
         backgroundImage: `url(${A}/bg/combat.jpg)`,
         backgroundSize: 'cover',
