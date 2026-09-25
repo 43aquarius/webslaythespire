@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useGame } from '@/store/gameStore'
 import { music } from '@/game/music'
+import { loadSettings, savePlayerName } from '@/game/persist'
 
 export function InGameMenu() {
   const run = useGame(s => s.run)
@@ -16,6 +17,9 @@ export function InGameMenu() {
   const [confirmAbandon, setConfirmAbandon] = useState(false)
   const [vol, setVol] = useState(music.volume)
   const [muted, setMuted] = useState(music.muted)
+  const [nick, setNick] = useState('')
+
+  useEffect(() => { setNick(loadSettings().playerName) }, [])
 
   // ESC 键开关菜单
   useEffect(() => {
@@ -106,13 +110,36 @@ export function InGameMenu() {
                   />
                   <span className="sts-body" style={{ color: '#d8c8a8', width: 34, fontSize: 13 }}>{muted ? 0 : Math.round(vol * 100)}</span>
                 </div>
-                <button className="sts-btn sts-body" style={{ fontSize: 14, padding: '6px 24px' }}
-                  onClick={() => {
-                    if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
-                    else document.documentElement.requestFullscreen().catch(() => {})
-                  }}>
-                  切换全屏
-                </button>
+                <div className="flex items-center gap-3" style={{ width: '100%' }}>
+                  <span className="sts-body" style={{ color: '#c8b090', width: 90, fontSize: 14 }}>静音</span>
+                  <button
+                    className="sts-btn sts-body" style={{ fontSize: 14, padding: '6px 24px' }}
+                    onClick={() => { const m = !muted; setMuted(m); music.setMuted(m) }}
+                  >
+                    {muted ? '已静音（点击开启）' : '开启中（点击静音）'}
+                  </button>
+                </div>
+                <div className="flex items-center gap-3" style={{ width: '100%' }}>
+                  <span className="sts-body" style={{ color: '#c8b090', width: 90, fontSize: 14 }}>联机昵称</span>
+                  <input
+                    className="sts-body"
+                    style={{ flex: 1, background: 'rgba(0,0,0,0.5)', border: '1.5px solid #6b4a2e', borderRadius: 8, color: '#e8d8b8', padding: '7px 12px', fontSize: 14 }}
+                    defaultValue={nick}
+                    maxLength={10}
+                    onChange={e => { setNick(e.target.value); savePlayerName(e.target.value) }}
+                    placeholder="联机时显示的名字"
+                  />
+                </div>
+                <div className="flex items-center gap-3" style={{ width: '100%' }}>
+                  <span className="sts-body" style={{ color: '#c8b090', width: 90, fontSize: 14 }}>全屏</span>
+                  <button className="sts-btn sts-body" style={{ fontSize: 14, padding: '6px 24px' }}
+                    onClick={() => {
+                      if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+                      else document.documentElement.requestFullscreen().catch(() => {})
+                    }}>
+                    切换全屏
+                  </button>
+                </div>
                 <button className="sts-btn sts-title" style={{ fontSize: 17, padding: '8px 50px', marginTop: 8 }} onClick={() => setShowSettings(false)}>
                   返 回
                 </button>

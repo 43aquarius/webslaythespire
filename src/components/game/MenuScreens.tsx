@@ -60,9 +60,6 @@ export function MainMenuScreen() {
           className="menu-logo"
           style={{ width: 286 }}
         />
-        <div className="sts-title" style={{ fontSize: 17, color: '#c8a878', textShadow: '2px 2px 0 #000', letterSpacing: 5, marginTop: 6 }}>
-          WEB 复刻版 · 单人 + 联机合作
-        </div>
       </div>
 
       {/* 竖排菜单（原版石板按钮） */}
@@ -89,7 +86,7 @@ export function MainMenuScreen() {
 
       {/* 版本信息（左下角，原版样式） */}
       <div className="absolute sts-body" style={{ left: 16, bottom: 12, color: '#8a7458', fontSize: 12 }}>
-        Web 复刻版 v1.5 · 基于 Slay the Spire 玩法复刻
+        Web 复刻版 v1.6
       </div>
 
       {/* GitHub 入口（右下角） */}

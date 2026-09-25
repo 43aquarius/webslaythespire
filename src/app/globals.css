@@ -133,8 +133,8 @@
 .sts-title { font-family: var(--sts-font-title); }
 .sts-body { font-family: var(--sts-font-body); }
 
-/* 卡牌通用 */
-.sts-card { position: relative; user-select: none; }
+/* 卡牌通用（overflow:hidden 裁掉 512 画布映射的透明溢出区，避免弹窗出现滚动条） */
+.sts-card { position: relative; user-select: none; overflow: hidden; }
 
 /* 卡牌 512 画布统一映射（卡体位于 (106,47)-(405,466)） */
 .sts-canvas512 {

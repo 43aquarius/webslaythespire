@@ -56,7 +56,7 @@ export function Tip({ children, tip, className = '' }: { children: ReactNode; ti
   )
 }
 
-// ============ 顶部 HUD（参照原版：左上 牌组+血条 / 右上 金币+药水+遗物） ============
+// ============ 顶部 HUD（参照原版：左上 金币+药水+遗物 / 右上 牌组+血条+层数） ============
 export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: number }) {
   const run = useGame(s => s.run)
   const openPile = useGame(s => s.openPile)
@@ -86,63 +86,67 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
         padding: '10px 18px 26px',
       }}>
       <div className="flex items-start justify-between">
-        {/* 左上：牌组按钮 + 血条（联机显示双人） */}
-        <div className="flex items-center gap-3">
-          <Tip tip={<b>查看牌组（{me.deck.length} 张）</b>}>
-            <button
-              className="sts-btn flex flex-col items-center justify-center"
-              style={{ width: 62, height: 62, padding: 2, borderRadius: 10 }}
-              onClick={() => openPile('deck')}
-            >
-              <img src={`${A}/frames/cardRedOrb.png`} alt="" width={26} height={20} draggable={false}
-                style={{ objectFit: 'contain' }} />
-              <span className="sts-num font-bold" style={{ fontSize: 15, lineHeight: 1.1 }}>{me.deck.length}</span>
-            </button>
-          </Tip>
-          <div className="flex flex-col gap-1.5">
-            <HpBar hp={me.hp} maxHp={me.maxHp} block={myBlock} width={mp ? 250 : 300} label={mp ? me.name : undefined} />
-            {mp && run.players.map((rp, i) => (
-              <div key={i} className="flex items-center gap-1.5">
-                <span className="sts-body font-bold" style={{ fontSize: 11, color: i === myIdx ? '#8ee8ff' : '#c8a878', textShadow: '1px 1px 0 #000', minWidth: 34 }}>
-                  {i === myIdx ? '你' : rp.name}
-                </span>
-                <HpBar hp={rp.hp} maxHp={rp.maxHp} width={182} />
-              </div>
-            ))}
-            {floor !== undefined && (
-              <div className="sts-body font-bold" style={{ color: '#c8b090', fontSize: 13, textShadow: '1px 1px 0 #000' }}>
-                第 {run.act} 幕 · 第 {floor} 层{mp ? ' · 联机合作' : ''}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* 右上：金币 + 药水 + 遗物（避开右上角控制按钮） */}
-        <div className="flex flex-col items-end gap-1.5" style={{ marginRight: 108 }}>
+        {/* 左上：金币 + 药水 + 遗物（参照原版原位） */}
+        <div className="flex flex-col items-start gap-1.5" style={{ maxWidth: 660 }}>
           <div className="flex items-center gap-3">
-            <div className="sts-body font-bold sts-num flex items-center gap-1"
-              style={{ color: '#ffd980', textShadow: '1px 1px 0 #000', fontSize: 18 }}>
-              <span>💰</span>{me.gold}
+            <div className="sts-body font-bold sts-num flex items-center gap-1.5"
+              style={{ color: '#ffd980', textShadow: '1px 1px 0 #000', fontSize: 20 }}>
+              <span style={{ fontSize: 17 }}>💰</span>{me.gold}
             </div>
             {mp && (
               <div className="sts-body sts-num flex items-center gap-1" style={{ color: '#a8b8c8', textShadow: '1px 1px 0 #000', fontSize: 13 }}>
                 队友 {run.players[1 - myIdx]?.gold ?? '-'}
               </div>
             )}
-            <div className="flex gap-1.5">
-              {me.potions.map((pid, i) => (
-                <PotionSlot
-                  key={i} potionId={pid} size={38}
-                  selected={combat && selectedPotionIdx === i}
-                  onClick={() => onPotionClick(i)}
-                  onDiscard={combat ? () => discardPotion(i) : undefined}
-                />
-              ))}
-            </div>
+          </div>
+          <div className="flex gap-1.5">
+            {me.potions.map((pid, i) => (
+              <PotionSlot
+                key={i} potionId={pid} size={38}
+                selected={combat && selectedPotionIdx === i}
+                onClick={() => onPotionClick(i)}
+                onDiscard={combat ? () => discardPotion(i) : undefined}
+              />
+            ))}
           </div>
           {/* 遗物行 */}
-          <div className="flex gap-1 items-center flex-wrap justify-end" style={{ maxWidth: 560 }}>
-            {me.relics.map(id => <RelicIcon key={id} id={id} size={34} />)}
+          <div className="flex flex-wrap gap-1 items-center justify-start" style={{ maxWidth: 620 }}>
+            {me.relics.map(id => <RelicIcon key={id} id={id} size={32} />)}
+          </div>
+        </div>
+
+        {/* 右上：牌组按钮 + 血条 + 层数（避开右上角控制按钮簇） */}
+        <div className="flex items-start gap-3" style={{ marginRight: 186 }}>
+          <div className="flex flex-col items-center gap-1">
+            <Tip tip={<b>查看牌组（{me.deck.length} 张）</b>}>
+              <button
+                className="sts-btn flex flex-col items-center justify-center"
+                style={{ width: 62, height: 62, padding: 2, borderRadius: 10 }}
+                onClick={() => openPile('deck')}
+              >
+                <img src={`${A}/frames/cardRedOrb.png`} alt="" width={26} height={20} draggable={false}
+                  style={{ objectFit: 'contain' }} />
+                <span className="sts-num font-bold" style={{ fontSize: 15, lineHeight: 1.1 }}>{me.deck.length}</span>
+              </button>
+            </Tip>
+            {floor !== undefined && (
+              <div className="sts-body font-bold" style={{ color: '#c8b090', fontSize: 12, textShadow: '1px 1px 0 #000' }}>
+                第 {run.act} 幕 · 第 {floor} 层{mp ? ' · 联机' : ''}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col gap-1.5 items-start">
+            <HpBar hp={me.hp} maxHp={me.maxHp} block={myBlock} width={mp ? 240 : 290} label={mp ? me.name : undefined} />
+            {mp && run.players.map((rp, i) => (
+              i === myIdx ? null : (
+                <div key={i} className="flex items-center gap-1.5">
+                  <span className="sts-body font-bold" style={{ fontSize: 11, color: '#c8a878', textShadow: '1px 1px 0 #000', minWidth: 34 }}>
+                    {rp.name}
+                  </span>
+                  <HpBar hp={rp.hp} maxHp={rp.maxHp} width={182} />
+                </div>
+              )
+            ))}
           </div>
         </div>
       </div>

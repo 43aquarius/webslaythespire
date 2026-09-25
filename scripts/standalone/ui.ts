@@ -339,24 +339,26 @@ function potionHtml(pid: string | null, idx: number, combat: boolean): string {
   </span>`
 }
 
-// ============ 顶部 HUD（参照原版：左上牌组+血条，右上金币+药水+遗物） ============
+// ============ 顶部 HUD（参照原版：左上 金币+药水+遗物，右上 牌组+血条+层数） ============
 function topHudShell(): string {
+  // 参照原版：左上 金币+药水+遗物 / 右上 牌组+血条+层数（避开右上控制按钮）
   return `<div class="top-hud"><div class="hud-row">
     <div class="hud-left">
-      <button class="sts-btn deck-btn" data-act="openPile" data-pile="deck" data-tip="<b>查看牌组</b>">
-        <img src="${A('frames/cardRedOrb.png')}" alt=""><b class="sts-num" id="hud-deck-count"></b>
-      </button>
-      <div>
-        ${hpBarShell('hud-hp', 300)}
-        <div class="floor-stat" id="hud-floor" style="display:none"></div>
-      </div>
-    </div>
-    <div class="hud-right">
       <div class="hud-gold-pots">
         <span class="gold-stat sts-body sts-num" id="hud-gold"></span>
         <span class="pots-row" id="hud-potions"></span>
       </div>
       <span class="relics hud-relics" id="hud-relics"></span>
+    </div>
+    <div class="hud-right">
+      <button class="sts-btn deck-btn" data-act="openPile" data-pile="deck" data-tip="<b>查看牌组</b>">
+        <img src="${A('frames/cardRedOrb.png')}" alt=""><b class="sts-num" id="hud-deck-count"></b>
+      </button>
+      <div class="hud-hp-holder">
+        ${hpBarShell('hud-hp', 290)}
+        <div class="floor-stat" id="hud-floor" style="display:none"></div>
+        <div id="hud-mp-hp" style="display:none"></div>
+      </div>
     </div>
   </div></div>`
 }
@@ -379,27 +381,22 @@ function updateHud(run: RunState, combat: boolean) {
   setText(document.getElementById('hud-gold'), mp ? `💰 ${me.gold}（队友 ${run.players[1 - myIdx]?.gold ?? '-'}）` : `💰 ${me.gold}`)
   setHtml(document.getElementById('hud-potions'), me.potions.map((p, i) => potionHtml(p, i, combat)).join(''))
   setHtml(document.getElementById('hud-relics'), me.relics.map(id => relicIcon(id)).join(''))
-  // 联机：双人迷你血条
-  let mini = document.getElementById('hud-mp-hp')
-  if (mp) {
-    if (!mini) {
-      const holder = document.querySelector('.hud-left > div:last-child')
-      if (holder) {
-        mini = document.createElement('div')
-        mini.id = 'hud-mp-hp'
-        mini.style.cssText = 'display:flex;flex-direction:column;gap:3px;margin-top:3px'
-        holder.appendChild(mini)
-      }
-    }
-    if (mini) {
-      setHtml(mini, run.players.map((rp, i) => `
-        <div style="display:flex;align-items:center;gap:5px">
-          <span class="sts-body" style="font-size:11px;font-weight:700;color:${i === myIdx ? '#8ee8ff' : '#c8a878'};text-shadow:1px 1px 0 #000;min-width:32px">${i === myIdx ? '你' : esc(rp.name)}</span>
+  // 联机：双人迷你血条（只显示队友，自己的血条在上方主位）
+  const mini = document.getElementById('hud-mp-hp')
+  if (mini) {
+    if (mp) {
+      mini.style.display = ''
+      setHtml(mini, run.players.map((rp, i) => i === myIdx ? '' : `
+        <div style="display:flex;align-items:center;gap:5px;margin-top:3px">
+          <span class="sts-body" style="font-size:11px;font-weight:700;color:#c8a878;text-shadow:1px 1px 0 #000;min-width:32px">${esc(rp.name)}</span>
           ${hpBarShell('hud-mp-hp-' + i, 180)}
         </div>`).join(''))
-      run.players.forEach((rp, i) => updateHpBar(document.getElementById('hud-mp-hp-' + i), rp.hp, rp.maxHp))
+      run.players.forEach((rp, i) => { if (i !== myIdx) updateHpBar(document.getElementById('hud-mp-hp-' + i), rp.hp, rp.maxHp) })
+    } else {
+      mini.style.display = 'none'
+      setHtml(mini, '')
     }
-  } else mini?.remove()
+  }
 }
 
 // ============ GitHub 图标（内联 SVG） ============
@@ -426,12 +423,11 @@ function rMainMenu(): string {
   <div class="main-menu-fog"></div>
   <div class="center-col" style="padding-top:0;gap:14px">
     <img class="menu-logo" src="${A('bg/logo.png')}" alt="Slay the Spire" draggable="false" style="width:286px">
-    <div class="sts-title" style="font-size:17px;color:#c8a878;text-shadow:2px 2px 0 #000;letter-spacing:5px;margin-top:-6px">WEB 复刻版 · 单人 + 联机合作</div>
     <div style="display:flex;flex-direction:column;gap:13px;margin-top:22px">
       ${items.map(it => `<button class="menu-btn sts-title ${it.dis ? 'dis' : ''}" data-act="${it.act}" ${it.arg ? `data-screen="${it.arg}"` : ''} ${it.dis ? 'disabled' : ''}
         style="opacity:${it.dis ? 1 : ''}"><span style="opacity:${it.dis ? .45 : 1};display:block">${it.label}</span></button>`).join('')}
     </div>
-    <div class="sts-body" style="color:#8a7458;font-size:12px;position:absolute;left:16px;bottom:12px">Web 复刻版 v1.5 · 基于 Slay the Spire 玩法复刻</div>
+    <div class="sts-body" style="color:#8a7458;font-size:12px;position:absolute;left:16px;bottom:12px">Web 复刻版 v1.6</div>
   </div>
   <a class="github-btn" href="https://github.com/43aquarius/webslaythespire" target="_blank" rel="noreferrer" title="GitHub 仓库">${GITHUB_SVG}<span>43aquarius/webslaythespire</span></a>
 </div>`
@@ -1611,10 +1607,22 @@ function renderMenuOverlay(st: ReturnType<typeof g>) {
   el.id = 'ingame-menu'
   el.style.cssText = 'position:absolute;inset:0;z-index:900;background:rgba(4,2,1,.72);display:flex;align-items:center;justify-content:center'
   const mp = st.run.players.length > 1
-  el.innerHTML = `<div class="sts-panel" style="padding:28px 50px;display:flex;flex-direction:column;gap:12px;min-width:360px;align-items:center">
+  el.innerHTML = `<div class="sts-panel" style="padding:28px 50px;display:flex;flex-direction:column;gap:12px;min-width:380px;align-items:center">
     <div class="sts-title" style="font-size:25px;color:#ffd980;letter-spacing:6px;margin-bottom:4px">菜 单</div>
     <button class="sts-btn sts-title" data-act="closeMenu" style="font-size:19px;padding:9px 66px;min-width:240px">继 续 游 戏</button>
     <button class="sts-btn sts-title" data-act="menuSettings" style="font-size:19px;padding:9px 66px;min-width:240px">设　　置</button>
+    <div id="ingame-menu-settings" style="display:none;flex-direction:column;gap:11px;width:100%;padding:12px 14px;background:rgba(0,0,0,.3);border-radius:10px;border:1px solid rgba(90,64,32,.5)">
+      <div class="row" style="gap:10px"><span class="sts-body" style="color:#c8b090;width:78px;font-size:14px">音乐音量</span>
+        <input type="range" data-input="musicVol" min="0" max="1" step="0.05" value="${music.volume}" style="flex:1;accent-color:#c8a060">
+        <span class="sts-body" style="color:#d8c8a8;width:30px;font-size:13px" id="menu-vol-label">${music.muted ? 0 : Math.round(music.volume * 100)}</span></div>
+      <div class="row" style="gap:10px"><span class="sts-body" style="color:#c8b090;width:78px;font-size:14px">静音</span>
+        <button class="sts-btn sts-body" data-act="menuMute" style="font-size:13px;padding:5px 18px">${music.muted ? '已静音（点击开启）' : '开启中（点击静音）'}</button></div>
+      <div class="row" style="gap:10px"><span class="sts-body" style="color:#c8b090;width:78px;font-size:14px">联机昵称</span>
+        <input class="sts-body" data-input="mpName" value="${esc(loadSettings().playerName)}" maxlength="10" placeholder="联机时显示的名字"
+          style="flex:1;background:rgba(0,0,0,.5);border:1.5px solid #6b4a2e;border-radius:8px;color:#e8d8b8;padding:7px 12px;font-size:14px"></div>
+      <div class="row" style="gap:10px"><span class="sts-body" style="color:#c8b090;width:78px;font-size:14px">全屏</span>
+        <button class="sts-btn sts-body" data-act="fullscreen" style="font-size:13px;padding:5px 18px">切换全屏</button></div>
+    </div>
     ${mp
       ? `<button class="sts-btn sts-title" data-act="mpLeaveMenu" style="font-size:19px;padding:9px 66px;min-width:240px;color:#ffa898">退出联机房间</button>`
       : `<button class="sts-btn sts-title" data-act="abandon" data-confirm="0" id="abandon-btn" style="font-size:19px;padding:9px 66px;min-width:240px;color:#e8d8b8">放 弃 本 局</button>`}
@@ -1622,6 +1630,9 @@ function renderMenuOverlay(st: ReturnType<typeof g>) {
     <div class="sts-body" style="color:#8a7458;font-size:12px;margin-top:2px">第 ${st.run.act} 幕 · 第 ${Math.max(1, st.run.visitedNodes.length)} 层${mp ? ' · 联机合作中' : ' · 进度已自动保存'}</div>
   </div>`
   stageEl.appendChild(el)
+  // 打开菜单时若已展开设置面板则收起（重新打开默认收起）
+  const settingsPanel = el.querySelector('#ingame-menu-settings') as HTMLElement | null
+  if (settingsPanel) settingsPanel.style.display = 'none'
 }
 
 // ============ 全局键盘快捷键（还原原版：1-9 出牌 / E·空格·回车 结束回合 / Esc 菜单） ============
