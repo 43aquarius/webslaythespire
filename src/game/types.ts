@@ -129,6 +129,7 @@ export interface Intent {
   type: IntentType
   damage?: number       // 每次伤害
   times?: number        // 攻击次数
+  targetIdx?: number    // 联机：目标玩家索引（单机恒为 0）
 }
 
 export interface EnemyMove {
@@ -261,15 +262,33 @@ export interface PlayerCombatState {
   lightningChanneled?: number
   // ---- 通用 ----
   cardsDrawnThisTurn?: number
-}
-
-export interface CombatState {
-  enemies: EnemyInstance[]
-  player: PlayerCombatState
+  // ---- 牌堆（每玩家独立） ----
   drawPile: CardInstance[]
   hand: CardInstance[]
   discardPile: CardInstance[]
   exhaustPile: CardInstance[]
+  // ---- 待处理选择（每玩家） ----
+  pendingArmaments?: 'one' | 'all' | null
+  pendingHeadbutt?: boolean
+  pendingTrueGrit?: boolean
+  pendingWarcry?: boolean
+  pendingNightmare?: { cardId: string; upgraded: number; count: number } | null
+  pendingScry?: number | null
+  scryDiscarded?: string[]
+  // ---- 成长追踪（每玩家） ----
+  rampage?: Record<string, number>
+  glassKnife?: Record<string, number>
+  clawBonus?: number
+  // ---- 联机 ----
+  dead?: boolean
+  firstTurnDone?: number
+}
+
+export interface CombatState {
+  enemies: EnemyInstance[]
+  players: PlayerCombatState[]
+  activeIdx: number               // 当前行动玩家
+  acted: boolean[]                // 本轮已结束回合的玩家
   turn: number
   phase: 'player' | 'enemy' | 'over'
   encounterName: string
@@ -282,16 +301,7 @@ export interface CombatState {
   combatOver: boolean
   playerWon: boolean
   combatEndTriggered: boolean
-  rampage?: Record<string, number>   // 暴走牌伤害成长
-  glassKnife?: Record<string, number> // 玻璃小刀永久削减
-  clawBonus?: number                 // 爪击全局成长
-  pendingArmaments?: 'one' | 'all' | null  // 武装升级选择
-  pendingHeadbutt?: boolean              // 头槌选牌
-  pendingTrueGrit?: boolean              // 坚毅升级版选牌
-  pendingWarcry?: boolean                // 战吼选牌
-  pendingNightmare?: { cardId: string; upgraded: number; count: number } | null // 噩梦：下回合入手副本
-  pendingScry?: number | null               // 预见中（卡数）
-  scryDiscarded?: string[]                  // 预见弃牌 uid 集合
+  // rampage/glassKnife/clawBonus 已移入 PlayerCombatState（每玩家独立）
 }
 
 export interface FxEvent {
@@ -331,9 +341,26 @@ export interface ShopState {
   removalPrice: number
 }
 
+// ============ 联机：玩家个人数据 ============
+export interface RunPlayer {
+  name: string                  // 显示名（联机）
+  character: CharacterId
+  hp: number
+  maxHp: number
+  gold: number
+  deck: CardInstance[]
+  relics: string[]
+  potions: (string | null)[]
+  relicCounters: Record<string, number>
+  goldEarned: number
+  dead?: boolean                // 联机：该玩家已阵亡
+}
+
 export interface RewardState {
   gold?: number
   cards?: string[]
+  mpCards?: string[][]          // 联机：每玩家独立的卡牌奖励
+  mpDone?: boolean[]            // 联机：每玩家是否已确认
   potion?: string
   relic?: string
   taken: string[]
@@ -351,6 +378,10 @@ export interface NeowOption {
 export interface NeowState {
   options: NeowOption[]
   chosen: string | null
+  // 联机：每位玩家独立选择；chooserIdx 为当前选择者，-1 表示全部完成
+  mpOptions?: NeowOption[][]
+  chooserIdx?: number
+  mpChosen?: (string | null)[]
 }
 
 export interface RunState {
@@ -361,6 +392,9 @@ export interface RunState {
   deck: CardInstance[]
   relics: string[]
   potions: (string | null)[]
+  // 多人数据：players[activeIdx] 的数据与上方镜像字段保持同步（单人局恒为 1 名玩家）
+  players: RunPlayer[]
+  activeIdx: number
   map: GameMap
   currentNodeId: string | null
   visitedNodes: string[]
@@ -380,4 +414,6 @@ export interface RunState {
   neow?: NeowState | null
   bossesSeen: string[]   // 本局已遭遇的 boss（避免重复）
   nextActInfo?: number | null
+  // 联机篝火：每玩家的选择（未选为 null；null = 未初始化）
+  mpRest?: (null | 'rest' | 'smith')[] | null
 }

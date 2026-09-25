@@ -14,6 +14,24 @@ import {
   ACT4_ELITE_ENCOUNTERS, ACT4_BOSS_ENCOUNTERS, Encounter,
 } from './enemies'
 import { generateMap, generateAct4Map, reachableNodes } from './map'
+import { setRunActive, syncRunActive } from './mp'
+
+/** 联机：构造玩家个人数据 */
+export function makeRunPlayer(character: CharacterId, name = '玩家'): import('./types').RunPlayer {
+  const info = CHARACTER_INFO[character]
+  return {
+    name,
+    character,
+    hp: info.hp,
+    maxHp: info.hp,
+    gold: 99,
+    deck: starterDeckIds(character).map(id => makeCard(id)),
+    relics: [info.relic],
+    potions: [null, null, null],
+    relicCounters: {},
+    goldEarned: 0,
+  }
+}
 
 function pick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)] }
 function rnd(min: number, max: number) { return Math.floor(Math.random() * (max - min + 1)) + min }
@@ -79,16 +97,24 @@ export function makeNeowOptions(): NeowOption[] {
   return opts
 }
 
-// ============ 新开一局 ============
+// ============ 新开一局（单人） ============
 export function newRun(character: CharacterId = 'ironclad'): RunState {
   const info = CHARACTER_INFO[character]
   const deck = starterDeckIds(character).map(id => makeCard(id))
+  const p0 = {
+    name: '玩家', character,
+    hp: info.hp, maxHp: info.hp, gold: 99,
+    deck, relics: [info.relic], potions: [null, null, null] as (string | null)[],
+    relicCounters: {}, goldEarned: 0,
+  }
   return {
     hp: info.hp, maxHp: info.hp, gold: 99,
     character,
     deck,
     relics: [info.relic],
     potions: [null, null, null],
+    players: [p0],
+    activeIdx: 0,
     map: generateMap(Math.floor(Math.random() * 1e9)),
     currentNodeId: null,
     visitedNodes: [],
@@ -105,6 +131,42 @@ export function newRun(character: CharacterId = 'ironclad'): RunState {
   }
 }
 
+// ============ 新开一局（联机双人合作，仿杀戮尖塔2） ============
+export function newMultiRun(
+  hostChar: CharacterId, guestChar: CharacterId,
+  hostName = '房主', guestName = '队友',
+): RunState {
+  const players = [makeRunPlayer(hostChar, hostName), makeRunPlayer(guestChar, guestName)]
+  const run: RunState = {
+    hp: players[0].hp, maxHp: players[0].maxHp, gold: players[0].gold,
+    character: hostChar,
+    deck: players[0].deck,
+    relics: players[0].relics,
+    potions: players[0].potions,
+    players,
+    activeIdx: 0,
+    map: generateMap(Math.floor(Math.random() * 1e9)),
+    currentNodeId: null,
+    visitedNodes: [],
+    screen: 'neow',
+    combat: null, reward: null, shop: null,
+    currentEvent: null, eventsSeen: [],
+    removalCount: 0, eliteKilled: 0, monsterKilled: 0, goldEarned: 0,
+    act: 1,
+    relicCounters: players[0].relicCounters,
+    gameOverInfo: null,
+    neow: {
+      options: [], chosen: null,
+      mpOptions: [makeNeowOptions(), makeNeowOptions()],
+      chooserIdx: 0,
+      mpChosen: [null, null],
+    },
+    bossesSeen: [],
+    nextActInfo: null,
+  }
+  return run
+}
+
 // ============ 幕间推进 ============
 export function advanceAct(run: RunState): void {
   run.act += 1
@@ -113,11 +175,19 @@ export function advanceAct(run: RunState): void {
   run.currentEvent = null
   run.reward = null
   run.shop = null
+  run.mpRest = null
   run.map = run.act >= 4
     ? generateAct4Map(Math.floor(Math.random() * 1e9))
     : generateMap(Math.floor(Math.random() * 1e9))
   run.screen = 'map'
+  // 联机：全体存活玩家回复（仿尖塔2幕间治疗）；单人保持原有行为（无变化）
+  if (run.players.length > 1) {
+    run.players.forEach(p => { p.hp = Math.min(p.maxHp, p.hp + Math.floor(p.maxHp * 0.2)) })
+    syncRunActive(run)
+  }
 }
+
+export { setRunActive }
 
 // ============ 遭遇选择 ============
 export function pickEncounter(run: RunState, isElite: boolean, isBoss: boolean): { name: string; enemies: string[] } {
@@ -148,38 +218,49 @@ export function pickEncounter(run: RunState, isElite: boolean, isBoss: boolean):
 // ============ 战斗奖励生成 ============
 export function makeCombatReward(run: RunState, isElite: boolean, isBoss: boolean): RewardState {
   const reward: RewardState = { taken: [] }
+  const mp = run.players.length > 1
+  const anyRelic = (id: string) => run.players.some(p => p.relics.includes(id))
 
-  // 金币
+  // 金币（联机：每位玩家各自获得一份）
   let gold = run.combat?.goldReward ?? 10
   gold = Math.floor(gold * (1 + 0.1 * (run.act - 1)))
-  if (run.relics.includes('goldenIdol')) gold = Math.floor(gold * 1.25)
+  if (anyRelic('goldenIdol')) gold = Math.floor(gold * 1.25)
   reward.gold = gold
 
   // 卡牌奖励（3 张，按稀有度概率；按角色卡池）
-  const nCards = run.relics.includes('bustedCrown') ? 2 : 3
   let rareChance = 0.04 + (isElite ? 0.10 : 0) + Math.min(0.08, run.monsterKilled * 0.005)
-  const cards: string[] = []
-  const poolCommon = shuffle(poolByRarity('common', run.character))
-  const poolUncommon = shuffle(poolByRarity('uncommon', run.character))
-  const poolRare = shuffle(poolByRarity('rare', run.character))
-  for (let i = 0; i < nCards; i++) {
-    const r = Math.random()
-    if (r < rareChance && poolRare.length) cards.push(poolRare.pop()!)
-    else if (r < rareChance + 0.37 && poolUncommon.length) cards.push(poolUncommon.pop()!)
-    else if (poolCommon.length) cards.push(poolCommon.pop()!)
-    else if (poolUncommon.length) cards.push(poolUncommon.pop()!)
+  const rollCards = (character: CharacterId, hasBustedCrown: boolean): string[] => {
+    const nCards = hasBustedCrown ? 2 : 3
+    const cards: string[] = []
+    const poolCommon = shuffle(poolByRarity('common', character))
+    const poolUncommon = shuffle(poolByRarity('uncommon', character))
+    const poolRare = shuffle(poolByRarity('rare', character))
+    for (let i = 0; i < nCards; i++) {
+      const r = Math.random()
+      if (r < rareChance && poolRare.length) cards.push(poolRare.pop()!)
+      else if (r < rareChance + 0.37 && poolUncommon.length) cards.push(poolUncommon.pop()!)
+      else if (poolCommon.length) cards.push(poolCommon.pop()!)
+      else if (poolUncommon.length) cards.push(poolUncommon.pop()!)
+    }
+    return cards
   }
-  reward.cards = cards
+  if (mp) {
+    // 联机：每位玩家从自己角色卡池独立获得一份三选一
+    reward.mpCards = run.players.map(p => rollCards(p.character, p.relics.includes('bustedCrown')))
+    reward.mpDone = run.players.map(() => false)
+  } else {
+    reward.cards = rollCards(run.character, run.relics.includes('bustedCrown'))
+  }
 
-  // 精英掉遗物
+  // 精英掉遗物（联机：先到先得，点击者获得）
   if (isElite) {
-    const owned = new Set(run.relics)
+    const owned = new Set(run.players.flatMap(p => p.relics))
     const pool = shuffle(shopRelicPool().filter(id => !owned.has(id)))
     if (pool.length) reward.relic = pool[0]
   }
 
-  // 药水掉落
-  if (run.combat?.potionDrop && !run.relics.includes('sozu')) {
+  // 药水掉落（联机：点击者获得）
+  if (run.combat?.potionDrop && !anyRelic('sozu')) {
     reward.potion = pick(potionPool())
   }
 

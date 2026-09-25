@@ -312,3 +312,30 @@ img { -webkit-user-drag: none; }
 .scry-card { cursor: pointer; transition: transform .15s ease, filter .15s ease; }
 .scry-card:hover { transform: translateY(-6px); }
 .scry-card.marked { transform: translateY(-26px) scale(1.04); filter: drop-shadow(0 0 14px rgba(220,80,80,.9)); }
+
+
+/* ============ v1.4 联机与菜单 ============ */
+.menu-item {
+  background: linear-gradient(180deg, rgba(72,52,32,.95), rgba(38,26,16,.98));
+  border: 2px solid #6b4a2e;
+  box-shadow: 0 3px 0 #1a0f08, inset 0 1px 0 rgba(255,220,160,.14), 0 4px 14px rgba(0,0,0,.55);
+  color: #e8d5ae;
+  transition: all .15s ease;
+}
+.menu-item:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(104,76,44,.98), rgba(56,38,22,1));
+  border-color: #a87a44;
+  color: #ffe9b8;
+  box-shadow: 0 3px 0 #1a0f08, inset 0 1px 0 rgba(255,220,160,.25), 0 0 22px rgba(255,190,90,.35);
+  transform: translateY(-1px);
+}
+@keyframes waitPulse {
+  0%, 100% { opacity: .25; transform: scale(.8); }
+  50% { opacity: 1; transform: scale(1.25); }
+}
+.wait-dot { animation: waitPulse 1.2s ease-in-out infinite; color: #ffd97a; }
+@keyframes actIn {
+  0% { opacity: 0; transform: scale(.86) translateY(26px); letter-spacing: 26px; }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: scale(1) translateY(0); letter-spacing: 14px; }
+}

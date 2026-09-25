@@ -403,3 +403,33 @@
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-18px); }
 }
+
+/* ============ 联机等待呼吸点 ============ */
+.sts-wait-dot { animation: sts-wait-pulse 1.2s ease-in-out infinite; color: #ffd97a; }
+@keyframes sts-wait-pulse {
+  0%, 100% { opacity: 0.25; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.25); }
+}
+
+/* ============ 幕间过场入场 ============ */
+@keyframes sts-act-in {
+  0% { opacity: 0; transform: scale(0.86) translateY(26px); letter-spacing: 26px; }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: scale(1) translateY(0); letter-spacing: 14px; }
+}
+
+/* ============ 主菜单按钮（原版质感：悬浮提亮 + 金边呼吸） ============ */
+.menu-item {
+  background: linear-gradient(180deg, rgba(72,52,32,0.95), rgba(38,26,16,0.98));
+  border: 2px solid #6b4a2e;
+  box-shadow: 0 3px 0 #1a0f08, inset 0 1px 0 rgba(255,220,160,0.14), 0 4px 14px rgba(0,0,0,0.55);
+  color: #e8d5ae;
+  transition: all .15s ease;
+}
+.menu-item:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(104,76,44,0.98), rgba(56,38,22,1));
+  border-color: #a87a44;
+  color: #ffe9b8;
+  box-shadow: 0 3px 0 #1a0f08, inset 0 1px 0 rgba(255,220,160,0.25), 0 0 22px rgba(255,190,90,0.35);
+  transform: translateY(-1px);
+}

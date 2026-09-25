@@ -7,10 +7,10 @@
 // 新系统：故障机器人宝球、观者姿态
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useGame, FxItem } from '@/store/gameStore'
-import { EnemyInstance, CardInstance } from '@/game/types'
+import { EnemyInstance, CardInstance, RunPlayer, PlayerCombatState } from '@/game/types'
 import { CARDS, cardCost } from '@/game/cards'
 import { ENEMIES } from '@/game/enemies'
-import { enemyDisplayDamage } from '@/game/engine'
+import { enemyDisplayDamage, AP } from '@/game/engine'
 import { CardView } from './CardView'
 import { StatusRow, HpBar, Tip, TopHud, STATUS_INFO, statusImg } from './Shared'
 import { ScryOverlay } from './Overlays'
@@ -20,9 +20,13 @@ const A = '/assets'
 // ============ 意图图标 ============
 function IntentView({ enemy, targetable }: { enemy: EnemyInstance; targetable: boolean }) {
   const combat = useGame(s => s.run?.combat)
+  const net = useGame(s => s.net)
   if (!combat || !enemy.intent || enemy.dying) return null
   const it = enemy.intent
-  const { dmg, times } = enemyDisplayDamage(enemy, combat.player.statuses, combat.player.stance)
+  // 联机：以意图目标玩家的状态计算伤害显示
+  const tgtIdx = combat.players.length > 1 ? (it.targetIdx ?? 0) : 0
+  const TP = combat.players[tgtIdx] || AP(combat)
+  const { dmg, times } = enemyDisplayDamage(enemy, TP.statuses, TP.stance)
   const map: Record<string, string> = {
     attack: 'attack3', attackDebuff: 'attack5', attackDefend: 'attack4',
     defend: 'defend', buff: 'buff', debuff: 'debuff', strongDebuff: 'debuffStrong',
@@ -31,6 +35,7 @@ function IntentView({ enemy, targetable }: { enemy: EnemyInstance; targetable: b
   const icon = `${A}/intent/${map[it.type] || 'unknown'}.png`
   const isAttack = it.type.startsWith('attack')
   const mvName = ENEMIES[enemy.id]?.moves[enemy.nextMoveIdx]?.name || ''
+  const tgtLabel = combat.players.length > 1 ? (tgtIdx === net.myIdx ? '▶你' : '▶队友') : ''
 
   return (
     <Tip tip={<b>{mvName}</b>}>
@@ -45,6 +50,11 @@ function IntentView({ enemy, targetable }: { enemy: EnemyInstance; targetable: b
         {!isAttack && <img src={icon} alt="" width={42} height={42} draggable={false} />}
         {(it.type === 'attackDebuff' || it.type === 'attackDefend') && (
           <img src={`${A}/intent/${it.type === 'attackDebuff' ? 'debuff' : 'defend'}.png`} alt="" width={28} height={28} draggable={false} />
+        )}
+        {isAttack && tgtLabel && (
+          <span className="sts-body font-bold" style={{ fontSize: 13, color: tgtIdx === net.myIdx ? '#ff6a50' : '#6ab0ff', textShadow: '1px 1px 0 #000' }}>
+            {tgtLabel}
+          </span>
         )}
         {targetable && <span className="sts-body text-xs font-bold" style={{ color: '#ff6a50' }}>点击目标</span>}
       </div>
@@ -225,12 +235,14 @@ const ORB_STYLE: Record<string, { color: string; glow: string; symbol: string }>
   plasma: { color: '#e87ab0', glow: 'rgba(232,122,176,0.55)', symbol: '✦' },
 }
 
-function OrbRow() {
+function OrbRow({ p }: { p?: PlayerCombatState }) {
   const combat = useGame(s => s.run?.combat)
-  if (!combat?.player.orbs) return null
-  const orbs = combat.player.orbs
-  const slots = combat.player.orbSlots ?? 3
-  if (combat.player.orbs.length === 0 && slots === 0) return null
+  if (!combat) return null
+  const P = p ?? AP(combat)
+  if (!P.orbs) return null
+  const orbs = P.orbs
+  const slots = P.orbSlots ?? 3
+  if (orbs.length === 0 && slots === 0) return null
   return (
     <div className="flex items-center gap-1.5" style={{ marginBottom: 4 }}>
       {Array.from({ length: Math.max(slots, orbs.length) }).map((_, i) => {
@@ -275,10 +287,12 @@ const STANCE_STYLE: Record<string, { name: string; color: string; desc: string }
   divinity: { name: '神格', color: '#ffd980', desc: '造成的攻击伤害三倍。回合结束自动退出。' },
 }
 
-function StanceBadge() {
+function StanceBadge({ p }: { p?: PlayerCombatState }) {
   const combat = useGame(s => s.run?.combat)
-  const stance = combat?.player.stance || 'none'
-  const mantra = combat?.player.mantra || 0
+  if (!combat) return null
+  const P = p ?? AP(combat)
+  const stance = P.stance || 'none'
+  const mantra = P.mantra || 0
   if (stance === 'none' && mantra === 0) return null
   const st = STANCE_STYLE[stance]
   return (
@@ -338,6 +352,53 @@ function PlayedCardFx({ items, removeFx }: { items: FxItem[]; removeFx: (id: num
 }
 
 // ============ 主战斗界面 ============
+// ============ 玩家英雄视图（联机双人并排） ============
+function HeroView({ idx, player, pc, fxItems, mp }: {
+  idx: number; player: RunPlayer; pc: PlayerCombatState
+  fxItems: FxItem[]; mp: boolean
+}) {
+  const removeFx = useGame(s => s.removeFx)
+  const net = useGame(s => s.net)
+  const isMe = idx === net.myIdx
+  const dead = player.hp <= 0 || player.dead
+  return (
+    <div className="relative flex flex-col items-center gap-1.5" style={{ width: mp ? 205 : 240 }}>
+      <div className="relative" style={{ width: '100%', height: 56 }}>
+        <FloatFx items={fxItems} removeFx={removeFx} />
+      </div>
+      {/* 宝球 / 姿态 */}
+      {player.character === 'defect' && <OrbRow p={pc} />}
+      {player.character === 'watcher' && <StanceBadge p={pc} />}
+      <StatusRow statuses={pc.statuses} size={mp ? 26 : 30} />
+      <div className="relative">
+        <img
+          src={`${A}/hero/${player.character}.png`}
+          alt=""
+          draggable={false}
+          style={{
+            width: mp ? 205 : 240, height: mp ? 146 : 171, objectFit: 'contain',
+            filter: dead
+              ? 'grayscale(1) brightness(0.5)'
+              : player.hp <= player.maxHp * 0.3 ? 'brightness(0.85) drop-shadow(0 0 12px rgba(255,60,40,0.5))' : 'drop-shadow(0 8px 10px rgba(0,0,0,0.5))',
+          }}
+        />
+        {dead && (
+          <div className="absolute inset-0 flex items-center justify-center sts-title"
+            style={{ color: '#ff5a4a', fontSize: 26, textShadow: '2px 2px 0 #000' }}>阵 亡</div>
+        )}
+      </div>
+      {mp && (
+        <div className="sts-body font-bold" style={{
+          fontSize: 13, marginTop: -4, letterSpacing: 1,
+          color: isMe ? '#8ee8ff' : '#c8a878', textShadow: '1px 1px 0 #000',
+        }}>
+          {player.name}{isMe ? '（你）' : ''}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function CombatScreen() {
   const run = useGame(s => s.run)
   const combat = useGame(s => s.run?.combat)
@@ -351,11 +412,12 @@ export function CombatScreen() {
   const openPile = useGame(s => s.openPile)
   const removeFx = useGame(s => s.removeFx)
   const fxList = useGame(s => s.fxList)
+  const net = useGame(s => s.net)
 
-  // 屏幕震动
+  // 屏幕震动（联机：任一玩家受击均震动）
   const rootRef = useRef<HTMLDivElement>(null)
   const lastShakeRef = useRef(0)
-  const shakeEvents = fxList.filter(f => f.kind === 'shake' && f.target === 'player')
+  const shakeEvents = fxList.filter(f => f.kind === 'shake' && (f.target === 'player' || f.target === 'p0' || f.target === 'p1'))
   const shakeId = shakeEvents.length > 0 ? shakeEvents[shakeEvents.length - 1].id : 0
   useEffect(() => {
     if (shakeId > lastShakeRef.current && rootRef.current) {
@@ -373,9 +435,9 @@ export function CombatScreen() {
     lastShakeRef.current = Math.max(lastShakeRef.current, shakeId)
   }, [shakeId])
 
-  const playerFx = fxList.filter(f => f.target === 'player' && f.kind !== 'cardPlay')
+  const playerFx = fxList.filter(f => (f.target === 'player' || f.target === 'p0' || f.target === 'p1') && f.kind !== 'cardPlay')
   const cardPlayFx = fxList.filter(f => f.kind === 'cardPlay')
-  const hand = combat?.hand ?? []
+  const hand = combat ? AP(combat).hand : []
 
   // 手牌 uid 集合（用于抽牌动画：新出现的卡播放飞入）
   const prevHandRef = useRef<Set<string>>(new Set())
@@ -403,11 +465,13 @@ export function CombatScreen() {
   })()
 
   if (!run || !combat) return null
-  const p = combat.player
+  const p = AP(combat)
   const isDefect = run.character === 'defect'
   const isWatcher = run.character === 'watcher'
-  const energyOrb = { ironclad: 'redEnergy', silent: 'greenEnergy', defect: 'blueEnergy', watcher: 'purpleEnergy' }[run.character]
-  const heroSprite = run.character
+  const energyOrb = { ironclad: 'redEnergy', silent: 'greenEnergy', defect: 'blueEnergy', watcher: 'purpleEnergy' }[run.players[combat.activeIdx]?.character || run.character]
+  const mp = run.players.length > 1
+  const myTurn = !mp || (net.myIdx === combat.activeIdx)
+  const waitingPeer = mp && combat.phase === 'player' && !myTurn && !combat.combatOver
 
   return (
     <div
@@ -426,22 +490,55 @@ export function CombatScreen() {
       {/* ===== 顶部 HUD ===== */}
       <TopHud combat />
 
-      {/* ===== 玩家（左下） ===== */}
-      <div className="absolute flex flex-col items-center gap-1.5" style={{ left: 44, bottom: 96, zIndex: 40 }}>
-        <div className="relative" style={{ width: 240, height: 60 }}>
-          <FloatFx items={playerFx} removeFx={removeFx} />
+      {/* ===== 联机等待横幅 ===== */}
+      {waitingPeer && (
+        <div className="absolute left-1/2 -translate-x-1/2 sts-title flex items-center gap-2"
+          style={{ top: 66, zIndex: 70, fontSize: 20, color: '#ffe9a0', textShadow: '2px 2px 0 #000', letterSpacing: 3 }}>
+          <span className="sts-wait-dot">●</span>
+          等待 {run.players[combat.activeIdx]?.name || '队友'} 行动…
         </div>
-        {/* 宝球 / 姿态 */}
-        {isDefect && <OrbRow />}
-        {isWatcher && <StanceBadge />}
-        <StatusRow statuses={p.statuses} size={30} />
-        <img
-          src={`${A}/hero/${heroSprite}.png`}
-          alt=""
-          draggable={false}
-          style={{ width: 240, height: 171, objectFit: 'contain', filter: 'drop-shadow(0 8px 10px rgba(0,0,0,0.5))' }}
-        />
-      </div>
+      )}
+
+      {/* ===== 玩家（左下；联机双人并排） ===== */}
+      {mp ? (
+        <div className="absolute flex items-end gap-2" style={{ left: 30, bottom: 92, zIndex: 40 }}>
+          {run.players.map((rp, i) => {
+            const pc = combat.players[i]
+            const items = fxList.filter(f =>
+              (f.target === `p${i}` || (i === 0 && f.target === 'player')) && f.kind !== 'cardPlay')
+            const isActive = combat.activeIdx === i && !pc.dead
+            return (
+              <div key={i}
+                style={{
+                  filter: isActive ? 'none' : 'brightness(0.62)',
+                  transition: 'filter .25s ease',
+                  borderRadius: 14,
+                  boxShadow: isActive ? '0 0 22px rgba(255,217,128,0.28)' : 'none',
+                  padding: '4px 4px 0',
+                }}
+              >
+                <HeroView idx={i} player={rp} pc={pc} fxItems={items} mp />
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="absolute flex flex-col items-center gap-1.5" style={{ left: 44, bottom: 96, zIndex: 40 }}>
+          <div className="relative" style={{ width: 240, height: 60 }}>
+            <FloatFx items={playerFx} removeFx={removeFx} />
+          </div>
+          {/* 宝球 / 姿态 */}
+          {isDefect && <OrbRow />}
+          {isWatcher && <StanceBadge />}
+          <StatusRow statuses={p.statuses} size={30} />
+          <img
+            src={`${A}/hero/${run.character}.png`}
+            alt=""
+            draggable={false}
+            style={{ width: 240, height: 171, objectFit: 'contain', filter: 'drop-shadow(0 8px 10px rgba(0,0,0,0.5))' }}
+          />
+        </div>
+      )}
 
       {/* ===== 敌人区 ===== */}
       <div className="absolute flex items-start justify-center gap-10"
@@ -464,12 +561,12 @@ export function CombatScreen() {
       )}
 
       {/* ===== 抽牌堆 ===== */}
-      <PileButton label="抽牌堆" count={combat.drawPile.length} style={{ left: 26, bottom: 158 }} onClick={() => openPile('draw')} shuffled />
+      <PileButton label="抽牌堆" count={AP(combat).drawPile.length} style={{ left: 26, bottom: 158 }} onClick={() => openPile('draw')} shuffled />
       {/* ===== 弃牌堆 ===== */}
-      <PileButton label="弃牌堆" count={combat.discardPile.length} style={{ right: 26, bottom: 158 }} onClick={() => openPile('discard')} />
+      <PileButton label="弃牌堆" count={AP(combat).discardPile.length} style={{ right: 26, bottom: 158 }} onClick={() => openPile('discard')} />
       {/* ===== 消耗堆 ===== */}
-      {combat.exhaustPile.length > 0 && (
-        <PileButton label="消耗堆" count={combat.exhaustPile.length} style={{ right: 26, bottom: 88 }} onClick={() => openPile('exhaust')} small />
+      {AP(combat).exhaustPile.length > 0 && (
+        <PileButton label="消耗堆" count={AP(combat).exhaustPile.length} style={{ right: 26, bottom: 88 }} onClick={() => openPile('exhaust')} small />
       )}
 
       {/* ===== 能量球 ===== */}
@@ -486,19 +583,26 @@ export function CombatScreen() {
         className="sts-btn absolute sts-title"
         style={{
           right: 108, bottom: 116, fontSize: 24, padding: '13px 34px', zIndex: 46,
-          opacity: combat.phase !== 'player' || busy ? 0.5 : 1,
+          opacity: combat.phase !== 'player' || busy || !myTurn ? 0.5 : 1,
         }}
-        disabled={combat.phase !== 'player' || busy || combat.combatOver}
+        disabled={combat.phase !== 'player' || busy || combat.combatOver || !myTurn}
         onClick={endTurn}
       >
-        {combat.phase === 'player' ? '结束回合' : '敌方回合…'}
+        {combat.phase === 'player' ? (waitingPeer ? '队友回合…' : '结束回合') : '敌方回合…'}
       </button>
+
+      {/* ===== 键盘快捷键提示（桌面端，原版快捷键还原） ===== */}
+      {!isTouch && !waitingPeer && combat.phase === 'player' && (
+        <div className="absolute sts-body" style={{ right: 96, bottom: 88, color: '#8a7458', fontSize: 11, zIndex: 46, textShadow: '1px 1px 0 #000' }}>
+          快捷键：1-9 出牌 · E / 空格 结束回合 · Esc 菜单
+        </div>
+      )}
 
       {/* ===== 手牌 ===== */}
       <div className="absolute inset-x-0 flex justify-center items-end" style={{ bottom: -40, height: 320, zIndex: 45, pointerEvents: 'none' }}>
         {hand.map((card, i) => {
           const layout = handLayout[i]
-          const isPlayable = combat.phase === 'player' && !busy && !combat.combatOver
+          const isPlayable = combat.phase === 'player' && !busy && !combat.combatOver && myTurn
           const isSelected = selectedCardUid === card.uid
           const cost = cardCost(card, p.hpLostThisCombat, p.cardsDiscardedThisTurn || 0)
           const enough = cost === -1 ? true : p.energy >= Math.max(0, cost)
@@ -511,7 +615,7 @@ export function CombatScreen() {
                 transform: `translateX(${layout.x}px) translateY(${layout.ty}px) rotate(${layout.rot}deg)`,
                 transformOrigin: 'bottom center',
                 zIndex: 10 + i,
-                pointerEvents: 'auto',
+                pointerEvents: isPlayable ? 'auto' : 'none',
               }}
             >
               <div className="hand-inner"
@@ -519,7 +623,7 @@ export function CombatScreen() {
                 <CardView
                   card={card}
                   width={168}
-                  ctx={{ hpLost: p.hpLostThisCombat, rampageBonus: combat.rampage?.[card.uid] || 0, glassKnifePenalty: combat.glassKnife?.[card.uid] || 0, clawBonus: combat.clawBonus || 0, shivBonus: p.statuses.accuracy || 0 }}
+                  ctx={{ hpLost: p.hpLostThisCombat, rampageBonus: AP(combat).rampage?.[card.uid] || 0, glassKnifePenalty: AP(combat).glassKnife?.[card.uid] || 0, clawBonus: AP(combat).clawBonus || 0, shivBonus: p.statuses.accuracy || 0 }}
                   dimmed={!isPlayable || !enough}
                   selected={isSelected}
                   hoverPlay={isPlayable && enough}

@@ -5,6 +5,7 @@ import { StatusMap } from '@/game/types'
 import { RELICS } from '@/game/relics'
 import { POTIONS } from '@/game/potions'
 import { useGame } from '@/store/gameStore'
+import { AP } from '@/game/engine'
 
 import { STATUS_INFO, statusImgPath } from '@/game/statusInfo'
 export { STATUS_INFO }
@@ -62,16 +63,21 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
   const discardPotion = useGame(s => s.discardPotion)
   const usePotionMap = useGame(s => s.usePotionMap)
   const selectedPotionIdx = useGame(s => s.selectedPotionIdx)
+  const net = useGame(s => s.net)
   if (!run) return null
 
+  const mp = run.players.length > 1
+  const myIdx = mp ? net.myIdx : 0
+  const me = run.players[myIdx] || run.players[0]
+  const activeBlock = combat && run.combat ? (AP(run.combat).block ?? 0) : 0
+  const myBlock = combat && run.combat && run.combat.activeIdx === myIdx ? activeBlock : 0
+
   const onPotionClick = (idx: number) => {
-    const pid = run.potions[idx]
+    const pid = me.potions[idx]
     if (!pid) return
     if (!combat) { usePotionMap(idx); return }
     useGame.setState(s => ({ selectedPotionIdx: s.selectedPotionIdx === idx ? null : idx }))
   }
-
-  const block = combat ? (run.combat?.player.block ?? 0) : 0
 
   return (
     <div className="absolute top-0 inset-x-0 z-40 sts-screen-fade select-none"
@@ -80,9 +86,9 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
         padding: '10px 18px 26px',
       }}>
       <div className="flex items-start justify-between">
-        {/* 左上：牌组按钮 + 血条 */}
+        {/* 左上：牌组按钮 + 血条（联机显示双人） */}
         <div className="flex items-center gap-3">
-          <Tip tip={<b>查看牌组（{run.deck.length} 张）</b>}>
+          <Tip tip={<b>查看牌组（{me.deck.length} 张）</b>}>
             <button
               className="sts-btn flex flex-col items-center justify-center"
               style={{ width: 62, height: 62, padding: 2, borderRadius: 10 }}
@@ -90,14 +96,22 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
             >
               <img src={`${A}/frames/cardRedOrb.png`} alt="" width={26} height={20} draggable={false}
                 style={{ objectFit: 'contain' }} />
-              <span className="sts-num font-bold" style={{ fontSize: 15, lineHeight: 1.1 }}>{run.deck.length}</span>
+              <span className="sts-num font-bold" style={{ fontSize: 15, lineHeight: 1.1 }}>{me.deck.length}</span>
             </button>
           </Tip>
           <div className="flex flex-col gap-1.5">
-            <HpBar hp={run.hp} maxHp={run.maxHp} block={block} width={300} />
+            <HpBar hp={me.hp} maxHp={me.maxHp} block={myBlock} width={mp ? 250 : 300} label={mp ? me.name : undefined} />
+            {mp && run.players.map((rp, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <span className="sts-body font-bold" style={{ fontSize: 11, color: i === myIdx ? '#8ee8ff' : '#c8a878', textShadow: '1px 1px 0 #000', minWidth: 34 }}>
+                  {i === myIdx ? '你' : rp.name}
+                </span>
+                <HpBar hp={rp.hp} maxHp={rp.maxHp} width={182} />
+              </div>
+            ))}
             {floor !== undefined && (
               <div className="sts-body font-bold" style={{ color: '#c8b090', fontSize: 13, textShadow: '1px 1px 0 #000' }}>
-                第 1 幕 · 第 {floor} 层
+                第 {run.act} 幕 · 第 {floor} 层{mp ? ' · 联机合作' : ''}
               </div>
             )}
           </div>
@@ -108,10 +122,15 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
           <div className="flex items-center gap-3">
             <div className="sts-body font-bold sts-num flex items-center gap-1"
               style={{ color: '#ffd980', textShadow: '1px 1px 0 #000', fontSize: 18 }}>
-              <span>💰</span>{run.gold}
+              <span>💰</span>{me.gold}
             </div>
+            {mp && (
+              <div className="sts-body sts-num flex items-center gap-1" style={{ color: '#a8b8c8', textShadow: '1px 1px 0 #000', fontSize: 13 }}>
+                队友 {run.players[1 - myIdx]?.gold ?? '-'}
+              </div>
+            )}
             <div className="flex gap-1.5">
-              {run.potions.map((pid, i) => (
+              {me.potions.map((pid, i) => (
                 <PotionSlot
                   key={i} potionId={pid} size={38}
                   selected={combat && selectedPotionIdx === i}
@@ -123,7 +142,7 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
           </div>
           {/* 遗物行 */}
           <div className="flex gap-1 items-center flex-wrap justify-end" style={{ maxWidth: 560 }}>
-            {run.relics.map(id => <RelicIcon key={id} id={id} size={34} />)}
+            {me.relics.map(id => <RelicIcon key={id} id={id} size={34} />)}
           </div>
         </div>
       </div>

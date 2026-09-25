@@ -8,6 +8,29 @@ import { CARDS, cardCost, cardValues, makeCard, isStatusCard } from './cards'
 import { ENEMIES } from './enemies'
 import { POTIONS } from './potions'
 import { RELICS } from './relics'
+import { setRunActive } from './mp'
+
+// ============ 多人辅助 ============
+/** 当前活动玩家（单人局 = players[0]） */
+export function AP(c: CombatState) { return c.players[c.activeIdx]! }
+/** 玩家目标 fx 标识：单人 'player'，联机 'p0'/'p1' */
+function ptgt(c: CombatState): FxEvent['target'] { return c.players.length > 1 ? 'p' + c.activeIdx : 'player' }
+/** 是否联机战斗 */
+function isMpCombat(c: CombatState) { return c.players.length > 1 }
+/** 将某个状态效果施加到所有存活玩家（联机敌人AOE咒类） */
+function applyStatusToAllPlayers(combat: CombatState, run: RunState, id: string, amount: number) {
+  if (!isMpCombat(combat)) { applyStatus(combat, 'player', id, amount); return }
+  const n = combat.players.length
+  const prev = combat.activeIdx
+  for (let i = 0; i < n; i++) {
+    if (combat.players[i].dead) continue
+    combat.activeIdx = i
+    setRunActive(run, i)
+    applyStatus(combat, 'player', id, amount)
+  }
+  combat.activeIdx = prev
+  setRunActive(run, prev)
+}
 
 let fxId = 1
 export function fx(combat: CombatState, kind: FxEvent['kind'], target: FxEvent['target'], value?: number, text?: string) {
@@ -63,43 +86,45 @@ export function enemyDisplayDamage(enemy: EnemyInstance, playerStatuses: StatusM
 const DEBUFF_STATUSES = new Set(['vulnerable', 'weak', 'frail'])
 export function applyStatus(combat: CombatState, target: 'player' | EnemyInstance, id: string, amount: number) {
   if (amount === 0) return
-  const map: StatusMap = target === 'player' ? combat.player.statuses : target.statuses
+  const map: StatusMap = target === 'player' ? AP(combat).statuses : target.statuses
   // 反制：负面状态（易伤/虚弱/脆弱）或力量/敏捷降低被无效化
   const isDebuff = DEBUFF_STATUSES.has(id) ||
     ((id === 'strength' || id === 'dexterity') && amount < 0)
   // 姜/萝卜：免疫虚弱/脆弱
   if (target === 'player' && amount > 0) {
-    if (id === 'weak' && combat.player.customFlags?.gingerImmune) return
-    if (id === 'frail' && combat.player.customFlags?.turnipImmune) return
+    if (id === 'weak' && AP(combat).customFlags?.gingerImmune) return
+    if (id === 'frail' && AP(combat).customFlags?.turnipImmune) return
   }
   if (map.artifact && isDebuff) {
     map.artifact -= 1
     if (map.artifact <= 0) delete map.artifact
-    fx(combat, 'text', target === 'player' ? 'player' : target.uid, undefined, '反制!')
+    fx(combat, 'text', target === 'player' ? ptgt(combat) : target.uid, undefined, '反制!')
     return
   }
   map[id] = (map[id] || 0) + amount
   if (map[id] === 0) delete map[id]
-  fx(combat, 'status', target === 'player' ? 'player' : target.uid, amount, id)
+  fx(combat, 'status', target === 'player' ? ptgt(combat) : target.uid, amount, id)
 }
 
 // ============ 生命/格挡 ============
 export function healPlayer(run: RunState, combat: CombatState | null, amount: number) {
   const before = run.hp
   run.hp = Math.min(run.maxHp, run.hp + amount)
-  if (combat && run.hp > before) fx(combat, 'heal', 'player', run.hp - before)
+  // 同步 players[]（联机：保证 players[activeIdx].hp 实时一致）
+  if (run.players[run.activeIdx]) run.players[run.activeIdx].hp = run.hp
+  if (combat && run.hp > before) fx(combat, 'heal', ptgt(combat), run.hp - before)
 }
 
 export function playerGainBlock(combat: CombatState, run: RunState, base: number) {
   if (run.hp <= 0) return
-  const amount = calcBlock(base, combat.player.statuses)
-  combat.player.block += amount
-  if (amount > 0) fx(combat, 'block', 'player', amount)
+  const amount = calcBlock(base, AP(combat).statuses)
+  AP(combat).block += amount
+  if (amount > 0) fx(combat, 'block', ptgt(combat), amount)
   // 主宰：获得格挡时对随机敌人造成伤害
-  if (combat.player.statuses.juggernaut) {
+  if (AP(combat).statuses.juggernaut) {
     const living = combat.enemies.filter(e => !e.dying && e.hp > 0)
     if (living.length > 0 && amount > 0) {
-      damageEnemy(combat, run, pick(living), combat.player.statuses.juggernaut, false)
+      damageEnemy(combat, run, pick(living), AP(combat).statuses.juggernaut, false)
     }
   }
 }
@@ -145,39 +170,41 @@ export function damagePlayer(combat: CombatState, run: RunState, amount: number,
   if (run.hp <= 0) return 0
   let dmg = amount
   // 虚无形体：受到的伤害变为 1
-  if (combat.player.statuses.intangible) dmg = 1
+  if (AP(combat).statuses.intangible) dmg = 1
   let hpLoss = dmg
-  if (combat.player.block > 0) {
-    const absorbed = Math.min(combat.player.block, dmg)
-    combat.player.block -= absorbed
+  if (AP(combat).block > 0) {
+    const absorbed = Math.min(AP(combat).block, dmg)
+    AP(combat).block -= absorbed
     hpLoss = dmg - absorbed
   }
   run.hp -= hpLoss
+  // 同步 players[]（保持实时一致）
+  if (run.players[run.activeIdx]) run.players[run.activeIdx].hp = run.hp
   // 钨钢棒：失去生命时减 1
   if (hpLoss > 0 && run.relics.includes('tungstenRod')) {
     run.hp += 1
     hpLoss -= 1
     if (hpLoss < 0) hpLoss = 0
   }
-  combat.player.hpLostThisCombat += hpLoss
-  if (dmg > 0) fx(combat, 'dmg', 'player', dmg)
+  AP(combat).hpLostThisCombat += hpLoss
+  if (dmg > 0) fx(combat, 'dmg', ptgt(combat), dmg)
   if (hpLoss > 0) {
-    fx(combat, 'shake', 'player')
+    fx(combat, 'shake', ptgt(combat))
     // 世纪魔方：战斗中第一次因攻击失去生命 → 抽1张
-    if (isAttack && run.relics.includes('centennialPuzzle') && !combat.player.customFlags?.puzzleUsed) {
-      combat.player.customFlags = combat.player.customFlags || {}
-      combat.player.customFlags.puzzleUsed = 1
+    if (isAttack && run.relics.includes('centennialPuzzle') && !AP(combat).customFlags?.puzzleUsed) {
+      const cf = AP(combat).customFlags = AP(combat).customFlags || {}
+      cf.puzzleUsed = 1
       drawCards(combat, run, 1)
     }
     // 静电释放：受到攻击伤害 → 引导闪电
-    if (isAttack && combat.player.statuses.staticDischargeS) {
-      for (let i = 0; i < combat.player.statuses.staticDischargeS; i++) channelOrb(combat, run, 'lightning')
+    if (isAttack && AP(combat).statuses.staticDischargeS) {
+      for (let i = 0; i < AP(combat).statuses.staticDischargeS; i++) channelOrb(combat, run, 'lightning')
     }
   }
   // 反伤
   if (isAttack && attacker && attacker.hp > 0 && !attacker.dying) {
-    const fb = combat.player.statuses.flameBarrier || 0
-    const thorns = combat.player.statuses.thorns || 0
+    const fb = AP(combat).statuses.flameBarrier || 0
+    const thorns = AP(combat).statuses.thorns || 0
     const back = fb + thorns
     if (back > 0) damageEnemy(combat, run, attacker, back, false)
   }
@@ -188,8 +215,17 @@ export function damagePlayer(combat: CombatState, run: RunState, amount: number,
     if (fairyIdx >= 0) {
       run.potions[fairyIdx] = null
       run.hp = Math.floor(run.maxHp * 0.3)
-      fx(combat, 'heal', 'player', run.hp)
-      fx(combat, 'text', 'player', undefined, '瓶中仙女!')
+      fx(combat, 'heal', ptgt(combat), run.hp)
+      fx(combat, 'text', ptgt(combat), undefined, '瓶中仙女!')
+    }
+  }
+  // 同步 players[]（联机：死亡标记 + hp 实时一致）
+  const rp = run.players[run.activeIdx]
+  if (rp) {
+    rp.hp = run.hp
+    if (run.hp <= 0) {
+      rp.dead = true
+      if (combat.players[run.activeIdx]) combat.players[run.activeIdx].dead = true
     }
   }
   return hpLoss
@@ -217,9 +253,9 @@ function onEnemyDeath(combat: CombatState, run: RunState, e: EnemyInstance) {
   }
   e.dying = true
   e.intent = null
-  // 真菌兽孢子云
+  // 真菌兽孢子云（联机：所有存活玩家中招）
   if (def?.onDeath === 'sporeCloud') {
-    applyStatus(combat, 'player', 'vulnerable', 2)
+    applyStatusToAllPlayers(combat, run, 'vulnerable', 2)
   }
   if (def?.onDeath === 'splitAcid' || def?.onDeath === 'splitBoss') {
     // 分裂出小型史莱姆
@@ -262,58 +298,58 @@ function spawnEnemyAt(combat: CombatState, run: RunState, id: string, source: En
 // ============ 抽牌/洗牌 ============
 export function drawCards(combat: CombatState, run: RunState, n: number) {
   for (let i = 0; i < n; i++) {
-    if (combat.hand.length >= 10) break
-    if (combat.player.statuses.noDraw) break
-    if (combat.drawPile.length === 0) {
-      if (combat.discardPile.length === 0) break
-      combat.drawPile = shuffle(combat.discardPile)
-      combat.discardPile = []
+    if (AP(combat).hand.length >= 10) break
+    if (AP(combat).statuses.noDraw) break
+    if (AP(combat).drawPile.length === 0) {
+      if (AP(combat).discardPile.length === 0) break
+      AP(combat).drawPile = shuffle(AP(combat).discardPile)
+      AP(combat).discardPile = []
       // 日晷
       if (run.relics.includes('sundial')) {
         run.relicCounters.sundial = (run.relicCounters.sundial || 0) + 1
         if (run.relicCounters.sundial % 3 === 0) {
-          combat.player.energy += 2
-          fx(combat, 'text', 'player', undefined, '日晷 +2能量')
+          AP(combat).energy += 2
+          fx(combat, 'text', ptgt(combat), undefined, '日晷 +2能量')
         }
       }
     }
-    const card = combat.drawPile.pop()!
-    combat.hand.push(card)
+    const card = AP(combat).drawPile.pop()!
+    AP(combat).hand.push(card)
     // 火焰吐息 / 进化
     if (isStatusCard(card.id)) {
-      if (combat.player.statuses.fireBreathing) {
+      if (AP(combat).statuses.fireBreathing) {
         const living = combat.enemies.filter(e => !e.dying && e.hp > 0)
-        living.forEach(e => damageEnemy(combat, run, e, combat.player.statuses.fireBreathing, false))
+        living.forEach(e => damageEnemy(combat, run, e, AP(combat).statuses.fireBreathing, false))
       }
-      if (combat.player.statuses.evolve) drawCards(combat, run, combat.player.statuses.evolve)
+      if (AP(combat).statuses.evolve) drawCards(combat, run, AP(combat).statuses.evolve)
     }
   }
 }
 
 export function exhaustCard(combat: CombatState, run: RunState, card: CardInstance, from: 'hand' | 'discard') {
   if (from === 'hand') {
-    const i = combat.hand.findIndex(c => c.uid === card.uid)
-    if (i >= 0) combat.hand.splice(i, 1)
+    const i = AP(combat).hand.findIndex(c => c.uid === card.uid)
+    if (i >= 0) AP(combat).hand.splice(i, 1)
   } else {
-    const i = combat.discardPile.findIndex(c => c.uid === card.uid)
-    if (i >= 0) combat.discardPile.splice(i, 1)
+    const i = AP(combat).discardPile.findIndex(c => c.uid === card.uid)
+    if (i >= 0) AP(combat).discardPile.splice(i, 1)
   }
-  combat.exhaustPile.push(card)
+  AP(combat).exhaustPile.push(card)
   onCardExhausted(combat, run, card)
 }
 
 function discardHandCard(combat: CombatState, card: CardInstance) {
-  const i = combat.hand.findIndex(c => c.uid === card.uid)
-  if (i >= 0) combat.hand.splice(i, 1)
+  const i = AP(combat).hand.findIndex(c => c.uid === card.uid)
+  if (i >= 0) AP(combat).hand.splice(i, 1)
   const def = CARDS[card.id]
   // 本回合弃牌计数
-  combat.player.cardsDiscardedThisTurn = (combat.player.cardsDiscardedThisTurn || 0) + 1
+  AP(combat).cardsDiscardedThisTurn = (AP(combat).cardsDiscardedThisTurn || 0) + 1
   if (def?.onDiscardDraw) {
     // 本能反应：被弃时抽牌（升级版多抽1）
     drawCards(combat, combat_run_ref, def.onDiscardDraw + (card.upgraded > 0 ? 1 : 0))
   }
-  if (def?.exhaustOnDiscard) combat.exhaustPile.push(card)
-  else combat.discardPile.push(card)
+  if (def?.exhaustOnDiscard) AP(combat).exhaustPile.push(card)
+  else AP(combat).discardPile.push(card)
 }
 // run 引用（弃牌触发抽牌需要）
 let combat_run_ref: RunState = null as unknown as RunState
@@ -401,6 +437,12 @@ export function rollEnemyIntent(combat: CombatState, e: EnemyInstance) {
   const mv = def.moves[idx]
   const intent: Intent = { ...mv.intent }
   // damage 保存基础值，显示时实时计算（rollEnemyIntent 不再预计算）
+  // 联机：为攻击分配目标玩家（随机存活；仿尖塔2）
+  if (isMpCombat(combat) && (intent.type === 'attack' || intent.type === 'attackDebuff' || intent.type === 'attackDefend')) {
+    const aliveIdx: number[] = []
+    combat.players.forEach((p, i) => { if (!p.dead) aliveIdx.push(i) })
+    intent.targetIdx = aliveIdx.length ? pick(aliveIdx) : 0
+  }
   e.intent = intent
 }
 
@@ -414,31 +456,32 @@ export function initEncounter(combat: CombatState, enemyIds: string[]) {
 
 // ============ 宝球系统（故障机器人） ============
 function orbBase(combat: CombatState, type: string): number {
-  const focus = combat.player.statuses.focus || 0
+  const focus = AP(combat).statuses.focus || 0
   if (type === 'lightning') return 3 + focus
   if (type === 'frost') return 2 + focus
   return 0
 }
 
 export function channelOrb(combat: CombatState, run: RunState, type: OrbType) {
-  combat.player.orbs = combat.player.orbs || []
-  combat.player.orbSlots = combat.player.orbSlots ?? 3
+  const P = AP(combat)
+  P.orbs = P.orbs || []
+  P.orbSlots = P.orbSlots ?? 3
   // 超出上限：唤起最旧（最左）的球
-  while (combat.player.orbs.length >= combat.player.orbSlots) {
-    const old = combat.player.orbs.shift()!
+  while (P.orbs.length >= P.orbSlots) {
+    const old = P.orbs.shift()!
     evokeOrbEffect(combat, run, old)
   }
-  combat.player.orbs.push({ type, damage: type === 'dark' ? 6 : undefined })
-  combat.player.channeledThisCombat = (combat.player.channeledThisCombat || 0) + 1
-  if (type === 'lightning') combat.player.lightningChanneled = (combat.player.lightningChanneled || 0) + 1
+  P.orbs.push({ type, damage: type === 'dark' ? 6 : undefined })
+  P.channeledThisCombat = (P.channeledThisCombat || 0) + 1
+  if (type === 'lightning') P.lightningChanneled = (P.lightningChanneled || 0) + 1
   fx(combat, 'orb', 'player', undefined, type)
 }
 
 export function evokeOrbEffect(combat: CombatState, run: RunState, orb: Orb) {
-  const focus = combat.player.statuses.focus || 0
+  const focus = AP(combat).statuses.focus || 0
   const living = () => combat.enemies.filter(e => !e.dying && e.hp > 0)
   if (orb.type === 'lightning') {
-    if (combat.player.statuses.electro) {
+    if (AP(combat).statuses.electro) {
       living().forEach(e => damageEnemy(combat, run, e, 9 + focus, false))
     } else if (living().length) {
       damageEnemy(combat, run, pick(living()), 9 + focus, false)
@@ -448,14 +491,14 @@ export function evokeOrbEffect(combat: CombatState, run: RunState, orb: Orb) {
   } else if (orb.type === 'dark') {
     if (living().length) damageEnemy(combat, run, pick(living()), (orb.damage || 6) + focus, false)
   } else if (orb.type === 'plasma') {
-    combat.player.energy += 2
-    fx(combat, 'text', 'player', undefined, '等离子 +2能量')
+    AP(combat).energy += 2
+    fx(combat, 'text', ptgt(combat), undefined, '等离子 +2能量')
   }
 }
 
 // 唤起最右侧的球
 export function evokeTopOrb(combat: CombatState, run: RunState) {
-  const orbs = combat.player.orbs || []
+  const orbs = AP(combat).orbs || []
   if (!orbs.length) return
   const orb = orbs.pop()!
   evokeOrbEffect(combat, run, orb)
@@ -463,12 +506,12 @@ export function evokeTopOrb(combat: CombatState, run: RunState) {
 
 // 回合结束：所有球触发被动
 function orbsPassiveEnd(combat: CombatState, run: RunState) {
-  const orbs = combat.player.orbs || []
+  const orbs = AP(combat).orbs || []
   if (!orbs.length) return
   const living = () => combat.enemies.filter(e => !e.dying && e.hp > 0)
   orbs.forEach(orb => {
     if (orb.type === 'lightning') {
-      if (combat.player.statuses.electro) {
+      if (AP(combat).statuses.electro) {
         living().forEach(e => damageEnemy(combat, run, e, orbBase(combat, 'lightning'), false))
       } else if (living().length) {
         damageEnemy(combat, run, pick(living()), orbBase(combat, 'lightning'), false)
@@ -478,16 +521,16 @@ function orbsPassiveEnd(combat: CombatState, run: RunState) {
     } else if (orb.type === 'dark') {
       orb.damage = (orb.damage || 6) + 6
     } else if (orb.type === 'plasma') {
-      combat.player.energy = Math.min(combat.player.energy + 1, 99)
-      fx(combat, 'text', 'player', undefined, '等离子 +1能量')
+      AP(combat).energy = Math.min(AP(combat).energy + 1, 99)
+      fx(combat, 'text', ptgt(combat), undefined, '等离子 +1能量')
     }
   })
 }
 
 // 回合开始：循环触发最右球被动
 function loopPassiveStart(combat: CombatState, run: RunState) {
-  const n = combat.player.statuses.loopS || 0
-  const orbs = combat.player.orbs || []
+  const n = AP(combat).statuses.loopS || 0
+  const orbs = AP(combat).orbs || []
   if (!n || !orbs.length) return
   const orb = orbs[orbs.length - 1]
   for (let i = 0; i < n; i++) {
@@ -499,72 +542,74 @@ function loopPassiveStart(combat: CombatState, run: RunState) {
     } else if (orb.type === 'dark') {
       orb.damage = (orb.damage || 6) + 6
     } else if (orb.type === 'plasma') {
-      combat.player.energy += 1
+      AP(combat).energy += 1
     }
   }
 }
 
 // ============ 姿态系统（观者） ============
 export function enterStance(combat: CombatState, run: RunState, newStance: StanceId) {
-  const cur = combat.player.stance || 'none'
+  const cur = AP(combat).stance || 'none'
   if (cur === newStance) return
   // 退出静相：获得 2 能量
   if (cur === 'calm' && newStance !== 'calm') {
-    combat.player.energy += 2
-    fx(combat, 'text', 'player', undefined, '静相 +2能量')
+    AP(combat).energy += 2
+    fx(combat, 'text', ptgt(combat), undefined, '静相 +2能量')
   }
-  combat.player.stance = newStance
-  if (cur !== 'none' && newStance !== 'none') combat.player.exitedStanceThisTurn = true
-  if (cur !== 'none') combat.player.exitedStanceThisTurn = true
+  AP(combat).stance = newStance
+  if (cur !== 'none' && newStance !== 'none') AP(combat).exitedStanceThisTurn = true
+  if (cur !== 'none') AP(combat).exitedStanceThisTurn = true
   // 心灵壁垒：切换姿态获得格挡
-  if (combat.player.statuses.mentalFortressS) {
-    playerGainBlock(combat, run, combat.player.statuses.mentalFortressS)
+  if (AP(combat).statuses.mentalFortressS) {
+    playerGainBlock(combat, run, AP(combat).statuses.mentalFortressS)
   }
   // 进入神格：获得 3 能量
   if (newStance === 'divinity') {
-    combat.player.energy += 3
-    fx(combat, 'text', 'player', undefined, '神格!')
+    AP(combat).energy += 3
+    fx(combat, 'text', ptgt(combat), undefined, '神格!')
   }
   const names: Record<StanceId, string> = { none: '退出姿态', wrath: '进入怒相', calm: '进入静相', divinity: '进入神格' }
-  if (newStance !== 'none') fx(combat, 'text', 'player', undefined, names[newStance])
+  if (newStance !== 'none') fx(combat, 'text', ptgt(combat), undefined, names[newStance])
 }
 
 export function exitStance(combat: CombatState, run: RunState) {
-  const cur = combat.player.stance || 'none'
+  const cur = AP(combat).stance || 'none'
   if (cur === 'none') return
-  combat.player.stance = 'none'
-  combat.player.exitedStanceThisTurn = true
+  AP(combat).stance = 'none'
+  AP(combat).exitedStanceThisTurn = true
   if (cur === 'calm') {
-    combat.player.energy += 2
-    fx(combat, 'text', 'player', undefined, '静相 +2能量')
+    AP(combat).energy += 2
+    fx(combat, 'text', ptgt(combat), undefined, '静相 +2能量')
   }
-  if (combat.player.statuses.mentalFortressS) {
-    playerGainBlock(combat, run, combat.player.statuses.mentalFortressS)
+  if (AP(combat).statuses.mentalFortressS) {
+    playerGainBlock(combat, run, AP(combat).statuses.mentalFortressS)
   }
 }
 
 // 获得真言
 export function gainMantra(combat: CombatState, run: RunState, n: number) {
   // 光辉：获得真言时对随机敌人造成伤害
-  if (combat.player.statuses.brillianceS) {
+  if (AP(combat).statuses.brillianceS) {
     const living = combat.enemies.filter(e => !e.dying && e.hp > 0)
-    if (living.length) damageEnemy(combat, run, pick(living), combat.player.statuses.brillianceS, false)
+    if (living.length) damageEnemy(combat, run, pick(living), AP(combat).statuses.brillianceS, false)
   }
-  combat.player.mantra = (combat.player.mantra || 0) + n
-  if (combat.player.mantra >= 10) {
-    combat.player.mantra -= 10
+  const P = AP(combat)
+  P.mantra = (P.mantra || 0) + n
+  if (P.mantra >= 10) {
+    P.mantra -= 10
     enterStance(combat, run, 'divinity')
   }
 }
 
 // ============ 预见 ============
 export function beginScry(combat: CombatState, n: number) {
-  if (n <= 0 || combat.drawPile.length === 0) return
-  combat.pendingScry = Math.min(n, combat.drawPile.length)
-  combat.scryDiscarded = []
+  const P = AP(combat)
+  if (n <= 0 || P.drawPile.length === 0) return
+  P.pendingScry = Math.min(n, P.drawPile.length)
+  P.scryDiscarded = []
   // 涅槃：每预见一张牌获得格挡
-  if (combat.player.statuses.nirvanaS) {
-    playerGainBlock(combat, run_ref, combat.player.statuses.nirvanaS * combat.pendingScry)
+  if (P.statuses.nirvanaS) {
+    playerGainBlock(combat, run_ref, P.statuses.nirvanaS * P.pendingScry!)
   }
 }
 // run 引用占位（beginScry 由 playCard 调用时一定有 run）
@@ -575,29 +620,36 @@ export function setRunRef(run: RunState) { run_ref = run }
 export function startCombat(run: RunState, encounterName: string, enemyIds: string[], isElite: boolean, isBoss: boolean): CombatState {
   const combat: CombatState = {
     enemies: [],
-    player: {
-      block: 0, statuses: {}, energy: 0, maxEnergy: 3,
-      hpLostThisCombat: 0, attacksThisTurn: 0, tempStr: 0, customFlags: {},
-      stance: 'none', mantra: 0, exitedStanceThisTurn: false,
-      cardsDiscardedThisTurn: 0,
-      orbs: [], orbSlots: 3, channeledThisCombat: 0, lightningChanneled: 0,
-      cardsDrawnThisTurn: 0, lastCardType: 'none',
-    },
-    drawPile: shuffle(run.deck.map(c => ({ ...c }))),
-    hand: [], discardPile: [], exhaustPile: [],
+    players: [],
+    activeIdx: 0,
+    acted: run.players.map(() => false),
     turn: 0, phase: 'player',
     encounterName, isElite, isBoss,
     goldReward: isBoss ? rnd(95, 105) : isElite ? rnd(25, 35) : rnd(10, 20),
-    potionDrop: !run.relics.includes('sozu') && (isBoss ? true : Math.random() < (isElite ? 0.6 : 0.4)),
+    potionDrop: !run.players.some(rp => rp.relics.includes('sozu')) && (isBoss ? true : Math.random() < (isElite ? 0.6 : 0.4)),
     fx: [], log: [],
     combatOver: false, playerWon: false, combatEndTriggered: false,
   }
-  combat.player.maxEnergy = 3 + (run.relics.filter(r => ['ectoplasm', 'sozu', 'velvetChoker', 'philosophersStone', 'coffeeDripper', 'bustedCrown'].includes(r)).length ? 1 : 0)
+  // 每位玩家独立的战斗体（牌堆/能量/格挡）
+  run.players.forEach(rp => {
+    const pc = {
+      block: 0, statuses: {}, energy: 0, maxEnergy: 3,
+      hpLostThisCombat: 0, attacksThisTurn: 0, tempStr: 0, customFlags: {},
+      stance: 'none' as const, mantra: 0, exitedStanceThisTurn: false,
+      cardsDiscardedThisTurn: 0,
+      orbs: [] as Orb[], orbSlots: 3, channeledThisCombat: 0, lightningChanneled: 0,
+      cardsDrawnThisTurn: 0, lastCardType: 'none' as const,
+      drawPile: shuffle(rp.deck.map(c => ({ ...c }))),
+      hand: [], discardPile: [], exhaustPile: [],
+    }
+    pc.maxEnergy = 3 + (rp.relics.filter(r => ['ectoplasm', 'sozu', 'velvetChoker', 'philosophersStone', 'coffeeDripper', 'bustedCrown'].includes(r)).length ? 1 : 0)
+    combat.players.push(pc)
+  })
 
   enemyIds.forEach(id => {
     const def = ENEMIES[id]
     let hp = rnd(def.minHp, def.maxHp)
-    if (isElite && run.relics.includes('preservedInsect')) hp = Math.ceil(hp * 0.75)
+    if (isElite && run.players.some(rp => rp.relics.includes('preservedInsect'))) hp = Math.ceil(hp * 0.75)
     const inst: EnemyInstance = {
       uid: `e${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       id, hp, maxHp: hp, block: 0,
@@ -608,40 +660,53 @@ export function startCombat(run: RunState, encounterName: string, enemyIds: stri
   })
   initEncounter(combat, enemyIds)
 
-  // ===== 战斗开始时遗物 =====
-  if (run.relics.includes('vajra')) applyStatus(combat, 'player', 'strength', 1)
-  if (run.relics.includes('smoothlyStone')) applyStatus(combat, 'player', 'dexterity', 1)
-  if (run.relics.includes('oddlySmoothStone')) applyStatus(combat, 'player', 'dexterity', 1)
-  if (run.relics.includes('bronzeScales')) applyStatus(combat, 'player', 'thorns', 3)
-  if (run.relics.includes('bloodVial')) healPlayer(run, combat, 2)
-  if (run.relics.includes('bagOfMarbles')) {
-    combat.enemies.forEach(e => applyStatus(combat, e, 'vulnerable', 1))
-  }
-  if (run.relics.includes('philosophersStone')) {
-    combat.enemies.forEach(e => applyStatus(combat, e, 'strength', 1))
-  }
-  // 角色专属初始遗物
-  if (run.relics.includes('crackedCore')) channelOrb(combat, run, 'lightning')
-  // 姜/萝卜免疫标记
-  if (run.relics.includes('ginger')) { combat.player.customFlags = combat.player.customFlags || {}; combat.player.customFlags.gingerImmune = 1 }
-  if (run.relics.includes('turnip')) { combat.player.customFlags = combat.player.customFlags || {}; combat.player.customFlags.turnipImmune = 1 }
+  // ===== 战斗开始时遗物（每位玩家独立结算） =====
+  const prevActive = run.activeIdx
+  combat.players.forEach((_, i) => {
+    if (run.players[i].hp <= 0) return
+    combat.activeIdx = i
+    setRunActive(run, i)
+    if (run.relics.includes('vajra')) applyStatus(combat, 'player', 'strength', 1)
+    if (run.relics.includes('smoothlyStone')) applyStatus(combat, 'player', 'dexterity', 1)
+    if (run.relics.includes('oddlySmoothStone')) applyStatus(combat, 'player', 'dexterity', 1)
+    if (run.relics.includes('bronzeScales')) applyStatus(combat, 'player', 'thorns', 3)
+    if (run.relics.includes('bloodVial')) healPlayer(run, combat, 2)
+    if (run.relics.includes('bagOfMarbles')) {
+      combat.enemies.forEach(e => applyStatus(combat, e, 'vulnerable', 1))
+    }
+    if (run.relics.includes('philosophersStone')) {
+      combat.enemies.forEach(e => applyStatus(combat, e, 'strength', 1))
+    }
+    // 角色专属初始遗物
+    if (run.relics.includes('crackedCore')) channelOrb(combat, run, 'lightning')
+    // 姜/萝卜免疫标记
+    if (run.relics.includes('ginger')) { const cf = AP(combat).customFlags = AP(combat).customFlags || {}; cf.gingerImmune = 1 }
+    if (run.relics.includes('turnip')) { const cf = AP(combat).customFlags = AP(combat).customFlags || {}; cf.turnipImmune = 1 }
+  })
 
-  startPlayerTurn(combat, run, true)
-  // 圣水：开战获得奇迹
-  if (run.relics.includes('pureWater')) combat.hand.push(makeCard('miracle'))
+  // 第一个存活玩家先手
+  const firstAlive = combat.players.findIndex((p, i) => !p.dead && run.players[i]?.hp > 0)
+  combat.activeIdx = firstAlive < 0 ? 0 : firstAlive
+  setRunActive(run, combat.activeIdx)
+  startPlayerTurn(combat, run)
   return combat
 }
 
 // ============ 玩家回合 ============
-export function startPlayerTurn(combat: CombatState, run: RunState, first = false) {
+export function startPlayerTurn(combat: CombatState, run: RunState) {
+  const P0 = AP(combat)
+  // 首回合自动判定（联机：每位玩家各自的首次回合享受开局遗物加成）
+  const first = !P0.firstTurnDone
+  P0.firstTurnDone = 1
+  if (P0.dead || run.hp <= 0) return   // 联机：死亡玩家跳过（防御）
   combat.turn += 1
   combat.phase = 'player'
-  combat.player.attacksThisTurn = 0
-  combat.player.cardsPlayedThisTurn = 0
-  combat.player.cardsDiscardedThisTurn = 0
-  combat.player.cardsDrawnThisTurn = 0
-  combat.player.exitedStanceThisTurn = false
-  const P = combat.player
+  AP(combat).attacksThisTurn = 0
+  AP(combat).cardsPlayedThisTurn = 0
+  AP(combat).cardsDiscardedThisTurn = 0
+  AP(combat).cardsDrawnThisTurn = 0
+  AP(combat).exitedStanceThisTurn = false
+  const P = AP(combat)
 
   // 壁垒：保留格挡
   if (!P.statuses.barricade) P.block = 0
@@ -650,7 +715,7 @@ export function startPlayerTurn(combat: CombatState, run: RunState, first = fals
   if (P.statuses.blasphemyD) {
     delete P.statuses.blasphemyD
     damagePlayer(combat, run, 9999, null, false)
-    fx(combat, 'text', 'player', undefined, '亵渎的代价!')
+    fx(combat, 'text', ptgt(combat), undefined, '亵渎的代价!')
   }
 
   // 玩家中毒
@@ -686,23 +751,23 @@ export function startPlayerTurn(combat: CombatState, run: RunState, first = fals
 
   // 阿尔法/贝塔链
   if (P.statuses.alphaS) {
-    combat.hand.push(makeCard('beta', P.statuses.alphaS >= 2 ? 1 : 0))
+    AP(combat).hand.push(makeCard('beta', P.statuses.alphaS >= 2 ? 1 : 0))
     P.statuses.alphaS -= 1
     if (P.statuses.alphaS <= 0) delete P.statuses.alphaS
-    fx(combat, 'text', 'player', undefined, '阿尔法→贝塔')
+    fx(combat, 'text', ptgt(combat), undefined, '阿尔法→贝塔')
   }
   if (P.statuses.betaActive) {
-    combat.hand.push(makeCard('omega'))
+    AP(combat).hand.push(makeCard('omega'))
     delete P.statuses.betaActive
-    fx(combat, 'text', 'player', undefined, '贝塔→欧米茄')
+    fx(combat, 'text', ptgt(combat), undefined, '贝塔→欧米茄')
   }
 
   // 噩梦：下回合入手副本
-  if (combat.pendingNightmare) {
-    const nm = combat.pendingNightmare
-    for (let i = 0; i < nm.count; i++) combat.hand.push(makeCard(nm.cardId, nm.upgraded))
-    fx(combat, 'text', 'player', undefined, '噩梦实现!')
-    combat.pendingNightmare = null
+  if (AP(combat).pendingNightmare) {
+    const nm = AP(combat).pendingNightmare!
+    for (let i = 0; i < nm.count; i++) AP(combat).hand.push(makeCard(nm.cardId, nm.upgraded))
+    fx(combat, 'text', ptgt(combat), undefined, '噩梦实现!')
+    AP(combat).pendingNightmare = null
   }
 
   // 故障机器人：循环
@@ -725,25 +790,29 @@ export function startPlayerTurn(combat: CombatState, run: RunState, first = fals
     if (powers.length) {
       const c = makeCard(pick(powers).id)
       c.freeThisTurn = true
-      combat.hand.push(c)
+      AP(combat).hand.push(c)
     }
   }
+  // 圣水（观者初始遗物）：首次回合获得奇迹
+  if (first && run.relics.includes('pureWater')) AP(combat).hand.push(makeCard('miracle'))
 }
 
 export function endPlayerTurn(combat: CombatState, run: RunState) {
-  const P = combat.player
+  const P = AP(combat)
+  // 标记本轮已行动（联机：轮转判断用）
+  if (combat.acted.length === combat.players.length) combat.acted[combat.activeIdx] = true
   // 灼伤
-  combat.hand.forEach(c => {
+  AP(combat).hand.forEach(c => {
     if (c.id === 'burn') {
       const dmg = c.upgraded > 0 ? 4 : 2
       damagePlayer(combat, run, dmg, null, false)
     }
   })
   // 虚空：失去能量
-  const voids = combat.hand.filter(c => c.id === 'void').length
+  const voids = AP(combat).hand.filter(c => c.id === 'void').length
   if (voids > 0) {
     P.energy = Math.max(0, P.energy - voids)
-    fx(combat, 'text', 'player', undefined, `虚空 -${voids}能量`)
+    fx(combat, 'text', ptgt(combat), undefined, `虚空 -${voids}能量`)
   }
   // 束缚（尖塔生长体）
   if (P.statuses.constricted) {
@@ -754,7 +823,7 @@ export function endPlayerTurn(combat: CombatState, run: RunState) {
     combat.enemies.filter(e => !e.dying && e.hp > 0).forEach(e => damageEnemy(combat, run, e, 50, false))
   }
   // 先见之明：回合开始时改为自动触发（预见在 UI 层弹出）
-  if (P.statuses.foresight && combat.drawPile.length > 0) {
+  if (P.statuses.foresight && AP(combat).drawPile.length > 0) {
     beginScry(combat, P.statuses.foresight)
   }
   // 静如水：静相获得格挡
@@ -784,12 +853,12 @@ export function endPlayerTurn(combat: CombatState, run: RunState) {
     P.stance = 'none'
   }
   // 虚无牌消耗
-  combat.hand.filter(c => CARDS[c.id]?.ethereal).forEach(c => exhaustCard(combat, run, c, 'hand'))
+  AP(combat).hand.filter(c => CARDS[c.id]?.ethereal).forEach(c => exhaustCard(combat, run, c, 'hand'))
   // 手牌弃掉（保留的不弃；平衡保留全部）
   const keepAll = !!P.statuses.equilibriumS
   if (!keepAll) {
-    combat.hand.filter(c => !CARDS[c.id]?.retain).forEach(c => discardHandCard(combat, c))
-    combat.hand = combat.hand.filter(c => CARDS[c.id]?.retain)
+    AP(combat).hand.filter(c => !CARDS[c.id]?.retain).forEach(c => discardHandCard(combat, c))
+    AP(combat).hand = AP(combat).hand.filter(c => CARDS[c.id]?.retain)
   }
   delete P.statuses.equilibriumS
   // 回合结束类状态清理
@@ -800,7 +869,7 @@ export function endPlayerTurn(combat: CombatState, run: RunState) {
   delete P.statuses.burstS
   delete P.statuses.amplifyS
   delete P.statuses.entangled
-  combat.phase = 'enemy'
+  // 阶段切换由调用方决定（单人：直接进敌人回合；联机：可能轮到另一位玩家）
   checkCombatEnd(combat, run)
   // 玩家 debuff 递减
   ;['vulnerable', 'weak', 'frail'].forEach(s => {
@@ -861,7 +930,8 @@ export function enemyStep(combat: CombatState, run: RunState): boolean {
     return true
   }
 
-  // 行动瞬间清除意图显示（原版行为）
+  // 行动前记录意图目标（联机：攻击指向哪位玩家）；随后清除意图显示（原版行为）
+  const intentTarget = actor.intent?.targetIdx ?? 0
   actor.intent = null
 
   const def = ENEMIES[actor.id]
@@ -871,13 +941,30 @@ export function enemyStep(combat: CombatState, run: RunState): boolean {
     actor.history.push(mvIdx)
     // 攻击前突进动画 fx
     if (mv.dmg) fx(combat, 'lunge', actor.uid)
-    // 执行
+    // 执行（联机：攻击命中意图目标玩家；目标死亡则改攻击另一存活玩家）
     if (mv.dmg) {
       const times = mv.times || 1
-      for (let t = 0; t < times; t++) {
-        const dmg = calcEnemyAttack(mv.dmg, actor.statuses, combat.player.statuses, combat.player.stance)
-        damagePlayer(combat, run, dmg, actor, true)
-        if (run.hp <= 0) break
+      if (isMpCombat(combat)) {
+        let vic = intentTarget
+        if (combat.players[vic]?.dead) {
+          const alt = combat.players.findIndex((p, i) => !p.dead && run.players[i]?.hp > 0)
+          if (alt < 0) return false
+          vic = alt
+        }
+        combat.activeIdx = vic
+        setRunActive(run, vic)
+        const V = combat.players[vic]
+        for (let t = 0; t < times; t++) {
+          const dmg = calcEnemyAttack(mv.dmg, actor.statuses, V.statuses, V.stance)
+          damagePlayer(combat, run, dmg, actor, true)
+          if (run.hp <= 0) break
+        }
+      } else {
+        for (let t = 0; t < times; t++) {
+          const dmg = calcEnemyAttack(mv.dmg, actor.statuses, AP(combat).statuses, AP(combat).stance)
+          damagePlayer(combat, run, dmg, actor, true)
+          if (run.hp <= 0) break
+        }
       }
     }
     if (mv.block) enemyGainBlock(combat, actor, mv.block)
@@ -899,29 +986,40 @@ export function enemyStep(combat: CombatState, run: RunState): boolean {
       }
     }
     if (mv.status) {
-      const tgt = mv.status.target === 'player' ? 'player' : actor
       if (mv.status.target === 'allies' || mv.status.target === 'allAllies') {
         combat.enemies.filter(x => x.hp > 0 && !x.dying).forEach(x => applyStatus(combat, x, mv.status!.id, mv.status!.amount))
+      } else if (mv.status.target === 'player') {
+        // 联机：负面咒术作用于全体存活玩家（仿尖塔2）
+        applyStatusToAllPlayers(combat, run, mv.status.id, mv.status.amount)
       } else {
-        applyStatus(combat, tgt as any, mv.status.id, mv.status.amount)
+        applyStatus(combat, actor, mv.status.id, mv.status.amount)
       }
     }
     if (mv.status2) {
-      const tgt = mv.status2.target === 'player' ? 'player' : actor
       if (mv.status2.target === 'allies' || mv.status2.target === 'allAllies') {
         combat.enemies.filter(x => x.hp > 0 && !x.dying).forEach(x => applyStatus(combat, x, mv.status2!.id, mv.status2!.amount))
+      } else if (mv.status2.target === 'player') {
+        applyStatusToAllPlayers(combat, run, mv.status2.id, mv.status2.amount)
       } else {
-        applyStatus(combat, tgt as any, mv.status2.id, mv.status2.amount)
+        applyStatus(combat, actor, mv.status2.id, mv.status2.amount)
       }
     }
     if (mv.addCards) {
-      for (let i = 0; i < mv.addCards.count; i++) {
-        const card = makeCard(mv.addCards.cardId)
-        if (mv.addCards.pile === 'discard') combat.discardPile.push(card)
-        else {
-          // 随机位置插入抽牌堆
-          const pos = Math.floor(Math.random() * (combat.drawPile.length + 1))
-          combat.drawPile.splice(pos, 0, card)
+      // 联机：塞牌塞给意图目标（或全体存活玩家若非攻击招式）
+      const receivers: number[] = isMpCombat(combat)
+        ? (mv.dmg ? [intentTarget] : combat.players.map((_, i) => i).filter(i => !combat.players[i].dead))
+        : [combat.activeIdx]
+      for (const ri of receivers) {
+        const R = combat.players[ri]
+        if (!R || R.dead) continue
+        for (let i = 0; i < mv.addCards.count; i++) {
+          const card = makeCard(mv.addCards.cardId)
+          if (mv.addCards.pile === 'discard') R.discardPile.push(card)
+          else {
+            // 随机位置插入抽牌堆
+            const pos = Math.floor(Math.random() * (R.drawPile.length + 1))
+            R.drawPile.splice(pos, 0, card)
+          }
         }
       }
     }
@@ -993,6 +1091,15 @@ export function checkCombatEnd(combat: CombatState, run: RunState) {
     combat.playerWon = true
     combat.phase = 'over'
     combat.combatEndTriggered = true
+  } else if (isMpCombat(combat)) {
+    // 联机：全员死亡才算失败
+    const allDead = combat.players.every((p, i) => p.dead || (run.players[i]?.hp ?? 0) <= 0)
+    if (allDead) {
+      combat.combatOver = true
+      combat.playerWon = false
+      combat.phase = 'over'
+      combat.combatEndTriggered = true
+    }
   } else if (run.hp <= 0) {
     combat.combatOver = true
     combat.playerWon = false
@@ -1007,26 +1114,26 @@ export function canPlayCard(combat: CombatState, run: RunState, card: CardInstan
   if (!def) return { ok: false, reason: '未知卡牌' }
   if (def.cost === -99 || def.unplayable) return { ok: false, reason: '不可打出' }
   // 纠缠：无法打出攻击牌
-  if (def.type === 'attack' && combat.player.statuses.entangled) return { ok: false, reason: '纠缠：无法打出攻击牌' }
+  if (def.type === 'attack' && AP(combat).statuses.entangled) return { ok: false, reason: '纠缠：无法打出攻击牌' }
   // 压轴大戏：抽牌堆为空
-  if (def.id === 'grandFinale' && combat.drawPile.length > 0) return { ok: false, reason: '抽牌堆必须为空' }
+  if (def.id === 'grandFinale' && AP(combat).drawPile.length > 0) return { ok: false, reason: '抽牌堆必须为空' }
   // 药水墨牌本回合 0 费
-  let cost = card.freeThisTurn ? 0 : cardCost(card, combat.player.hpLostThisCombat, combat.player.cardsDiscardedThisTurn || 0)
+  let cost = card.freeThisTurn ? 0 : cardCost(card, AP(combat).hpLostThisCombat, AP(combat).cardsDiscardedThisTurn || 0)
   // 堕落：技能 0 费
-  if (def.type === 'skill' && combat.player.statuses.corruption) cost = 0
+  if (def.type === 'skill' && AP(combat).statuses.corruption) cost = 0
   if (def.id === 'clash') {
-    const nonAttack = combat.hand.filter(c => CARDS[c.id].type !== 'attack')
+    const nonAttack = AP(combat).hand.filter(c => CARDS[c.id].type !== 'attack')
     if (nonAttack.length > 0) return { ok: false, reason: '手牌中必须全是攻击牌' }
   }
   if (cost === -1) return { ok: true } // X 费只要有能量就能打
-  if (combat.player.energy < Math.max(0, cost)) return { ok: false, reason: '能量不足' }
+  if (AP(combat).energy < Math.max(0, cost)) return { ok: false, reason: '能量不足' }
   // 天鹅绒项圈
-  if (run.relics.includes('velvetChoker') && (combat.player.cardsPlayedThisTurn || 0) >= 6) return { ok: false, reason: '天鹅绒项圈：每回合最多6张' }
+  if (run.relics.includes('velvetChoker') && (AP(combat).cardsPlayedThisTurn || 0) >= 6) return { ok: false, reason: '天鹅绒项圈：每回合最多6张' }
   return { ok: true }
 }
 
 export function playCard(combat: CombatState, run: RunState, uid: string, targetUid: string | null) {
-  const card = combat.hand.find(c => c.uid === uid)
+  const card = AP(combat).hand.find(c => c.uid === uid)
   if (!card || combat.phase !== 'player' || combat.combatOver) return
   const def = CARDS[card.id]
   const check = canPlayCard(combat, run, card)
@@ -1039,29 +1146,29 @@ export function playCard(combat: CombatState, run: RunState, uid: string, target
   setRunRef(run)
 
   // 费用（药水墨牌本回合 0 费；堕落使技能 0 费）
-  let cost = card.freeThisTurn ? 0 : cardCost(card, combat.player.hpLostThisCombat, combat.player.cardsDiscardedThisTurn || 0)
-  if (def.type === 'skill' && combat.player.statuses.corruption) cost = 0
+  let cost = card.freeThisTurn ? 0 : cardCost(card, AP(combat).hpLostThisCombat, AP(combat).cardsDiscardedThisTurn || 0)
+  if (def.type === 'skill' && AP(combat).statuses.corruption) cost = 0
   let X = 0
   if (cost === -1) {
-    X = combat.player.energy
-    combat.player.energy = 0
+    X = AP(combat).energy
+    AP(combat).energy = 0
   } else {
-    combat.player.energy -= Math.max(0, cost)
+    AP(combat).energy -= Math.max(0, cost)
   }
-  combat.player.cardsPlayedThisTurn = (combat.player.cardsPlayedThisTurn || 0) + 1
+  AP(combat).cardsPlayedThisTurn = (AP(combat).cardsPlayedThisTurn || 0) + 1
 
   // 从手牌移除
-  const hi = combat.hand.findIndex(c => c.uid === uid)
-  combat.hand.splice(hi, 1)
+  const hi = AP(combat).hand.findIndex(c => c.uid === uid)
+  AP(combat).hand.splice(hi, 1)
 
   // 出牌动画 fx（UI 展示卡牌飞入屏幕中央）
   fx(combat, 'cardPlay', 'player', undefined, card.id + '|' + card.upgraded)
 
   // 咒术（天选者）：打出非攻击牌受到伤害
-  if (def.type !== 'attack' && combat.player.statuses.hex) {
-    damagePlayer(combat, run, 3 * combat.player.statuses.hex, null, false)
-    combat.player.statuses.hex -= 1
-    if (combat.player.statuses.hex <= 0) delete combat.player.statuses.hex
+  if (def.type !== 'attack' && AP(combat).statuses.hex) {
+    damagePlayer(combat, run, 3 * AP(combat).statuses.hex, null, false)
+    AP(combat).statuses.hex -= 1
+    if (AP(combat).statuses.hex <= 0) delete AP(combat).statuses.hex
   }
   // 腐朽之心死亡节拍：每打出一张牌受到伤害
   combat.enemies.forEach(e => {
@@ -1084,29 +1191,29 @@ export function playCard(combat: CombatState, run: RunState, uid: string, target
 
   // 重复打出：连击（攻击）/ 连发（技能）/ 扩增（能力）/ 回声形态（每回合首张）
   let repeat = 1
-  if (def.type === 'attack' && combat.player.statuses.doubleTap) {
+  if (def.type === 'attack' && AP(combat).statuses.doubleTap) {
     repeat = 2
-    combat.player.statuses.doubleTap -= 1
-    if (combat.player.statuses.doubleTap <= 0) delete combat.player.statuses.doubleTap
-  } else if (def.type === 'skill' && combat.player.statuses.burstS) {
+    AP(combat).statuses.doubleTap -= 1
+    if (AP(combat).statuses.doubleTap <= 0) delete AP(combat).statuses.doubleTap
+  } else if (def.type === 'skill' && AP(combat).statuses.burstS) {
     repeat = 2
-    combat.player.statuses.burstS -= 1
-    if (combat.player.statuses.burstS <= 0) delete combat.player.statuses.burstS
-  } else if (def.type === 'power' && combat.player.statuses.amplifyS) {
+    AP(combat).statuses.burstS -= 1
+    if (AP(combat).statuses.burstS <= 0) delete AP(combat).statuses.burstS
+  } else if (def.type === 'power' && AP(combat).statuses.amplifyS) {
     repeat = 2
-    combat.player.statuses.amplifyS -= 1
-    if (combat.player.statuses.amplifyS <= 0) delete combat.player.statuses.amplifyS
-  } else if (combat.player.statuses.echoForm && (combat.player.cardsPlayedThisTurn || 0) <= 1) {
+    AP(combat).statuses.amplifyS -= 1
+    if (AP(combat).statuses.amplifyS <= 0) delete AP(combat).statuses.amplifyS
+  } else if (AP(combat).statuses.echoForm && (AP(combat).cardsPlayedThisTurn || 0) <= 1) {
     repeat = 2
   }
 
   const v = cardValues(card, {
     strikesInDeck: countStrikesSafe(run),
-    hpLost: combat.player.hpLostThisCombat,
-    rampageBonus: combat.rampage?.[uid] || 0,
-    glassKnifePenalty: combat.glassKnife?.[uid] || 0,
-    clawBonus: combat.clawBonus || 0,
-    shivBonus: combat.player.statuses.accuracy || 0,
+    hpLost: AP(combat).hpLostThisCombat,
+    rampageBonus: AP(combat).rampage?.[uid] || 0,
+    glassKnifePenalty: AP(combat).glassKnife?.[uid] || 0,
+    clawBonus: AP(combat).clawBonus || 0,
+    shivBonus: AP(combat).statuses.accuracy || 0,
   })
 
   for (let rep = 0; rep < repeat; rep++) {
@@ -1115,44 +1222,44 @@ export function playCard(combat: CombatState, run: RunState, uid: string, target
   }
 
   // 狂怒：打出攻击牌获得格挡
-  if (def.type === 'attack' && combat.player.statuses.rage) {
-    playerGainBlock(combat, run, combat.player.statuses.rage)
+  if (def.type === 'attack' && AP(combat).statuses.rage) {
+    playerGainBlock(combat, run, AP(combat).statuses.rage)
   }
   // 残像：打出任意牌获得格挡
-  if (combat.player.statuses.afterImage) {
-    playerGainBlock(combat, run, combat.player.statuses.afterImage)
+  if (AP(combat).statuses.afterImage) {
+    playerGainBlock(combat, run, AP(combat).statuses.afterImage)
   }
   // 千刀万剐：打出任意牌对所有敌人伤害
-  if (combat.player.statuses.aThousandCuts) {
-    combat.enemies.filter(e => !e.dying && e.hp > 0).forEach(e => damageEnemy(combat, run, e, combat.player.statuses.aThousandCuts, false))
+  if (AP(combat).statuses.aThousandCuts) {
+    combat.enemies.filter(e => !e.dying && e.hp > 0).forEach(e => damageEnemy(combat, run, e, AP(combat).statuses.aThousandCuts, false))
   }
   // 风暴：打出能力牌引导闪电
-  if (def.type === 'power' && combat.player.statuses.stormS) {
-    for (let i = 0; i < combat.player.statuses.stormS; i++) channelOrb(combat, run, 'lightning')
+  if (def.type === 'power' && AP(combat).statuses.stormS) {
+    for (let i = 0; i < AP(combat).statuses.stormS; i++) channelOrb(combat, run, 'lightning')
   }
   // 编织：退出过姿态时返回手牌
-  if (def.id === 'weave' && combat.player.exitedStanceThisTurn) {
-    combat.hand.push({ ...card, uid: card.uid + '_w' + Math.random().toString(36).slice(2, 5) })
+  if (def.id === 'weave' && AP(combat).exitedStanceThisTurn) {
+    AP(combat).hand.push({ ...card, uid: card.uid + '_w' + Math.random().toString(36).slice(2, 5) })
     return
   }
 
   // 卡牌去向
-  const alreadyExhausted = def.exhaust || (def.type === 'skill' && combat.player.statuses.corruption) || card.limitBreakExhaust
+  const alreadyExhausted = def.exhaust || (def.type === 'skill' && AP(combat).statuses.corruption) || card.limitBreakExhaust
   if (alreadyExhausted) {
-    combat.exhaustPile.push(card)
+    AP(combat).exhaustPile.push(card)
     onCardExhausted(combat, run, card)
   } else if (def.id === 'tantrum' || def.id === 'miracle') {
     // 发怒返回手牌；奇迹消耗
-    if (def.id === 'tantrum') combat.hand.push(card)
-    else { combat.exhaustPile.push(card); onCardExhausted(combat, run, card) }
+    if (def.id === 'tantrum') AP(combat).hand.push(card)
+    else { AP(combat).exhaustPile.push(card); onCardExhausted(combat, run, card) }
   } else {
-    combat.discardPile.push(card)
+    AP(combat).discardPile.push(card)
   }
 
   // 攻击牌计数（手里剑/苦无/装饰扇/钢笔笔尖）
   if (def.type === 'attack') {
-    combat.player.attacksThisTurn += 1
-    const cnt = combat.player.attacksThisTurn
+    AP(combat).attacksThisTurn += 1
+    const cnt = AP(combat).attacksThisTurn
     if (cnt % 3 === 0) {
       if (run.relics.includes('shuriken')) applyStatus(combat, 'player', 'strength', 1)
       if (run.relics.includes('kunai')) applyStatus(combat, 'player', 'dexterity', 1)
@@ -1164,7 +1271,7 @@ export function playCard(combat: CombatState, run: RunState, uid: string, target
   }
 
   // 记录最后打出的牌型（观者）
-  combat.player.lastCardType = def.type
+  AP(combat).lastCardType = def.type
 
   // 哥布林大王激怒：玩家打出技能牌
   if (def.type === 'skill') {
@@ -1182,14 +1289,14 @@ export function playCard(combat: CombatState, run: RunState, uid: string, target
 function onCardExhausted(combat: CombatState, run: RunState, card: CardInstance) {
   if (card.id === 'sentinel') {
     const v = cardValues(card)[1] || 2
-    combat.player.energy += v
-    fx(combat, 'text', 'player', undefined, `哨卫 +${v}能量`)
+    AP(combat).energy += v
+    fx(combat, 'text', ptgt(combat), undefined, `哨卫 +${v}能量`)
   }
-  if (combat.player.statuses.feelNoPain) {
-    playerGainBlock(combat, run, combat.player.statuses.feelNoPain)
+  if (AP(combat).statuses.feelNoPain) {
+    playerGainBlock(combat, run, AP(combat).statuses.feelNoPain)
   }
-  if (combat.player.statuses.darkEmbrace) {
-    drawCards(combat, run, combat.player.statuses.darkEmbrace)
+  if (AP(combat).statuses.darkEmbrace) {
+    drawCards(combat, run, AP(combat).statuses.darkEmbrace)
   }
 }
 
@@ -1201,24 +1308,24 @@ function countStrikesSafe(run: RunState): number {
 function playerAttack(combat: CombatState, run: RunState, base: number, target: EnemyInstance | null, strMult = 1, allEnemies = false): number {
   let total = 0
   const doOne = (e: EnemyInstance) => {
-    let dmg = calcPlayerAttack(base, combat.player.statuses, e.statuses, strMult, combat.player.stance)
+    let dmg = calcPlayerAttack(base, AP(combat).statuses, e.statuses, strMult, AP(combat).stance)
     // 钢笔笔尖
     if (run.relics.includes('penNib') && run.relicCounters.penNib >= 10) {
       dmg *= 2
       run.relicCounters.penNib = 0
-      fx(combat, 'text', 'player', undefined, '钢笔笔尖!')
+      fx(combat, 'text', ptgt(combat), undefined, '钢笔笔尖!')
     }
     // 幻影杀手：下一张攻击翻倍
-    if (combat.player.statuses.phantasmal) {
+    if (AP(combat).statuses.phantasmal) {
       dmg *= 2
-      delete combat.player.statuses.phantasmal
-      fx(combat, 'text', 'player', undefined, '幻影杀手!')
+      delete AP(combat).statuses.phantasmal
+      fx(combat, 'text', ptgt(combat), undefined, '幻影杀手!')
     }
     const loss = damageEnemy(combat, run, e, dmg, true)
     total += loss
     // 淬毒：未被格挡的攻击伤害施加中毒
-    if (loss > 0 && combat.player.statuses.envenomS && target) {
-      applyStatus(combat, e, 'poison', combat.player.statuses.envenomS)
+    if (loss > 0 && AP(combat).statuses.envenomS && target) {
+      applyStatus(combat, e, 'poison', AP(combat).statuses.envenomS)
     }
   }
   if (allEnemies) {
@@ -1230,17 +1337,17 @@ function playerAttack(combat: CombatState, run: RunState, base: number, target: 
 }
 
 function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance, id: string, v: number[], target: EnemyInstance | null, X: number, uid: string) {
-  const P = combat.player
+  const P = AP(combat)
   const all = () => combat.enemies.filter(e => !e.dying && e.hp > 0)
   switch (id) {
     // ---- 基础 ----
     case 'strike': case 'anger': case 'wildStrike':
       playerAttack(combat, run, v[0], target)
-      if (id === 'anger') combat.discardPile.push({ ...card, uid: card.uid + '_copy' + Math.random().toString(36).slice(2, 5) })
+      if (id === 'anger') AP(combat).discardPile.push({ ...card, uid: card.uid + '_copy' + Math.random().toString(36).slice(2, 5) })
       if (id === 'wildStrike') {
         const w = makeCard('wound')
-        const pos = Math.floor(Math.random() * (combat.drawPile.length + 1))
-        combat.drawPile.splice(pos, 0, w)
+        const pos = Math.floor(Math.random() * (AP(combat).drawPile.length + 1))
+        AP(combat).drawPile.splice(pos, 0, w)
       }
       break
     case 'defend': case 'shrugItOff': case 'ghostlyArmor':
@@ -1259,7 +1366,7 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
     case 'armaments':
       playerGainBlock(combat, run, v[0])
       // 升级选择由 store 层处理（pendingSelect）
-      combat.pendingArmaments = card.upgraded > 0 ? 'all' : 'one'
+      AP(combat).pendingArmaments = card.upgraded > 0 ? 'all' : 'one'
       break
     case 'bodySlam':
       playerAttack(combat, run, P.block, target)
@@ -1270,7 +1377,7 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
     case 'cleave': case 'immolate': case 'reaper': case 'thunderclap': {
       const healed = playerAttack(combat, run, v[0], null, 1, true)
       if (id === 'thunderclap') all().forEach(e => applyStatus(combat, e, 'vulnerable', v[1]))
-      if (id === 'immolate') combat.discardPile.push(makeCard('burn'))
+      if (id === 'immolate') AP(combat).discardPile.push(makeCard('burn'))
       if (id === 'reaper') healPlayer(run, combat, healed)
       break
     }
@@ -1280,7 +1387,7 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
       break
     case 'headbutt':
       playerAttack(combat, run, v[0], target)
-      combat.pendingHeadbutt = true
+      AP(combat).pendingHeadbutt = true
       break
     case 'ironWave':
       playerAttack(combat, run, v[0], target)
@@ -1311,15 +1418,15 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
       break
     case 'trueGrit':
       playerGainBlock(combat, run, v[0])
-      if (card.upgraded > 0) combat.pendingTrueGrit = true
+      if (card.upgraded > 0) AP(combat).pendingTrueGrit = true
       else {
-        const cands = combat.hand.filter(c => c.uid !== card.uid && !CARDS[c.id].exhaust)
+        const cands = AP(combat).hand.filter(c => c.uid !== card.uid && !CARDS[c.id].exhaust)
         if (cands.length > 0) exhaustCard(combat, run, pick(cands), 'hand')
       }
       break
     case 'warcry':
       drawCards(combat, run, v[0])
-      combat.pendingWarcry = true
+      AP(combat).pendingWarcry = true
       break
     case 'heavyBlade':
       playerAttack(combat, run, v[0], target, v[1])
@@ -1357,12 +1464,12 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
       break
     case 'rampage':
       playerAttack(combat, run, v[0], target)
-      combat.rampage = combat.rampage || {}
-      combat.rampage[uid] = (combat.rampage[uid] || 0) + v[1]
+      const R = AP(combat).rampage = AP(combat).rampage || {}
+      R[uid] = (R[uid] || 0) + v[1]
       break
     case 'recklessCharge':
       playerAttack(combat, run, v[0], target)
-      combat.drawPile.push(makeCard('dazed'))
+      AP(combat).drawPile.push(makeCard('dazed'))
       break
     case 'whirlwind':
       for (let i = 0; i < X; i++) {
@@ -1374,7 +1481,7 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
       break
     case 'entrench':
       P.block *= 2
-      fx(combat, 'block', 'player', P.block)
+      fx(combat, 'block', ptgt(combat), P.block)
       break
     case 'feelNoPain': case 'fireBreathing': case 'evolve': case 'metallicize': case 'rupture': case 'combust': case 'darkEmbrace':
       applyStatus(combat, 'player', id === 'rupture' ? 'rupture' : id, v[0])
@@ -1390,14 +1497,14 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
       })
       break
     case 'powerThrough':
-      combat.hand.push(makeCard('wound'), makeCard('wound'))
+      AP(combat).hand.push(makeCard('wound'), makeCard('wound'))
       playerGainBlock(combat, run, v[0])
       break
     case 'rage':
       applyStatus(combat, 'player', 'rage', v[0])
       break
     case 'secondWind': {
-      const nonAttack = combat.hand.filter(c => CARDS[c.id].type !== 'attack')
+      const nonAttack = AP(combat).hand.filter(c => CARDS[c.id].type !== 'attack')
       nonAttack.forEach(c => exhaustCard(combat, run, c, 'hand'))
       playerGainBlock(combat, run, v[0] * nonAttack.length)
       break
@@ -1417,13 +1524,13 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
         if (before > 0 && target.hp <= 0) {
           run.maxHp += v[1]
           run.hp += v[1]
-          fx(combat, 'text', 'player', undefined, `最大生命+${v[1]}`)
+          fx(combat, 'text', ptgt(combat), undefined, `最大生命+${v[1]}`)
         }
       }
       break
     case 'fiendFire': {
-      const cnt = combat.hand.length
-      combat.hand.forEach(c => exhaustCard(combat, run, c, 'hand'))
+      const cnt = AP(combat).hand.length
+      AP(combat).hand.forEach(c => exhaustCard(combat, run, c, 'hand'))
       for (let i = 0; i < cnt; i++) playerAttack(combat, run, v[0], target)
       break
     }
@@ -1466,20 +1573,20 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
       break
     case 'survivor':
       playerGainBlock(combat, run, v[0])
-      if (combat.hand.length > 0) {
-        const c = pick(combat.hand)
+      if (AP(combat).hand.length > 0) {
+        const c = pick(AP(combat).hand)
         discardHandCard(combat, c)
       }
       break
     case 'bladeDance': {
-      for (let i = 0; i < v[0]; i++) combat.hand.push(makeCard('shiv'))
+      for (let i = 0; i < v[0]; i++) AP(combat).hand.push(makeCard('shiv'))
       break
     }
     case 'cloakAndDagger': {
       playerGainBlock(combat, run, v[0])
       const n = v[1]
       const up = card.upgraded > 0 ? 1 : 0
-      for (let i = 0; i < n; i++) combat.hand.push(makeCard('shiv', up))
+      for (let i = 0; i < n; i++) AP(combat).hand.push(makeCard('shiv', up))
       break
     }
     case 'cripplingCloud':
@@ -1495,7 +1602,7 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
     case 'daggerThrow':
       playerAttack(combat, run, v[0], target)
       drawCards(combat, run, 1)
-      if (combat.hand.length > 0) discardHandCard(combat, pick(combat.hand))
+      if (AP(combat).hand.length > 0) discardHandCard(combat, pick(AP(combat).hand))
       break
     case 'deadlyPoison': case 'corpseExplosion':
       if (target) {
@@ -1526,7 +1633,7 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
       const discardN = id === 'prepared' ? v[0] : 1
       drawCards(combat, run, draw)
       for (let i = 0; i < discardN; i++) {
-        if (combat.hand.length > 0) discardHandCard(combat, pick(combat.hand))
+        if (AP(combat).hand.length > 0) discardHandCard(combat, pick(AP(combat).hand))
       }
       break
     }
@@ -1557,9 +1664,9 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
       }
       break
     case 'calculatedGamble': {
-      const cnt = combat.hand.length
-      combat.hand.forEach(c => discardHandCard(combat, c))
-      combat.hand = []
+      const cnt = AP(combat).hand.length
+      AP(combat).hand.forEach(c => discardHandCard(combat, c))
+      AP(combat).hand = []
       drawCards(combat, run, cnt)
       break
     }
@@ -1575,7 +1682,7 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
     case 'concentrate': {
       const n = v[0]
       for (let i = 0; i < n; i++) {
-        if (combat.hand.length > 0) discardHandCard(combat, pick(combat.hand))
+        if (AP(combat).hand.length > 0) discardHandCard(combat, pick(AP(combat).hand))
       }
       P.energy += v[1]
       break
@@ -1590,7 +1697,7 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
         if (pool.length) {
           const c = makeCard(pick(pool).id)
           c.freeThisTurn = true
-          combat.hand.push(c)
+          AP(combat).hand.push(c)
         }
       }
       break
@@ -1606,10 +1713,10 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
       break
     case 'expertise': case 'scrawl': {
       const target2 = id === 'scrawl' ? v[0] : v[0]
-      while (combat.hand.length < target2 && combat.drawPile.length + combat.discardPile.length > 0) {
-        const before = combat.hand.length
+      while (AP(combat).hand.length < target2 && AP(combat).drawPile.length + AP(combat).discardPile.length > 0) {
+        const before = AP(combat).hand.length
         drawCards(combat, run, 1)
-        if (combat.hand.length === before) break
+        if (AP(combat).hand.length === before) break
       }
       break
     }
@@ -1665,26 +1772,27 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
         if (!target || target.hp <= 0) break
         playerAttack(combat, run, v[0], target)
       }
-      combat.glassKnife = combat.glassKnife || {}
-      combat.glassKnife[uid] = (combat.glassKnife[uid] || 0) + v[1]
+      const GK = AP(combat).glassKnife = AP(combat).glassKnife || {}
+      GK[uid] = (GK[uid] || 0) + v[1]
       break
     case 'grandFinale':
       playerAttack(combat, run, v[0], null, 1, true)
       break
-    case 'nightmare':
-      combat.pendingNightmare = null
-      combat.player.customFlags = combat.player.customFlags || {}
-      combat.player.customFlags.pendingNightmareSelect = v[0]
+    case 'nightmare': {
+      AP(combat).pendingNightmare = null
+      const cf = AP(combat).customFlags = AP(combat).customFlags || {}
+      cf.pendingNightmareSelect = v[0]
       break
+    }
     case 'phantasmalKiller':
       applyStatus(combat, 'player', 'phantasmal', 1)
       break
     case 'stormOfSteel': {
-      const cnt = combat.hand.length
+      const cnt = AP(combat).hand.length
       const up = card.upgraded > 0 ? 1 : 0
-      combat.hand.forEach(c => discardHandCard(combat, c))
-      combat.hand = []
-      for (let i = 0; i < cnt; i++) combat.hand.push(makeCard('shiv', up))
+      AP(combat).hand.forEach(c => discardHandCard(combat, c))
+      AP(combat).hand = []
+      for (let i = 0; i < cnt; i++) AP(combat).hand.push(makeCard('shiv', up))
       break
     }
     case 'wraithForm':
@@ -1728,7 +1836,7 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
       break
     case 'claw':
       playerAttack(combat, run, v[0], target)
-      combat.clawBonus = (combat.clawBonus || 0) + 2
+      AP(combat).clawBonus = (AP(combat).clawBonus || 0) + 2
       break
     case 'coldSnap':
       playerAttack(combat, run, v[0], target)
@@ -1746,11 +1854,12 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
         applyStatus(combat, target, 'weak', v[1])
       }
       break
-    case 'hologram':
+    case 'hologram': {
       playerGainBlock(combat, run, v[0])
-      combat.player.customFlags = combat.player.customFlags || {}
-      combat.player.customFlags.pendingHologram = 1
+      const cf = AP(combat).customFlags = AP(combat).customFlags || {}
+      cf.pendingHologram = 1
       break
+    }
     case 'reprogram':
       applyStatus(combat, 'player', 'focus', -1)
       applyStatus(combat, 'player', 'strength', v[0])
@@ -1775,7 +1884,7 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
       P.customFlags.nextEnergy = (P.customFlags.nextEnergy || 0) + 1
       break
     case 'chill': {
-      const n = Math.floor(combat.hand.length / 2) * v[0]
+      const n = Math.floor(AP(combat).hand.length / 2) * v[0]
       for (let i = 0; i < n; i++) channelOrb(combat, run, 'frost')
       break
     }
@@ -1807,7 +1916,7 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
       break
     case 'overclock':
       drawCards(combat, run, v[0])
-      combat.discardPile.push(makeCard('burn'))
+      AP(combat).discardPile.push(makeCard('burn'))
       break
     case 'skim':
       drawCards(combat, run, v[0])
@@ -1828,22 +1937,22 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
       if (pool.length) {
         const c = makeCard(pick(pool).id)
         c.freeThisTurn = true
-        combat.hand.push(c)
+        AP(combat).hand.push(c)
       }
       break
     }
     case 'allForOne':
       playerAttack(combat, run, v[0], target)
       // 弃牌堆所有0费牌返回手牌
-      const zeroCost = combat.discardPile.filter(c => {
+      const zeroCost = AP(combat).discardPile.filter(c => {
         const d = CARDS[c.id]
         return d && d.cost === 0
       })
       zeroCost.forEach(c => {
-        const i = combat.discardPile.findIndex(x => x.uid === c.uid)
+        const i = AP(combat).discardPile.findIndex(x => x.uid === c.uid)
         if (i >= 0) {
-          combat.discardPile.splice(i, 1)
-          combat.hand.push(c)
+          AP(combat).discardPile.splice(i, 1)
+          AP(combat).hand.push(c)
         }
       })
       break
@@ -1891,14 +2000,15 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
       }
       break
     case 'reboot':
-      combat.drawPile = shuffle([...combat.drawPile, ...combat.discardPile])
-      combat.discardPile = []
+      AP(combat).drawPile = shuffle([...AP(combat).drawPile, ...AP(combat).discardPile])
+      AP(combat).discardPile = []
       drawCards(combat, run, v[0])
       break
-    case 'seek':
-      combat.player.customFlags = combat.player.customFlags || {}
-      combat.player.customFlags.pendingSeek = v[0]
+    case 'seek': {
+      const cf = AP(combat).customFlags = AP(combat).customFlags || {}
+      cf.pendingSeek = v[0]
       break
+    }
     case 'thunderStrike': {
       const n = P.lightningChanneled || 0
       for (let i = 0; i < n; i++) {
@@ -1976,7 +2086,7 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
       break
     case 'carveReality':
       playerAttack(combat, run, v[0], target)
-      if (P.stance === 'wrath') combat.hand.push(makeCard('smite'))
+      if (P.stance === 'wrath') AP(combat).hand.push(makeCard('smite'))
       break
     case 'conclude':
       playerAttack(combat, run, v[0], null, 1, true)
@@ -2032,7 +2142,7 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
     case 'wheelKick':
       playerAttack(combat, run, v[0], target)
       drawCards(combat, run, 2)
-      if (combat.hand.length > 0) discardHandCard(combat, pick(combat.hand))
+      if (AP(combat).hand.length > 0) discardHandCard(combat, pick(AP(combat).hand))
       break
     case 'alphaS':
       applyStatus(combat, 'player', 'alphaS', 1)
@@ -2047,12 +2157,13 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
     case 'devotionS':
       applyStatus(combat, 'player', 'devotionS', v[0])
       break
-    case 'omniscience':
-      combat.player.customFlags = combat.player.customFlags || {}
-      combat.player.customFlags.pendingOmniscience = 2
+    case 'omniscience': {
+      const cf = AP(combat).customFlags = AP(combat).customFlags || {}
+      cf.pendingOmniscience = 2
       break
+    }
     case 'spiritShield':
-      playerGainBlock(combat, run, v[0] * combat.hand.length)
+      playerGainBlock(combat, run, v[0] * AP(combat).hand.length)
       break
     case 'vault':
       applyStatus(combat, 'player', 'vaultS', 1)
@@ -2092,7 +2203,7 @@ export function usePotion(combat: CombatState, run: RunState, idx: number, targe
     case 'blockPotion': playerGainBlock(combat, run, 12); break
     case 'strengthPotion': applyStatus(combat, 'player', 'strength', 2); break
     case 'dexterityPotion': applyStatus(combat, 'player', 'dexterity', 2); break
-    case 'energyPotion': combat.player.energy += 2; break
+    case 'energyPotion': AP(combat).energy += 2; break
     case 'explosivePotion':
       combat.enemies.filter(e => !e.dying && e.hp > 0).forEach(e => damageEnemy(combat, run, e, 10, false))
       break
@@ -2123,7 +2234,7 @@ export function usePotion(combat: CombatState, run: RunState, idx: number, targe
       const pool = Object.values(CARDS).filter(c => c.rarity !== 'special' && c.rarity !== 'starter' && c.type === (pid === 'skillPotion' ? 'skill' : 'attack') && c.rarity !== 'rare')
       const c = makeCard(pick(pool).id)
       c.freeThisTurn = true
-      combat.hand.push(c)
+      AP(combat).hand.push(c)
       break
     }
     case 'fairyInBottle': return false // 不能主动使用

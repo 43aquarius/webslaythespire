@@ -6,7 +6,6 @@ import { music, trackForScreen } from '@/game/music'
 
 export function MusicPlayer() {
   const run = useGame(s => s.run)
-  const screen = useGame(s => s.screen)
   const [vol, setVol] = useState(music.volume)
   const [muted, setMuted] = useState(music.muted)
   const [open, setOpen] = useState(false)

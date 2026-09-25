@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useGame } from '@/store/gameStore'
 import { CardInstance } from '@/game/types'
+import { AP } from '@/game/engine'
 import { CardView } from './CardView'
 
 // ============ 牌堆查看 ============
@@ -21,9 +22,9 @@ export function PileViewOverlay() {
     deck: '牌组',
   }
   let cards: CardInstance[] = []
-  if (pileView === 'draw') cards = [...(run.combat?.drawPile ?? [])].reverse()
-  else if (pileView === 'discard') cards = [...(run.combat?.discardPile ?? [])].reverse()
-  else if (pileView === 'exhaust') cards = [...(run.combat?.exhaustPile ?? [])].reverse()
+  if (pileView === 'draw') cards = [...(run.combat ? AP(run.combat).drawPile : [])].reverse()
+  else if (pileView === 'discard') cards = [...(run.combat ? AP(run.combat).discardPile : [])].reverse()
+  else if (pileView === 'exhaust') cards = [...(run.combat ? AP(run.combat).exhaustPile : [])].reverse()
   else cards = run.deck
 
   return (
@@ -57,15 +58,15 @@ export function CardSelectOverlay() {
 
   const findCard = (uid: string): CardInstance | undefined => {
     if (select.source === 'deck') return run.deck.find(c => c.uid === uid)
-    if (select.source === 'hand') return run.combat?.hand.find(c => c.uid === uid)
-    if (select.source === 'discard') return run.combat?.discardPile.find(c => c.uid === uid)
+    if (select.source === 'hand') return AP(run.combat!).hand.find(c => c.uid === uid)
+    if (select.source === 'discard') return AP(run.combat!).discardPile.find(c => c.uid === uid)
     return undefined
   }
   // 保持牌堆顺序展示
   const ordered: CardInstance[] =
     select.source === 'deck' ? run.deck
-      : select.source === 'hand' ? (run.combat?.hand ?? [])
-        : (run.combat?.discardPile ?? [])
+      : select.source === 'hand' ? (run.combat ? AP(run.combat).hand : [])
+        : (run.combat ? AP(run.combat).discardPile : [])
   const cards = ordered.filter(c => select.cardUids.includes(c.uid))
 
   const cancellable = select.kind === 'eventUpgrade' || select.kind === 'eventRemove' ||
@@ -104,11 +105,11 @@ export function ScryOverlay() {
   const run = useGame(s => s.run)
   const resolveScry = useGame(s => s.resolveScry)
   const [marked, setMarked] = useState<Set<string>>(new Set())
-  const pending = run?.combat?.pendingScry
+  const pending = run?.combat ? AP(run.combat).pendingScry : null
   if (!run || !run.combat || !pending) return null
 
   // 抽牌堆末尾 N 张是即将抽到的牌
-  const topCards = run.combat.drawPile.slice(-pending)
+  const topCards = AP(run.combat!).drawPile.slice(-pending)
 
   const toggle = (uid: string) => {
     setMarked(prev => {

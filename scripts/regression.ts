@@ -2,7 +2,7 @@
 import { useGame } from '../src/store/gameStore'
 import { CARDS, cardCost, makeCard } from '../src/game/cards'
 import {
-  startCombat, canPlayCard, playCard, applyStatus, enemyDisplayDamage,
+  startCombat, canPlayCard, playCard, applyStatus, enemyDisplayDamage, AP,
 } from '../src/game/engine'
 import { newRun } from '../src/game/run'
 
@@ -30,7 +30,7 @@ async function main() {
     const run = g.getState().run
     run.combat.enemies[0].hp = 1
     g.getState().playCard(
-      g.getState().run.combat.hand.find((c: any) => CARDS[c.id].type === 'attack')!.uid,
+      g.getState().run.combat && AP(g.getState().run.combat).hand.find((c: any) => CARDS[c.id].type === 'attack')!.uid,
       g.getState().run.combat.enemies[0].uid
     )
     // 等待胜利横幅结算
@@ -50,28 +50,28 @@ async function main() {
     // 模拟技能药水给牌：一张 2 费牌设为 freeThisTurn
     const freeCard = makeCard('entrench')  // 2 费技能（无回能量效果）
     freeCard.freeThisTurn = true
-    combat.hand.push(freeCard)
-    const e0 = combat.player.energy
+    AP(combat).hand.push(freeCard)
+    const e0 = AP(combat).energy
     const chk = canPlayCard(combat, run, freeCard)
     check('freeThisTurn 卡在 0 能量时可打出', chk.ok)
-    combat.player.energy = 0
+    AP(combat).energy = 0
     const chk2 = canPlayCard(combat, run, freeCard)
     check('freeThisTurn 卡能量检查按 0 费', chk2.ok)
-    combat.player.energy = e0
+    AP(combat).energy = e0
     playCard(combat, run, freeCard.uid, null)
-    check('打出 freeThisTurn 卡不扣能量', combat.player.energy === e0, `energy ${e0} -> ${combat.player.energy}`)
+    check('打出 freeThisTurn 卡不扣能量', AP(combat).energy === e0, `energy ${e0} -> ${AP(combat).energy}`)
   }
 
   console.log('=== 专项回归：Artifact 反制 debuff ===')
   {
     const run = newRun()
     const combat = startCombat(run, '测试', ['jawWorm'], false, false)
-    combat.player.statuses.artifact = 1
+    AP(combat).statuses.artifact = 1
     applyStatus(combat, 'player', 'vulnerable', 2)
-    check('反制了易伤（原 bug：不反制正值 debuff）', combat.player.statuses.vulnerable === undefined)
-    check('反制层数消耗', combat.player.statuses.artifact === undefined)
+    check('反制了易伤（原 bug：不反制正值 debuff）', AP(combat).statuses.vulnerable === undefined)
+    check('反制层数消耗', AP(combat).statuses.artifact === undefined)
     applyStatus(combat, 'player', 'strength', 2)
-    check('力量增益不被反制', combat.player.statuses.strength === 2)
+    check('力量增益不被反制', AP(combat).statuses.strength === 2)
     combat.enemies[0].statuses.artifact = 1
     applyStatus(combat, combat.enemies[0], 'vulnerable', 2)
     check('敌人 artifact 也正确反制', combat.enemies[0].statuses.vulnerable === undefined)
@@ -84,12 +84,12 @@ async function main() {
     const e = combat.enemies[0]
     // 找到攻击意图（cultist 第二招是攻击，或直接构造）
     e.intent = { type: 'attack', damage: 6, times: 1 }
-    const before = enemyDisplayDamage(e, combat.player.statuses).dmg
+    const before = enemyDisplayDamage(e, AP(combat).statuses).dmg
     applyStatus(combat, e, 'weak', 1)  // 敌人虚弱 → 伤害降
-    const after = enemyDisplayDamage(e, combat.player.statuses).dmg
+    const after = enemyDisplayDamage(e, AP(combat).statuses).dmg
     check('施加虚弱后意图伤害实时下降', after < before, `${before} -> ${after}`)
     applyStatus(combat, 'player', 'vulnerable', 1)  // 玩家易伤 → 伤害升
-    const after2 = enemyDisplayDamage(e, combat.player.statuses).dmg
+    const after2 = enemyDisplayDamage(e, AP(combat).statuses).dmg
     check('玩家易伤后意图伤害实时上升', after2 > after, `${after} -> ${after2}`)
   }
 

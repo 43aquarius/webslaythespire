@@ -16,9 +16,15 @@ export function ShopScreen() {
   const buyPotion = useGame(s => s.buyPotion)
   const buyRemoval = useGame(s => s.buyRemoval)
   const leave = useGame(s => s.leaveShop)
+  const net = useGame(s => s.net)
 
   if (!run?.shop) return null
   const shop = run.shop
+  const mp = run.players.length > 1
+  const myIdx = mp ? net.myIdx : 0
+  const me = run.players[myIdx] || run.players[0]
+  const myGold = me.gold
+  const gold = myGold  // 以下所有价格判断基于自己的金币
 
   return (
     <div className="w-full h-full relative overflow-y-auto sts-scroll select-none"
@@ -32,15 +38,22 @@ export function ShopScreen() {
             <div className="sts-title" style={{ fontSize: 40, color: '#ffd980', textShadow: '3px 3px 0 #000' }}>商店</div>
             <div className="sts-body" style={{ color: '#c8b090', fontSize: 14 }}>「看看有没有中意的？」</div>
           </div>
-          <div className="sts-body font-bold sts-num" style={{ color: '#ffd980', fontSize: 20, textShadow: '1px 1px 0 #000' }}>
-            💰 {run.gold}
+          <div className="flex items-center gap-4">
+            <div className="sts-body font-bold sts-num" style={{ color: '#ffd980', fontSize: 20, textShadow: '1px 1px 0 #000' }}>
+              💰 {myGold}
+            </div>
+            {mp && (
+              <div className="sts-body sts-num" style={{ color: '#a8b8c8', fontSize: 13 }}>
+                队友 {run.players[1 - myIdx]?.gold ?? '-'}
+              </div>
+            )}
           </div>
         </div>
 
         {/* 卡牌 */}
         <div className="flex gap-5 flex-wrap justify-center">
           {shop.cards.map((item, i) => {
-            const canAfford = run.gold >= item.price
+            const canAfford = gold >= item.price
             return (
               <div key={i} className={`flex flex-col items-center gap-1 transition-all ${item.sold ? 'opacity-30' : canAfford ? 'hover:-translate-y-1' : 'opacity-70'}`}
                 style={{ cursor: item.sold ? 'default' : 'pointer' }}
@@ -65,7 +78,7 @@ export function ShopScreen() {
           <div className="flex gap-4 flex-wrap justify-center">
             {shop.relics.map((item, i) => {
               const def = RELICS[item.relicId]
-              const canAfford = run.gold >= item.price
+              const canAfford = gold >= item.price
               return (
                 <Tip key={i} tip={<><b>{def.name}</b><br />{def.desc}</>}>
                   <button
@@ -87,7 +100,7 @@ export function ShopScreen() {
           <div className="flex gap-4 flex-wrap justify-center">
             {shop.potions.map((item, i) => {
               const def = POTIONS[item.potionId]
-              const canAfford = run.gold >= item.price
+              const canAfford = gold >= item.price
               return (
                 <Tip key={i} tip={<><b>{def.name}</b><br />{def.desc}</>}>
                   <button
@@ -130,8 +143,11 @@ export function EventScreen() {
   const run = useGame(s => s.run)
   const chooseEvent = useGame(s => s.chooseEvent)
   const eventMsg = useGame(s => s.eventMsg)
+  const net = useGame(s => s.net)
   if (!run?.currentEvent) return null
   const ev = EVENTS[run.currentEvent]
+  const mp = run.players.length > 1
+  const me = run.players[mp ? net.myIdx : 0] || run.players[0]
 
   return (
     <div className="w-full h-full relative flex items-center justify-center select-none"
@@ -143,12 +159,17 @@ export function EventScreen() {
         <div className="sts-body" style={{ fontSize: 16, color: '#e8d8c0', lineHeight: 1.8, textAlign: 'justify' }}>
           {ev.desc}
         </div>
+        {mp && (
+          <div className="sts-body" style={{ fontSize: 13, color: '#a8b8c8' }}>
+            联机模式：任一玩家点击即生效（效果作用于点击者，你的金币 {me.gold}）
+          </div>
+        )}
         {eventMsg && (
           <div className="sts-body" style={{ fontSize: 15, color: '#8fe89a' }}>{eventMsg}</div>
         )}
         <div className="flex flex-col gap-3 w-full mt-2">
           {ev.choices.map((c: any, i: number) => {
-            const disabled = c.effect === 'cleric_heal' && run.gold < 35 || c.effect === 'cleric_purify' && run.gold < 50
+            const disabled = c.effect === 'cleric_heal' && me.gold < 35 || c.effect === 'cleric_purify' && me.gold < 50
             return (
               <button
                 key={i}

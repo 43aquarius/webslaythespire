@@ -46,7 +46,7 @@ async function main() {
         combat: r.combat ? {
           phase: r.combat.phase, over: r.combat.combatOver, won: r.combat.playerWon,
           enemies: r.combat.enemies.map(e => e.id + ':' + e.hp + '/' + e.maxHp + (e.dying ? 'D' : '')).join(','),
-          hand: r.combat.hand.length, energy: r.combat.player.energy, turn: r.combat.turn,
+          hand: r.combat.players[r.combat.activeIdx].hand.length, energy: r.combat.players[r.combat.activeIdx].energy, turn: r.combat.turn,
         } : null,
         select: g.select ? g.select.kind : null, banner: g.endBanner,
       })
@@ -109,12 +109,12 @@ async function main() {
         if (!H) { 
           window.__sts_helpers = {
             def: (id) => window.__STS_CARDS[id],
-            cost: (ci) => window.__STS_COST(ci, c.player.hpLostThisCombat),
+            cost: (ci) => window.__STS_COST(ci, c.players[c.activeIdx].hpLostThisCombat),
           }
           return 'HELPERS'
         }
-        const energy = c.player.energy
-        const hand = [...c.hand]
+        const energy = c.players[c.activeIdx].energy
+        const hand = [...c.players[c.activeIdx].hand]
         const cost = (ci) => { const k = H.cost(ci); return k === -1 ? energy : Math.max(0, k) }
         const attacks = hand.filter(ci => H.def(ci.id).type === 'attack' && cost(ci) <= energy)
         const powers = hand.filter(ci => H.def(ci.id).type === 'power' && cost(ci) <= energy)

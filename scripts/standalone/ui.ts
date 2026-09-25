@@ -6,10 +6,11 @@ import { CARDS, cardCost, cardDesc, cardColor } from '@/game/cards'
 import { ENEMIES } from '@/game/enemies'
 import { RELICS } from '@/game/relics'
 import { POTIONS } from '@/game/potions'
-import { enemyDisplayDamage } from '@/game/engine'
+import { enemyDisplayDamage, AP } from '@/game/engine'
 import { EVENTS } from '@/game/events'
 import { CHARACTER_INFO } from '@/game/run'
 import { STATUS_INFO, STATUS_IMG_FIX, statusImgPath } from '@/game/statusInfo'
+import { hasSave, loadStats, loadSettings, savePlayerName } from '@/game/persist'
 import type { CharacterId } from '@/game/types'
 import type { RunState, CombatState, CardInstance, EnemyInstance } from '@/game/types'
 
@@ -384,16 +385,42 @@ function topHudShell(): string {
 function updateHud(run: RunState, combat: boolean) {
   const deck = document.getElementById('hud-deck-count')
   if (!deck) return
-  setText(deck, String(run.deck.length))
-  updateHpBar(document.getElementById('hud-hp'), run.hp, run.maxHp, combat ? (run.combat?.player.block ?? 0) : 0)
+  const st = g()
+  const mp = run.players.length > 1
+  const myIdx = mp ? st.net.myIdx : 0
+  const me = run.players[myIdx] || run.players[0]
+  setText(deck, String(me.deck.length))
+  const myBlock = combat && run.combat && run.combat.activeIdx === myIdx ? AP(run.combat).block : 0
+  updateHpBar(document.getElementById('hud-hp'), me.hp, me.maxHp, myBlock)
   const floorEl = document.getElementById('hud-floor')
   if (floorEl) {
     if (combat) floorEl.style.display = 'none'
-    else { floorEl.style.display = ''; setText(floorEl, `第 ${run.act} 幕 · 第 ${run.visitedNodes.length} 层`) }
+    else { floorEl.style.display = ''; setText(floorEl, `第 ${run.act} 幕 · 第 ${run.visitedNodes.length} 层${mp ? ' · 联机合作' : ''}`) }
   }
-  setText(document.getElementById('hud-gold'), `💰 ${run.gold}`)
-  setHtml(document.getElementById('hud-potions'), run.potions.map((p, i) => potionHtml(p, i, combat)).join(''))
-  setHtml(document.getElementById('hud-relics'), run.relics.map(id => relicIcon(id)).join(''))
+  setText(document.getElementById('hud-gold'), mp ? `💰 ${me.gold}（队友 ${run.players[1 - myIdx]?.gold ?? '-'}）` : `💰 ${me.gold}`)
+  setHtml(document.getElementById('hud-potions'), me.potions.map((p, i) => potionHtml(p, i, combat)).join(''))
+  setHtml(document.getElementById('hud-relics'), me.relics.map(id => relicIcon(id)).join(''))
+  // 联机：双人迷你血条
+  let mini = document.getElementById('hud-mp-hp')
+  if (mp) {
+    if (!mini) {
+      const holder = document.querySelector('.hud-left > div:last-child')
+      if (holder) {
+        mini = document.createElement('div')
+        mini.id = 'hud-mp-hp'
+        mini.style.cssText = 'display:flex;flex-direction:column;gap:3px;margin-top:3px'
+        holder.appendChild(mini)
+      }
+    }
+    if (mini) {
+      setHtml(mini, run.players.map((rp, i) => `
+        <div style="display:flex;align-items:center;gap:5px">
+          <span class="sts-body" style="font-size:11px;font-weight:700;color:${i === myIdx ? '#8ee8ff' : '#c8a878'};text-shadow:1px 1px 0 #000;min-width:32px">${i === myIdx ? '你' : esc(rp.name)}</span>
+          ${hpBarShell('hud-mp-hp-' + i, 180)}
+        </div>`).join(''))
+      run.players.forEach((rp, i) => updateHpBar(document.getElementById('hud-mp-hp-' + i), rp.hp, rp.maxHp))
+    }
+  } else mini?.remove()
 }
 
 // ============ GitHub 图标（内联 SVG） ============
@@ -404,28 +431,203 @@ const CHARACTERS: CharacterId[] = ['ironclad', 'silent', 'defect', 'watcher']
 const CHAR_COLOR: Record<string, string> = { ironclad: '#b03828', silent: '#3a9a5a', defect: '#3a7ac8', watcher: '#9a5ab8' }
 let selectedChar: CharacterId = 'ironclad'
 
-function rTitle(): string {
+// ---- 主菜单（原版风格竖排菜单） ----
+function rMainMenu(): string {
+  const canCont = hasSave()
+  const items = [
+    { label: '开 始 冒 险', act: 'gotoMenu', arg: 'charSelect', dis: false },
+    { label: '继 续 冒 险', act: 'continueRun', arg: '', dis: !canCont },
+    { label: '联 机 合 作', act: 'gotoMenu', arg: 'mpLobby', dis: false },
+    { label: '统　　计', act: 'gotoMenu', arg: 'stats', dis: false },
+    { label: '设　　置', act: 'gotoMenu', arg: 'settings', dis: false },
+    { label: '制 作 名 单', act: 'gotoMenu', arg: 'credits', dis: false },
+  ]
+  return `<div class="screen bg-cover" style="background-image:url('${A('bg/combat.jpg')}')">
+  <div class="shade" style="background:rgba(6,3,2,.62)"></div>
+  <div class="center-col" style="padding-top:0;gap:14px">
+    <h1 class="sts-title game-title">杀戮尖塔</h1>
+    <div class="sts-title subtitle">—— SLAY THE SPIRE · WEB 复刻版 ——</div>
+    <div style="display:flex;flex-direction:column;gap:11px;margin-top:26px">
+      ${items.map(it => `<button class="sts-btn menu-item sts-title" data-act="${it.act}" ${it.arg ? `data-screen="${it.arg}"` : ''} ${it.dis ? 'disabled' : ''}
+        style="font-size:23px;letter-spacing:5px;padding:10px 80px;min-width:320px;${it.dis ? 'opacity:.4;cursor:not-allowed' : ''}">${it.label}</button>`).join('')}
+    </div>
+    <div class="sts-body" style="color:#8a7458;font-size:12px;position:absolute;left:16px;bottom:12px">Web 复刻版 v1.4 · 单人 + 联机合作</div>
+  </div>
+  <a class="github-btn" href="https://github.com/43aquaris/webslaythespire" target="_blank" rel="noreferrer" title="GitHub 仓库">${GITHUB_SVG}<span>43aquarius/webslaythespire</span></a>
+</div>`
+}
+
+// ---- 角色选择（原版：角色站立 + 出发/返回） ----
+function rCharSelect(): string {
+  const info = CHARACTER_INFO[selectedChar]
   const cards = CHARACTERS.map(c => {
-    const info = CHARACTER_INFO[c]
     const sel = selectedChar === c
     const col = CHAR_COLOR[c]
     return `<div class="char-card ${sel ? 'sel' : ''}" data-act="pickChar" data-char="${c}" style="${sel ? `border-color:${col};box-shadow:0 0 22px ${col}66` : ''}">
       <img src="${A('hero/' + c + '.png')}" alt="${info.name}" draggable="false">
-      <div class="sts-title" style="font-size:20px;color:${sel ? col : '#d8c8a8'};text-shadow:1px 1px 0 #000">${info.name}</div>
-      <div class="sts-body" style="font-size:12px;color:#a89878;line-height:1.5">${info.desc}<br>❤ ${info.hp} 生命 · ${RELICS[info.relic]?.name ?? ''}</div>
+      <div class="sts-title" style="font-size:20px;color:${sel ? col : '#d8c8a8'};text-shadow:1px 1px 0 #000">${CHARACTER_INFO[c].name}</div>
+      <div class="sts-body" style="font-size:12px;color:#a89878;line-height:1.5">${CHARACTER_INFO[c].desc}<br>❤ ${CHARACTER_INFO[c].hp} 生命 · ${RELICS[CHARACTER_INFO[c].relic]?.name ?? ''}</div>
     </div>`
   }).join('')
   return `<div class="screen bg-cover" style="background-image:url('${A('bg/combat.jpg')}')">
-  <div class="shade"></div>
-  <div class="center-col" style="padding-top:26px">
-    <h1 class="sts-title game-title">杀戮尖塔</h1>
-    <div class="sts-title subtitle">—— SLAY THE SPIRE · WEB 复刻版 ——</div>
+  <div class="shade" style="background:rgba(6,3,2,.58)"></div>
+  <div class="center-col" style="padding-top:0;gap:16px">
+    <div class="sts-title" style="font-size:38px;color:#ffd980;text-shadow:3px 3px 0 #000;letter-spacing:8px">选 择 你 的 角 色</div>
     <div class="char-row">${cards}</div>
-    <button class="sts-btn" data-act="startRun" style="font-size:26px;padding:12px 56px;margin-top:10px">开始攀登</button>
-    <div class="sts-body hint">4 位可选角色 · 220+ 张卡牌 · 60+ 种敌人 · 4 幕完整旅程</div>
+    <div class="sts-body" style="color:#c8b090;font-size:14px;max-width:560px;text-align:center;line-height:1.7">
+      <span style="color:#ffd980">${info.name}</span> · ${info.desc}<br>全 4 幕 · 220+ 卡牌 · 60+ 敌人 · 12 首领</div>
+    <div class="row" style="gap:36px;margin-top:6px">
+      <button class="sts-btn sts-title" data-act="gotoMenu" data-screen="title" style="font-size:20px;padding:10px 44px;letter-spacing:4px">返 回</button>
+      <button class="sts-btn sts-title" data-act="startRun" style="font-size:26px;padding:12px 68px;letter-spacing:6px">出 发</button>
+    </div>
   </div>
-  <a class="github-btn" href="https://github.com/43aquarius/webslaythespire" target="_blank" rel="noreferrer" title="GitHub 仓库">${GITHUB_SVG}<span>43aquarius/webslaythespire</span></a>
 </div>`
+}
+
+// ---- 设置 ----
+function rSettings(): string {
+  const s = loadSettings()
+  return `<div class="screen bg-cover" style="background-image:url('${A('bg/combat.jpg')}')">
+  <div class="shade" style="background:rgba(6,3,2,.66)"></div>
+  <div class="center-col" style="padding-top:0;gap:18px">
+    <div class="sts-title" style="font-size:32px;color:#ffd980;letter-spacing:6px">设 置</div>
+    <div class="sts-panel" style="padding:30px 48px;display:flex;flex-direction:column;gap:16px;min-width:480px">
+      <div class="row" style="gap:12px"><span class="sts-body" style="color:#c8b090;width:100px;font-size:15px">联机昵称</span>
+        <input class="sts-body" data-input="mpName" value="${esc(s.playerName)}" maxlength="10" placeholder="联机时显示的名字"
+          style="flex:1;background:rgba(0,0,0,.5);border:1.5px solid #6b4a2e;border-radius:8px;color:#e8d8b8;padding:8px 12px;font-size:15px"></div>
+      <div class="row" style="gap:12px"><span class="sts-body" style="color:#c8b090;width:100px;font-size:15px">音乐音量</span>
+        <input type="range" data-input="musicVol" min="0" max="1" step="0.05" value="${music.volume}" style="flex:1;accent-color:#c8a060">
+        <span class="sts-body" style="color:#d8c8a8;width:36px;font-size:14px" id="vol-label">${music.muted ? 0 : Math.round(music.volume * 100)}</span></div>
+      <div class="row" style="gap:12px"><span class="sts-body" style="color:#c8b090;width:100px;font-size:15px">全屏</span>
+        <button class="sts-btn sts-body" data-act="fullscreen" style="font-size:14px;padding:6px 20px">切换全屏（手机自动横屏）</button></div>
+    </div>
+    <button class="sts-btn sts-title" data-act="gotoMenu" data-screen="title" style="font-size:20px;padding:10px 60px">返 回</button>
+  </div>
+</div>`
+}
+
+// ---- 统计 ----
+function rStats(): string {
+  const s = loadStats()
+  const winRate = s.runs > 0 ? Math.round((s.wins / s.runs) * 100) : 0
+  const charRow = (c: CharacterId) => {
+    const e = s.perChar[c]
+    return `<div class="srow"><span>${CHARACTER_INFO[c].name}</span><b>${e ? `${e.runs} 局 · ${e.wins} 胜 · 最高 ${e.bestFloor} 层` : '未使用'}</b></div>`
+  }
+  return `<div class="screen bg-cover" style="background-image:url('${A('bg/combat.jpg')}')">
+  <div class="shade" style="background:rgba(6,3,2,.66)"></div>
+  <div class="center-col" style="padding-top:0;gap:14px">
+    <div class="sts-title" style="font-size:32px;color:#ffd980;letter-spacing:6px">统 计</div>
+    <div class="sts-panel" style="padding:26px 46px;display:flex;flex-direction:column;gap:9px;min-width:460px">
+      <div class="srow"><span>冒险次数</span><b>${s.runs}</b></div>
+      <div class="srow"><span>登顶次数</span><b style="color:#8ee888">${s.wins}</b></div>
+      <div class="srow"><span>胜率</span><b>${winRate}%</b></div>
+      <div class="srow"><span>最高层数</span><b style="color:#ffd980">${s.bestFloor}</b></div>
+      <div class="srow"><span>累计击杀</span><b>${s.totalKills}</b></div>
+      <div class="srow"><span>累计精英</span><b>${s.totalElites}</b></div>
+      <div class="srow"><span>累计金币</span><b style="color:#ffd97a">${s.totalGold}</b></div>
+      <div class="sts-title" style="font-size:16px;color:#c8a878;letter-spacing:3px;margin-top:8px">—— 各角色 ——</div>
+      ${CHARACTERS.map(charRow).join('')}
+    </div>
+    <button class="sts-btn sts-title" data-act="gotoMenu" data-screen="title" style="font-size:20px;padding:10px 60px">返 回</button>
+  </div>
+</div>`
+}
+
+// ---- 制作名单 ----
+function rCredits(): string {
+  return `<div class="screen bg-cover" style="background-image:url('${A('bg/combat.jpg')}')">
+  <div class="shade" style="background:rgba(6,3,2,.7)"></div>
+  <div class="center-col" style="padding-top:0;gap:12px">
+    <div class="sts-title" style="font-size:32px;color:#ffd980;letter-spacing:6px">制 作 名 单</div>
+    <div class="sts-panel sts-body" style="padding:28px 52px;max-width:560px;color:#c8b090;font-size:15px;line-height:2;text-align:center">
+      <b style="color:#e8d8b8">Web 复刻版</b><br>基于 Mega Crit Games 的《杀戮尖塔》玩法复刻<br>仅供学习交流使用 · 请支持正版原作<br>
+      <b style="color:#e8d8b8">技术</b><br>原生 JS · Zustand · Web Animations · PeerJS 联机<br>
+      <b style="color:#e8d8b8">开源</b><br>github.com/43aquaris/webslaythespire</div>
+    <button class="sts-btn sts-title" data-act="gotoMenu" data-screen="title" style="font-size:20px;padding:10px 60px">返 回</button>
+  </div>
+</div>`
+}
+
+// ---- 联机大厅 ----
+function rMpLobby(): string {
+  const st = g()
+  const n = st.net
+  if (!n.role) {
+    const s = loadSettings()
+    return `<div class="screen bg-cover" style="background-image:url('${A('bg/combat.jpg')}')">
+    <div class="shade" style="background:rgba(6,3,2,.64)"></div>
+    <div class="center-col" style="padding-top:0;gap:16px">
+      <div class="sts-title" style="font-size:34px;color:#ffd980;letter-spacing:8px">联 机 合 作</div>
+      <div class="sts-body" style="color:#c8b090;font-size:15px;line-height:1.9;max-width:480px;text-align:center">
+        仿照《杀戮尖塔 2》的合作模式：与好友一起攀登尖塔。<br>共享地图与敌人，各自拥有独立的牌组、生命与能量；<br>轮流行动，共同战斗（P2P 直连，无需服务器）。</div>
+      <div class="row" style="gap:10px"><span class="sts-body" style="color:#c8b090;font-size:15px">昵称</span>
+        <input class="sts-body" id="mp-name" value="${esc(s.playerName)}" maxlength="10" data-input="mpName"
+          style="background:rgba(0,0,0,.5);border:1.5px solid #6b4a2e;border-radius:8px;color:#e8d8b8;padding:8px 12px;font-size:15px;width:170px"></div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px">
+        <button class="sts-btn sts-title" data-act="mpCreate" style="font-size:22px;letter-spacing:4px;padding:10px 66px">创 建 房 间</button>
+        <div class="row" style="gap:8px">
+          <input class="sts-body" id="mp-code" placeholder="房间码" maxlength="6" data-input="mpCode"
+            style="background:rgba(0,0,0,.5);border:1.5px solid #6b4a2e;border-radius:8px;color:#e8d8b8;padding:8px 12px;font-size:17px;width:140px;letter-spacing:3px;text-align:center;text-transform:uppercase">
+          <button class="sts-btn sts-body" data-act="mpJoin" style="font-size:14px;padding:8px 16px">加入房间</button>
+        </div>
+      </div>
+      <button class="sts-btn sts-body" data-act="gotoMenu" data-screen="title" style="font-size:15px;padding:6px 28px;margin-top:8px">返回主菜单</button>
+      ${n.error ? `<div class="sts-body" style="color:#ff9a8a;font-size:14px">${esc(n.error)}</div>` : ''}
+    </div>
+  </div>`
+  }
+  const isHost = n.role === 'host'
+  const myChar = isHost ? n.lobby.hostChar : n.lobby.guestChar
+  const otherName = n.peerName || '等待加入…'
+  const both = !!(n.lobby.hostChar && n.lobby.guestChar)
+  const slot = (title: string, char: string | null, pickable: boolean, active: boolean) => `
+    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;opacity:${active ? 1 : 0.55}">
+      <div class="sts-body" style="color:#e8d8b8;font-size:15px">${esc(title)}</div>
+      ${char
+        ? `<img src="${A('hero/' + char + '.png')}" style="width:190px;height:133px;object-fit:contain;border-radius:12px;border:3px solid ${CHAR_COLOR[char]};background:radial-gradient(ellipse at 50% 70%,rgba(40,26,14,.9),rgba(10,6,4,.95))">`
+        : `<div class="sts-body" style="width:190px;height:133px;border-radius:12px;border:3px dashed #5a4230;display:flex;align-items:center;justify-content:center;color:#8a7458;font-size:14px">${active ? '选择角色' : '未加入'}</div>`}
+      ${pickable ? `<div class="row" style="gap:5px">${CHARACTERS.map(c => `<button data-act="lobbyPick" data-char="${c}" data-tip="${CHARACTER_INFO[c].name}" style="width:25px;height:25px;border-radius:50%;border:2px solid ${char === c ? '#ffd980' : CHAR_COLOR[c]};background:radial-gradient(circle at 40% 35%,${CHAR_COLOR[c]},rgba(10,8,6,.95));cursor:pointer;padding:0"></button>`).join('')}</div>` : ''}
+      <div class="sts-title" style="font-size:16px;color:${char ? '#ffd980' : '#8a7458'};letter-spacing:2px">${char ? CHARACTER_INFO[char].name : '？？？'}</div>
+    </div>`
+  return `<div class="screen bg-cover" style="background-image:url('${A('bg/combat.jpg')}')">
+  <div class="shade" style="background:rgba(6,3,2,.64)"></div>
+  <div class="center-col" style="padding-top:0;gap:16px">
+    <div class="sts-title" style="font-size:30px;color:#ffd980;letter-spacing:6px">合 作 大 厅</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+      <div class="sts-body" style="color:#a89070;font-size:13px">房间码（告诉你的好友）</div>
+      <div class="sts-title" style="font-size:44px;color:#8ee8ff;letter-spacing:12px;text-shadow:0 0 24px rgba(100,200,255,.5),3px 3px 0 #000">${n.roomCode}</div>
+    </div>
+    <div class="row" style="gap:52px;align-items:center">
+      ${slot(n.myName + '（你）', myChar, true, true)}
+      <div class="sts-title" style="font-size:26px;color:#8a7458">VS</div>
+      ${slot(otherName, isHost ? n.lobby.guestChar : n.lobby.hostChar, false, n.connected)}
+    </div>
+    <div class="sts-body" style="color:${n.connected ? '#8ee888' : '#c8a878'};font-size:14px">
+      ${!n.connected ? (isHost ? '等待好友加入…（把房间码发给对方）' : '正在连接房间…')
+        : both ? (isHost ? '双方已就绪，可以出发！' : '等待房主出发…')
+        : (isHost ? '等待双方选择角色…' : '选择你的角色，等待房主出发…')}</div>
+    <div class="row" style="gap:22px">
+      ${isHost ? `<button class="sts-btn sts-title" data-act="lobbyStart" ${n.connected && both ? '' : 'disabled'} style="font-size:23px;letter-spacing:6px;padding:12px 64px;${n.connected && both ? '' : 'opacity:.4;cursor:not-allowed'}">出 发</button>` : ''}
+      <button class="sts-btn sts-body" data-act="mpLeave" style="font-size:15px;padding:8px 24px">离开房间</button>
+    </div>
+    ${n.error ? `<div class="sts-body" style="color:#ff9a8a;font-size:14px">${esc(n.error)}</div>` : ''}
+  </div>
+</div>`
+}
+
+// ---- 幕间过场 ----
+const ACT_NAMES: Record<number, string> = { 2: '第 二 幕 · 城 堡', 3: '第 三 幕 · 尖 峰', 4: '终 章 · 腐 朽 心 脏' }
+function rActTransition(run: RunState): string {
+  const act = run.nextActInfo || run.act
+  return `<div class="screen center-col" style="background:radial-gradient(ellipse at 50% 40%,#1a1208 0%,#0a0603 55%,#030201 100%);cursor:pointer" data-act="continueAct">
+  <div class="sts-title" style="font-size:60px;color:#ffd980;letter-spacing:14px;text-shadow:4px 4px 0 #000,0 0 90px rgba(255,190,80,.35);animation:actIn 1.1s ease-out both">${ACT_NAMES[act] || `第 ${act} 幕`}</div>
+  <div class="sts-body" style="color:#a89070;font-size:16px;letter-spacing:3px;margin-top:18px">联机模式下全体队员已获得治疗 —— 点击继续</div>
+</div>`
+}
+
+function rTitle(): string {
+  return rMainMenu()
 }
 
 // ============ 涅奥祝福（大鲸鱼开局事件） ============
@@ -435,10 +637,22 @@ const NEOW_GREETING: Record<string, string> = {
 }
 function rNeow(run: RunState): string {
   if (!run.neow) return ''
-  const chosen = run.neow.chosen
-  const opts = run.neow.options.map((opt, i) => {
+  const mp = run.players.length > 1
+  const st = g()
+  const chooserIdx = mp ? (run.neow.chooserIdx ?? 0) : 0
+  const isMyChoice = !mp || chooserIdx === st.net.myIdx
+  const chosen = mp ? (run.neow.mpChosen?.[chooserIdx] ?? null) : run.neow.chosen
+  const options = mp ? (run.neow.mpOptions?.[chooserIdx] ?? []) : run.neow.options
+  const chooserName = mp ? (run.players[chooserIdx]?.name || '') : ''
+  const greeting = mp
+    ? (isMyChoice ? `「${esc(chooserName)}，轮到你了——选择你的祝福。」` : `「${esc(chooserName)} 正在选择祝福…」`)
+    : `「<span style="color:#ffd980">${NEOW_GREETING[run.character] || '旅人'}</span>，我将赐予你一份祝福——选择吧。」`
+  const waitBanner = mp && !isMyChoice
+    ? `<div class="sts-title" style="font-size:21px;color:#ffe9a0;display:flex;align-items:center;gap:10px;margin-bottom:14px"><span class="wait-dot">●</span> 等待 ${esc(chooserName)} 选择祝福…</div>` : ''
+  const opts = options.map((opt, i) => {
     const picked = chosen === opt.id
-    return `<button class="neow-opt ${picked ? 'picked' : ''} ${chosen ? 'off' : ''}" data-act="chooseNeow" data-idx="${i}" ${chosen && !picked ? 'disabled' : ''}>
+    const dis = !!chosen || (mp && !isMyChoice)
+    return `<button class="neow-opt ${picked ? 'picked' : ''} ${dis ? 'off' : ''}" data-act="chooseNeow" data-idx="${i}" ${dis && !picked ? 'disabled' : ''}>
       <div class="sts-title" style="font-size:18px;color:#ffd980">${esc(opt.title)}</div>
       <div class="sts-body" style="font-size:13px;color:#c8b898;line-height:1.6">${esc(opt.desc)}</div>
     </button>`
@@ -448,7 +662,8 @@ function rNeow(run: RunState): string {
   <div class="center-col" style="padding-top:8px">
     <img src="${A('neow/neow.png')}" alt="涅奥" draggable="false" style="width:400px;max-width:46vw;object-fit:contain;filter:drop-shadow(0 20px 36px rgba(0,0,0,.9)) drop-shadow(0 0 50px rgba(90,140,255,.25));animation:neowFloat 4s ease-in-out infinite">
     <div class="sts-title" style="font-size:38px;color:#b8d0ff;text-shadow:3px 3px 0 #000,0 0 44px rgba(80,120,255,.5);letter-spacing:8px">涅奥</div>
-    <div class="sts-body" style="color:#a8b8d8;font-size:15px;line-height:1.8;max-width:620px;margin:4px 0 14px">巨鲸涅奥在尖塔脚下苏醒。<br>「<span style="color:#ffd980">${NEOW_GREETING[run.character] || '旅人'}</span>，我将赐予你一份祝福——选择吧。」</div>
+    <div class="sts-body" style="color:#a8b8d8;font-size:15px;line-height:1.8;max-width:620px;margin:4px 0 14px">巨鲸涅奥在尖塔脚下苏醒。<br>${greeting}</div>
+    ${waitBanner}
     <div class="neow-row">${opts}</div>
   </div>
 </div>`
@@ -472,14 +687,28 @@ function combatBgKey(act: number): string {
 
 function buildCombatScreen(run: RunState): string {
   const hero = run.character
-  return `<div class="screen bg-cover" id="combat-screen" data-bg="1" style="background-image:url('${A(combatBgKey(run.act))}')">
-  ${topHudShell()}
-  <div class="player-zone">
+  const mp = run.players.length > 1
+  const playerZone = mp
+    ? `<div class="player-zone" style="left:26px;bottom:88px;flex-direction:row;gap:10px;align-items:flex-end">
+      ${run.players.map((p, i) => `
+      <div data-hidx="${i}" id="hero-slot-${i}" style="display:flex;flex-direction:column;align-items:center;gap:4px">
+        <div class="player-fx-slot" id="player-fx-slot-${i}" style="width:200px;height:52px"></div>
+        <div id="player-extra-${i}"></div>
+        <div id="player-status-${i}"></div>
+        <img src="${A('hero/' + p.character + '.png')}" alt="" id="hero-img-${i}" style="width:200px;filter:drop-shadow(0 8px 10px rgba(0,0,0,.5))">
+        <div class="sts-body" id="hero-name-${i}" style="font-size:12px;font-weight:700"></div>
+      </div>`).join('')}
+      </div>`
+    : `<div class="player-zone">
     <div class="player-fx-slot" id="player-fx-slot"></div>
     <div id="player-extra"></div>
     <div id="player-status"></div>
     <img src="${A('hero/' + hero + '.png')}" alt="" style="width:240px;filter:drop-shadow(0 8px 10px rgba(0,0,0,.5))">
-  </div>
+  </div>`
+  return `<div class="screen bg-cover" id="combat-screen" data-bg="1" style="background-image:url('${A(combatBgKey(run.act))}')">
+  ${topHudShell()}
+  <div id="mp-wait-banner"></div>
+  ${playerZone}
   <div class="enemies-row" id="enemies-row"></div>
   <div id="hint-holder"></div>
   <button class="pile-btn" id="pile-draw" data-act="openPile" data-pile="draw" style="left:26px;bottom:158px"><b>0</b><span>抽牌堆</span></button>
@@ -496,7 +725,11 @@ function buildCombatScreen(run: RunState): string {
 function intentHtml(e: EnemyInstance, c: CombatState): string {
   if (!e.intent || e.dying) return ''
   const it = e.intent
-  const { dmg, times } = enemyDisplayDamage(e, c.player.statuses)
+  const mp = c.players.length > 1
+  const tgtIdx = mp ? (it.targetIdx ?? 0) : 0
+  const TP = c.players[tgtIdx] || AP(c)
+  const { dmg, times } = enemyDisplayDamage(e, TP.statuses, TP.stance)
+  const tgtLabel = mp && it.type.startsWith('attack') ? `<span class="sts-body" style="font-size:12px;font-weight:700;color:${tgtIdx === g().net.myIdx ? '#ff6a50' : '#6ab0ff'};text-shadow:1px 1px 0 #000">▶${tgtIdx === g().net.myIdx ? '你' : '队友'}</span>` : ''
   const map: Record<string, string> = {
     attack: 'attack3', attackDebuff: 'attack5', attackDefend: 'attack4',
     defend: 'defend', buff: 'buff', debuff: 'debuff', strongDebuff: 'debuffStrong',
@@ -508,7 +741,7 @@ function intentHtml(e: EnemyInstance, c: CombatState): string {
   return `<div class="intent" data-tip="<b>${esc(mvName)}</b>">
     ${isAtk ? `<img src="${A('intent/' + (map[it.type] || 'unknown') + '.png')}" width="40" height="40">
       <span class="dmg-num sts-num">${dmg}${times > 1 ? `<small>x${times}</small>` : ''}</span>
-      ${(it.type === 'attackDebuff' || it.type === 'attackDefend') ? `<img src="${A('intent/' + (it.type === 'attackDebuff' ? 'debuff' : 'defend') + '.png')}" width="28" height="28">` : ''}`
+      ${(it.type === 'attackDebuff' || it.type === 'attackDefend') ? `<img src="${A('intent/' + (it.type === 'attackDebuff' ? 'debuff' : 'defend') + '.png')}" width="28" height="28">` : ''}${tgtLabel}`
     : `<img src="${A('intent/' + (map[it.type] || 'unknown') + '.png')}" width="42" height="42">`}
   </div>`
 }
@@ -558,11 +791,12 @@ function updateHand(run: RunState) {
   if (!row || !run.combat) return
   const c = run.combat
   const st = g()
-  const n = c.hand.length
+  const n = AP(c).hand.length
   const mid = (n - 1) / 2
-  const playableNow = c.phase === 'player' && !st.busy && !c.combatOver
+  const myTurnH = c.players.length === 1 || st.net.myIdx === c.activeIdx
+  const playableNow = c.phase === 'player' && !st.busy && !c.combatOver && myTurnH
   const seen = new Set<string>()
-  c.hand.forEach((card, i) => {
+  AP(c).hand.forEach((card, i) => {
     seen.add(card.uid)
     let el = row.querySelector(`[data-cuid="${card.uid}"]`) as HTMLElement | null
     if (!el) {
@@ -585,13 +819,13 @@ function updateHand(run: RunState) {
     if (inner.className !== innerCls) inner.className = innerCls
     const cardEl = inner.firstElementChild as HTMLElement
     // 卡面内容仅在升级/费用变化时重建（避免图片重载闪动）
-    const sig = `${card.id}|${card.upgraded}|${cardCost(card, c.player.hpLostThisCombat)}`
+    const sig = `${card.id}|${card.upgraded}|${cardCost(card, AP(c).hpLostThisCombat)}`
     if ((cardEl as any).__sig !== sig) {
       (cardEl as any).__sig = sig
       cardEl.innerHTML = cardInner(card, 168)
     }
-    const cost = cardCost(card, c.player.hpLostThisCombat)
-    const enough = cost === -1 ? true : c.player.energy >= Math.max(0, cost)
+    const cost = cardCost(card, AP(c).hpLostThisCombat)
+    const enough = cost === -1 ? true : AP(c).energy >= Math.max(0, cost)
     const cls = 'sts-card ' + (playableNow && enough ? 'playable' : 'dimmed')
     if (cardEl.className !== cls) cardEl.className = cls
   })
@@ -601,12 +835,13 @@ function updateHand(run: RunState) {
 }
 
 // 姿态徽章 + 宝球行（player-extra 区域差异更新）
-function playerExtraHtml(run: RunState): string {
+function playerExtraHtml(run: RunState, pidx?: number): string {
   const c = run.combat
   if (!c) return ''
-  const p = c.player
+  const p = pidx !== undefined ? c.players[pidx] : AP(c)
+  const character = pidx !== undefined ? run.players[pidx]?.character : run.character
   let html = ''
-  if (run.character === 'watcher') {
+  if (character === 'watcher') {
     const stance = p.stance || 'none'
     const mantra = p.mantra || 0
     const st = STANCE_STYLE[stance]
@@ -617,7 +852,7 @@ function playerExtraHtml(run: RunState): string {
       html += `<div class="mantra-badge sts-body" data-tip="<b>真言</b><br>积攒12点后进入神格姿态。">真言 ${mantra}/12</div>`
     }
   }
-  if (run.character === 'defect') {
+  if (character === 'defect') {
     const orbs = p.orbs || []
     const slots = p.orbSlots ?? 3
     const cells: string[] = []
@@ -646,23 +881,61 @@ function updateCombatScreen(run: RunState) {
     const bg = A(combatBgKey(run.act))
     if ((cs as any).__bg !== bg) { (cs as any).__bg = bg; cs.style.backgroundImage = `url('${bg}')` }
   }
-  setHtml(document.getElementById('player-extra'), playerExtraHtml(run))
-  setHtml(document.getElementById('player-status'), statusRow(c.player.statuses, 30))
+  const mp = c.players.length > 1
+  if (mp) {
+    // 联机：双英雄状态更新（骨架已含双份结构）
+    run.players.forEach((rp, i) => {
+      const pc = c.players[i]
+      const slot = document.getElementById(`hero-slot-${i}`)
+      if (!slot || !pc) return
+      const isActive = c.activeIdx === i && !pc.dead
+      const filter = pc.dead || rp.hp <= 0 ? 'grayscale(1) brightness(.5)' : (isActive ? 'none' : 'brightness(.62)')
+      const img = document.getElementById(`hero-img-${i}`) as HTMLElement | null
+      if (img && img.style.filter !== filter) img.style.filter = filter
+      slot.style.boxShadow = isActive ? '0 0 22px rgba(255,217,128,.28)' : 'none'
+      slot.style.borderRadius = '14px'
+      setHtml(document.getElementById(`player-extra-${i}`), playerExtraHtml(run, i))
+      setHtml(document.getElementById(`player-status-${i}`), statusRow(pc.statuses, 26))
+      const nm = document.getElementById(`hero-name-${i}`)
+      if (nm) {
+        const deadTxt = pc.dead || rp.hp <= 0 ? '（阵亡）' : ''
+        const txt = `${rp.name}${i === st.net.myIdx ? '（你）' : ''}${deadTxt}`
+        setText(nm, txt)
+        nm.style.color = i === st.net.myIdx ? '#8ee8ff' : '#c8a878'
+      }
+    })
+    // 等待横幅
+    const myTurn = st.net.myIdx === c.activeIdx
+    setHtml(document.getElementById('mp-wait-banner'), (c.phase === 'player' && !myTurn && !c.combatOver)
+      ? `<div class="sts-title" style="position:absolute;top:64px;left:50%;transform:translateX(-50%);z-index:70;font-size:19px;color:#ffe9a0;text-shadow:2px 2px 0 #000;letter-spacing:3px;display:flex;align-items:center;gap:8px"><span class="wait-dot">●</span> 等待 ${esc(run.players[c.activeIdx]?.name || '队友')} 行动…</div>` : '')
+  } else {
+    setHtml(document.getElementById('player-extra'), playerExtraHtml(run))
+    setHtml(document.getElementById('player-status'), statusRow(AP(c).statuses, 30))
+  }
   updateEnemies(run)
   updateHand(run)
-  setText(document.getElementById('energy-num'), String(c.player.energy))
+  // 能量球：按活动玩家角色换色（键控，避免闪烁）
+  const orbImg = document.querySelector('#energy-box img') as HTMLImageElement | null
+  if (orbImg) {
+    const oc = ENERGY_ORB[run.players[c.activeIdx]?.character || run.character] || 'redEnergy'
+    const url = A('frames/' + oc + '.png')
+    if (orbImg.dataset.orb !== oc) { orbImg.dataset.orb = oc; orbImg.src = url }
+  }
+  setText(document.getElementById('energy-num'), String(AP(c).energy))
   const pd = document.getElementById('pile-draw')
-  if (pd) setText(pd.querySelector('b'), String(c.drawPile.length))
+  if (pd) setText(pd.querySelector('b'), String(AP(c).drawPile.length))
   const pc = document.getElementById('pile-discard')
-  if (pc) setText(pc.querySelector('b'), String(c.discardPile.length))
-  setHtml(document.getElementById('exhaust-holder'), c.exhaustPile.length > 0
-    ? `<button class="pile-btn small" data-act="openPile" data-pile="exhaust" style="right:26px;bottom:88px"><b>${c.exhaustPile.length}</b><span>消耗堆</span></button>` : '')
+  if (pc) setText(pc.querySelector('b'), String(AP(c).discardPile.length))
+  setHtml(document.getElementById('exhaust-holder'), AP(c).exhaustPile.length > 0
+    ? `<button class="pile-btn small" data-act="openPile" data-pile="exhaust" style="right:26px;bottom:88px"><b>${AP(c).exhaustPile.length}</b><span>消耗堆</span></button>` : '')
   const et = document.getElementById('end-turn-btn') as HTMLButtonElement | null
   if (et) {
-    const dis = c.phase !== 'player' || st.busy
+    const mpE = c.players.length > 1
+    const myTurnE = !mpE || st.net.myIdx === c.activeIdx
+    const dis = c.phase !== 'player' || st.busy || !myTurnE
     et.disabled = dis || c.combatOver
     et.style.opacity = dis ? '0.5' : '1'
-    setText(et, c.phase === 'player' ? '结束回合' : '敌方回合…')
+    setText(et, c.phase === 'player' ? (mpE && !myTurnE ? '队友回合…' : '结束回合') : '敌方回合…')
   }
   setHtml(document.getElementById('hint-holder'), (st.selectedCardUid || st.selectedPotionIdx !== null)
     ? `<div class="target-hint sts-body">${st.selectedPotionIdx !== null
@@ -784,10 +1057,17 @@ function buildRewardScreen(): string {
 function updateRewardScreen(run: RunState) {
   const r = run.reward
   if (!r) return
+  const st = g()
+  const mp = run.players.length > 1
+  const myIdx = mp ? st.net.myIdx : 0
+  const myGoldTag = mp ? `gold_${myIdx}` : 'gold'
+  const myCardTag = `mpcard_${myIdx}`
+  const myCards = mp ? (r.mpCards?.[myIdx] ?? []) : r.cards
+  const tookMyCard = mp ? r.taken.includes(myCardTag) : r.taken.some(t => t.startsWith('card_'))
   const rows: string[] = []
   if (r.gold !== undefined) {
-    rows.push(`<button class="reward-row ${r.taken.includes('gold') ? 'done' : ''}" data-act="takeGold">
-      <img src="${A('mapicons/treasure.png')}" width="42" height="42"><span class="gold-text">${r.gold} 金币</span>${r.taken.includes('gold') ? '' : '<i>点击获取</i>'}</button>`)
+    rows.push(`<button class="reward-row ${r.taken.includes(myGoldTag) ? 'done' : ''}" data-act="takeGold">
+      <img src="${A('mapicons/treasure.png')}" width="42" height="42"><span class="gold-text">${r.gold} 金币</span>${r.taken.includes(myGoldTag) ? '' : '<i>点击获取</i>'}</button>`)
   }
   if (r.potion && !r.taken.includes('potion')) {
     rows.push(`<button class="reward-row" data-act="takePotion">${potionHtml(r.potion, 0, false)}<span class="sts-body">${POTIONS[r.potion]?.name}</span><i>点击获取</i></button>`)
@@ -801,24 +1081,22 @@ function updateRewardScreen(run: RunState) {
   const holder = document.getElementById('reward-cards')
   const label = document.getElementById('reward-label')
   if (!holder || !label) return
-  if (r.cards?.length) {
-    setText(label, '选择一张卡牌加入牌组（或跳过）')
-    const tookAny = r.taken.some(t => t.startsWith('card_'))
+  if (myCards?.length) {
+    setText(label, mp ? '你的卡牌奖励（队友独立选择）' : '选择一张卡牌加入牌组（或跳过）')
     const seen = new Set<string>()
-    r.cards.forEach((cid, i) => {
+    myCards.forEach((cid, i) => {
       seen.add(cid)
       let el = holder.querySelector(`[data-cid="${cid}"]`) as HTMLElement | null
       if (!el) {
         el = document.createElement('div')
         el.dataset.cid = cid
         el.style.animationDelay = `${i * 0.12}s`
-        el.innerHTML = cardHtml({ uid: 'r_' + cid, id: cid, upgraded: 0 }, 165) + `<span class="taken-mark sts-title" style="display:none">已选</span>`
+        el.innerHTML = cardHtml({ uid: 'r_' + cid, id: cid, upgraded: 0 }, mp ? 150 : 165) + `<span class="taken-mark sts-title" style="display:none">已选</span>`
         holder.appendChild(el)
       }
-      const taken = r.taken.includes('card_' + cid)
-      const locked = tookAny && !taken
-      el.className = `card-in ${taken || locked ? 'taken' : ''}`
-      if (taken || locked) delete el.dataset.act
+      const taken = tookMyCard
+      el.className = `card-in ${taken ? 'taken' : ''}`
+      if (taken) delete el.dataset.act
       else el.dataset.act = 'takeCard'
       const tm = el.querySelector('.taken-mark') as HTMLElement
       if (tm) tm.style.display = taken ? '' : 'none'
@@ -826,9 +1104,34 @@ function updateRewardScreen(run: RunState) {
     holder.querySelectorAll('[data-cid]').forEach(el => {
       if (!seen.has((el as HTMLElement).dataset.cid!)) el.remove()
     })
+    // 联机：跳过按钮 + 等待提示
+    const skipEl = document.getElementById('reward-mp-skip')
+    if (skipEl) skipEl.remove()
+    if (mp && !tookMyCard) {
+      const btnS = document.createElement('button')
+      btnS.id = 'reward-mp-skip'
+      btnS.className = 'sts-btn sts-body'
+      btnS.style.cssText = 'font-size:13px;padding:5px 22px;margin-top:6px'
+      btnS.dataset.act = 'mpSkipCard'
+      btnS.textContent = '跳过卡牌'
+      holder.parentElement?.appendChild(btnS)
+    }
   } else {
     holder.innerHTML = ''
     setText(label, '')
+    document.getElementById('reward-mp-skip')?.remove()
+  }
+  // 联机等待提示
+  const waitEl = document.getElementById('reward-mp-wait')
+  if (waitEl) waitEl.remove()
+  if (mp && !run.players.every((_, i) => r.mpDone?.[i])) {
+    const w = document.createElement('div')
+    w.id = 'reward-mp-wait'
+    w.className = 'sts-body'
+    w.style.cssText = 'color:#ffe9a0;font-size:14px;display:flex;align-items:center;gap:8px;margin-top:4px'
+    w.innerHTML = '<span class="wait-dot">●</span> 等待队友确认…'
+    const pbtn = document.getElementById('reward-proceed')
+    pbtn?.parentElement?.appendChild(w)
   }
   const btn = document.getElementById('reward-proceed')
   if (btn) setText(btn, run.combat?.isBoss ? '继续' : '返回地图')
@@ -862,7 +1165,10 @@ function shopPriceTag(sold: boolean, price: number, gold: number): string {
 function updateShopScreen(run: RunState) {
   const shop = run.shop
   if (!shop) return
-  setText(document.getElementById('shop-gold'), `💰 ${run.gold}`)
+  const stS = g()
+  const mpS = run.players.length > 1
+  const meS = run.players[mpS ? stS.net.myIdx : 0] || run.players[0]
+  setText(document.getElementById('shop-gold'), mpS ? `💰 ${meS.gold}（队友 ${run.players[1 - (mpS ? stS.net.myIdx : 0)]?.gold ?? '-'}）` : `💰 ${run.gold}`)
   // 卡牌（键控）
   const cardsEl = document.getElementById('shop-cards')
   if (cardsEl) {
@@ -879,7 +1185,7 @@ function updateShopScreen(run: RunState) {
       el.className = `shop-card ${item.sold ? 'sold' : ''}`
       if (item.sold) delete el.dataset.act
       else el.dataset.act = 'buyCard'
-      setHtml(el.querySelector('.shop-price'), shopPriceTag(item.sold, item.price, run.gold))
+      setHtml(el.querySelector('.shop-price'), shopPriceTag(item.sold, item.price, meS.gold))
     })
   }
   // 遗物
@@ -900,7 +1206,7 @@ function updateShopScreen(run: RunState) {
       el.className = `sts-panel shop-item ${item.sold ? 'sold' : ''}`
       if (item.sold) delete el.dataset.act
       else { el.dataset.act = 'buyRelic'; el.dataset.idx = String(i) }
-      setHtml(el.querySelector('.shop-price'), shopPriceTag(item.sold, item.price, run.gold))
+      setHtml(el.querySelector('.shop-price'), shopPriceTag(item.sold, item.price, meS.gold))
     })
   }
   // 药水
@@ -921,7 +1227,7 @@ function updateShopScreen(run: RunState) {
       el.className = `sts-panel shop-item ${item.sold ? 'sold' : ''}`
       if (item.sold) delete el.dataset.act
       else { el.dataset.act = 'buyPotion'; el.dataset.idx = String(i) }
-      setHtml(el.querySelector('.shop-price'), shopPriceTag(item.sold, item.price, run.gold))
+      setHtml(el.querySelector('.shop-price'), shopPriceTag(item.sold, item.price, meS.gold))
     })
   }
   const rm = document.getElementById('shop-removal') as HTMLButtonElement | null
@@ -950,17 +1256,26 @@ function rBossRelic(run: RunState): string {
 }
 
 function rRest(run: RunState): string {
-  const canRest = !run.relics.includes('coffeeDripper')
-  const heal = Math.min(Math.floor(run.maxHp * 0.3), run.maxHp - run.hp)
+  const st = g()
+  const mp = run.players.length > 1
+  const myIdx = mp ? st.net.myIdx : 0
+  const me = run.players[myIdx] || run.players[0]
+  const myChoice = mp ? run.mpRest?.[myIdx] : undefined
+  const canRest = !me.relics.includes('coffeeDripper')
+  const heal = Math.min(Math.floor(me.maxHp * 0.3), me.maxHp - me.hp)
+  const mpStatus = mp ? `<div class="sts-body" style="color:#c8b090;font-size:14px;margin-bottom:10px">联机模式：各自选择，全员选好后结算
+    ${run.players.map((rp, i) => ` <span style="margin-left:10px;color:${run.mpRest?.[i] ? '#8fe89a' : '#a89070'}">${i === myIdx ? '你' : esc(rp.name)}：${run.mpRest?.[i] === 'rest' ? '休息✔' : run.mpRest?.[i] === 'smith' ? '锻造✔' : '待选…'}</span>`).join('')}</div>` : ''
+  const dim = (v: boolean) => v ? '' : 'opacity:.5;cursor:not-allowed;'
   return `<div class="screen rest-bg center-col">
   <img src="${A('mapicons/rest.png')}" width="140" height="140" style="filter:drop-shadow(0 0 30px rgba(255,150,40,.7))">
   <div class="big-title sts-title">篝火</div>
+  ${mpStatus}
   <div class="row-cards">
-    <button class="sts-panel choice-card ${canRest ? '' : 'dis'}" data-act="rest" data-r="rest">
+    <button class="sts-panel choice-card ${canRest && !myChoice ? '' : 'dis'}" data-act="rest" data-r="rest" style="${dim(canRest && !myChoice)}">
       <span style="font-size:44px">🛏️</span><div class="sts-title" style="font-size:22px;color:#ffd980">休息</div>
-      <div class="sts-body">回复 ${Math.floor(run.maxHp * 0.3)} 点生命值（上限的 30%）<br><span style="color:#8fe89a">当前可回复 ${heal} 点</span></div>
+      <div class="sts-body">回复 ${Math.floor(me.maxHp * 0.3)} 点生命值（上限的 30%）<br><span style="color:#8fe89a">当前可回复 ${heal} 点</span></div>
     </button>
-    <button class="sts-panel choice-card" data-act="rest" data-r="smith">
+    <button class="sts-panel choice-card ${!myChoice ? '' : 'dis'}" data-act="rest" data-r="smith" style="${dim(!myChoice)}">
       <span style="font-size:44px">⚒️</span><div class="sts-title" style="font-size:22px;color:#ffd980">锻造</div>
       <div class="sts-body">升级牌组中的一张牌</div>
     </button>
@@ -986,7 +1301,8 @@ function rEvent(run: RunState): string {
     <div class="sts-body event-desc">${esc(ev.desc)}</div>
     ${msg ? `<div class="sts-body" style="color:#8fe89a">${esc(msg)}</div>` : ''}
     <div class="event-choices">${ev.choices.map((ch: any, i: number) => {
-      const dis = (ch.effect === 'cleric_heal' && run.gold < 35) || (ch.effect === 'cleric_purify' && run.gold < 50)
+      const meE = run.players[run.players.length > 1 ? g().net.myIdx : 0] || run.players[0]
+      const dis = (ch.effect === 'cleric_heal' && meE.gold < 35) || (ch.effect === 'cleric_purify' && meE.gold < 50)
       return `<button class="sts-btn event-btn ${dis ? 'dis' : ''}" data-act="chooseEvent" data-idx="${i}">${esc(ch.text)}</button>`
     }).join('')}</div>
   </div>
@@ -996,7 +1312,7 @@ function rEvent(run: RunState): string {
 function rGameOver(run: RunState): string {
   const info = run.gameOverInfo!
   return `<div class="screen gameover-bg center-col">
-  <div class="sts-title" style="font-size:64px;color:${info.victory ? '#ffd980' : '#c85040'};text-shadow:4px 4px 0 #000">${info.victory ? '第一幕 通关！' : '你死了'}</div>
+  <div class="sts-title" style="font-size:64px;color:${info.victory ? '#ffd980' : '#c85040'};text-shadow:4px 4px 0 #000">${info.victory ? '登顶成功！' : '你死了'}</div>
   <div class="sts-panel" style="padding:30px;min-width:320px;display:flex;flex-direction:column;gap:12px">
     <div class="srow"><span>到达层数</span><b>${info.floor}</b></div>
     <div class="srow"><span>消灭怪物</span><b>${info.monstersSlain}</b></div>
@@ -1016,10 +1332,10 @@ let scryMarked: Set<string> = new Set()
 function overlayHtml(st: ReturnType<typeof g>): { html: string; sig: string } {
   const run = st.run
   if (!run) return { html: '', sig: '' }
-  if (run.combat?.pendingScry) {
+  if (run.combat && AP(run.combat).pendingScry) {
     // 预见：展示抽牌堆顶 N 张，点击标记弃置
-    const n = run.combat.pendingScry
-    const top = run.combat.drawPile.slice(-n)
+    const n = AP(run.combat).pendingScry!
+    const top = AP(run.combat).drawPile.slice(-n)
     const sig = `scry:${n}:${top.map(c => c.uid).join(',')}:${[...scryMarked].join(',')}`
     const cards = top.map((c, i) => `<div class="card-in scry-card ${scryMarked.has(c.uid) ? 'marked' : ''}" style="animation-delay:${Math.min(i, 8) * 0.06}s" data-act="scryToggle" data-uid="${c.uid}">${cardHtml(c, 150)}</div>`).join('')
     return {
@@ -1041,9 +1357,9 @@ function overlayHtml(st: ReturnType<typeof g>): { html: string; sig: string } {
     const pile = st.pileView
     const titles: Record<string, string> = { draw: '抽牌堆（随机排序）', discard: '弃牌堆', exhaust: '消耗堆', deck: '牌组' }
     let cards: CardInstance[] = []
-    if (pile === 'draw') cards = [...(run.combat?.drawPile ?? [])].reverse()
-    else if (pile === 'discard') cards = [...(run.combat?.discardPile ?? [])].reverse()
-    else if (pile === 'exhaust') cards = [...(run.combat?.exhaustPile ?? [])]
+    if (pile === 'draw') cards = [...(run.combat ? AP(run.combat).drawPile : [])].reverse()
+    else if (pile === 'discard') cards = [...(run.combat ? AP(run.combat).discardPile : [])].reverse()
+    else if (pile === 'exhaust') cards = [...(run.combat ? AP(run.combat).exhaustPile : [])]
     else cards = run.deck
     const sig = `pile:${pile}:${cards.length}`
     return {
@@ -1060,8 +1376,8 @@ function overlayHtml(st: ReturnType<typeof g>): { html: string; sig: string } {
   if (st.select) {
     const sel = st.select
     const ordered: CardInstance[] = sel.source === 'deck' ? run.deck
-      : sel.source === 'hand' ? (run.combat?.hand ?? [])
-        : (run.combat?.discardPile ?? [])
+      : sel.source === 'hand' ? (run.combat ? AP(run.combat).hand : [])
+        : (run.combat ? AP(run.combat).discardPile : [])
     const cards = ordered.filter(c => sel.cardUids.includes(c.uid))
     const cancellable = ['eventUpgrade', 'eventRemove', 'sacrifice', 'restSmith', 'shopRemove'].includes(sel.kind)
     const sig = `select:${sel.kind}:${sel.title}:${cards.length}`
@@ -1102,10 +1418,16 @@ function computeFxPositions() {
     const r = (el as HTMLElement).getBoundingClientRect()
     fxPositions[(el as HTMLElement).dataset.euid!] = { x: (r.left + r.width / 2 - sr.left) / k, y: (r.top + 20 - sr.top) / k }
   })
-  const pz = document.querySelector('.player-zone')
+  const pz = document.querySelector('.player-zone') || document.querySelector('[data-hidx="0"]')
   if (pz) {
     const r = pz.getBoundingClientRect()
     fxPositions['player'] = { x: (r.left + r.width / 2 - sr.left) / k, y: (r.top + 50 - sr.top) / k }
+    fxPositions['p0'] = fxPositions['player']
+    const pz1 = document.getElementById('player-fx-slot-1')
+    if (pz1) {
+      const r1 = pz1.getBoundingClientRect()
+      fxPositions['p1'] = { x: (r1.left + r1.width / 2 - sr.left) / k, y: (r1.top + 30 - sr.top) / k }
+    }
   }
 }
 
@@ -1196,7 +1518,7 @@ function renderNewFx() {
     renderedFx.add(f.id)
     // 受击闪白 / 屏幕震动（Web Animations API，不重建 DOM）
     if (f.kind === 'shake') {
-      if (f.target === 'player') screenShake()
+      if (f.target === 'player' || f.target === 'p0' || f.target === 'p1') screenShake()
       else enemyFlash(f.target)
     }
     if (f.kind === 'dmg') enemyFlash(f.target)
@@ -1226,7 +1548,16 @@ function renderNewFx() {
 let curScreenKey = ''
 
 function buildScreen(scr: string, run: RunState | null): string {
-  if (scr === 'title' || !run) return rTitle()
+  if (!run) {
+    // 菜单系列界面（无 run 时）
+    if (scr === 'charSelect') return rCharSelect()
+    if (scr === 'mpLobby') return rMpLobby()
+    if (scr === 'stats') return rStats()
+    if (scr === 'settings') return rSettings()
+    if (scr === 'credits') return rCredits()
+    return rMainMenu()
+  }
+  if (scr === 'actTransition') return rActTransition(run)
   if (scr === 'neow') return rNeow(run)
   if (scr === 'map') return buildMapScreen()
   if (scr === 'combat') return buildCombatScreen(run)
@@ -1241,14 +1572,20 @@ function sigScreen(sig: string, build: () => string) {
 }
 
 function updateScreen(scr: string, run: RunState | null) {
-  if (!run) return
+  if (!run) {
+    const st0 = g()
+    if (scr === 'mpLobby') sigScreen(`lobby:${st0.net.role}:${st0.net.status}:${st0.net.roomCode}:${st0.net.connected}:${st0.net.lobby?.hostChar}:${st0.net.lobby?.guestChar}:${st0.net.peerName}:${st0.net.error ?? ''}`, () => rMpLobby())
+    return
+  }
+  if (scr === 'mpLobby') sigScreen(`lobby:${g().net.role}:${g().net.status}:${g().net.roomCode}:${g().net.connected}:${g().net.lobby?.hostChar}:${g().net.lobby?.guestChar}:${g().net.peerName}:${g().net.error ?? ''}`, () => rMpLobby())
   if (scr === 'combat') updateCombatScreen(run)
   else if (scr === 'map') updateMapScreen(run)
   else if (scr === 'reward') updateRewardScreen(run)
   else if (scr === 'shop') updateShopScreen(run)
-  else if (scr === 'neow') sigScreen(`neow:${run.character}:${run.neow?.chosen ?? ''}:${run.neow?.options.map(o => o.id).join(',')}`, () => rNeow(run))
+  else if (scr === 'neow') sigScreen(`neow:${run.character}:${run.neow?.chosen ?? ''}:${run.neow?.options.map(o => o.id).join(',')}:${run.players.length}:${run.neow?.chooserIdx}:${run.neow?.mpOptions?.map(o => o.map(x => x.id).join('+')).join('|')}`, () => rNeow(run))
+  else if (scr === 'actTransition') { /* 骨架已含 data-act=continueAct，自动推进 */ autoAdvanceAct() }
   else if (scr === 'event') sigScreen(`event:${run.currentEvent}:${g().eventMsg}:${run.gold}`, () => rEvent(run))
-  else if (scr === 'rest') sigScreen(`rest:${run.hp}:${run.maxHp}:${run.relics.length}`, () => rRest(run))
+  else if (scr === 'rest') sigScreen(`rest:${run.hp}:${run.maxHp}:${run.relics.length}:${run.mpRest?.join(',') ?? ''}:${g().net.myIdx}`, () => rRest(run))
   else if (scr === 'treasure') sigScreen('treasure', () => rTreasure())
   else if (scr === 'bossRelic') sigScreen('bossRelic', () => rBossRelic(run))
   else if (scr === 'gameover' || scr === 'victory') sigScreen('gameover', () => rGameOver(run))
@@ -1257,7 +1594,7 @@ function updateScreen(scr: string, run: RunState | null) {
 function render() {
   const st = g()
   const run = st.run
-  const scr = run ? run.screen : 'title'
+  const scr = run ? run.screen : (st.menuScreen || 'title')
   updateMusic(st)
   if (scr !== curScreenKey) {
     curScreenKey = scr
@@ -1268,11 +1605,117 @@ function render() {
   computeFxPositions()
   renderNewFx()
   renderOverlays(st)
+  renderMenuOverlay(st)
+}
+
+// 幕间自动推进（2.6s 或点击）
+let actTimer: ReturnType<typeof setTimeout> | null = null
+function autoAdvanceAct() {
+  if (actTimer) return
+  actTimer = setTimeout(() => {
+    actTimer = null
+    const s = g()
+    if (s.run && s.run.screen === 'actTransition') g().continueFromActTransition()
+  }, 2600)
+}
+
+// ============ 游戏内齿轮菜单遮罩 ============
+function renderMenuOverlay(st: ReturnType<typeof g>) {
+  let el = document.getElementById('ingame-menu')
+  if (!st.run || !st.menuOpen) { el?.remove(); return }
+  if (el) return
+  el = document.createElement('div')
+  el.id = 'ingame-menu'
+  el.style.cssText = 'position:absolute;inset:0;z-index:900;background:rgba(4,2,1,.72);display:flex;align-items:center;justify-content:center'
+  const mp = st.run.players.length > 1
+  el.innerHTML = `<div class="sts-panel" style="padding:28px 50px;display:flex;flex-direction:column;gap:12px;min-width:360px;align-items:center">
+    <div class="sts-title" style="font-size:25px;color:#ffd980;letter-spacing:6px;margin-bottom:4px">菜 单</div>
+    <button class="sts-btn sts-title" data-act="closeMenu" style="font-size:19px;padding:9px 66px;min-width:240px">继 续 游 戏</button>
+    <button class="sts-btn sts-title" data-act="menuSettings" style="font-size:19px;padding:9px 66px;min-width:240px">设　　置</button>
+    ${mp
+      ? `<button class="sts-btn sts-title" data-act="mpLeaveMenu" style="font-size:19px;padding:9px 66px;min-width:240px;color:#ffa898">退出联机房间</button>`
+      : `<button class="sts-btn sts-title" data-act="abandon" data-confirm="0" id="abandon-btn" style="font-size:19px;padding:9px 66px;min-width:240px;color:#e8d8b8">放 弃 本 局</button>`}
+    <button class="sts-btn sts-title" data-act="backTitle" style="font-size:19px;padding:9px 66px;min-width:240px">${mp ? '返回主菜单（断开联机）' : '返回主菜单'}</button>
+    <div class="sts-body" style="color:#8a7458;font-size:12px;margin-top:2px">第 ${st.run.act} 幕 · 第 ${Math.max(1, st.run.visitedNodes.length)} 层${mp ? ' · 联机合作中' : ' · 进度已自动保存'}</div>
+  </div>`
+  stageEl.appendChild(el)
+}
+
+// ============ 全局键盘快捷键（还原原版：1-9 出牌 / E·空格·回车 结束回合 / Esc 菜单） ============
+function setupKeyboard() {
+  window.addEventListener('keydown', (e: KeyboardEvent) => {
+    const tgt = e.target as HTMLElement
+    if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA')) return
+    const st = g()
+    // Esc：菜单 / 取消
+    if (e.key === 'Escape') {
+      if (st.run) { g().toggleMenu(); e.preventDefault(); return }
+      return
+    }
+    const c = st.run?.combat
+    if (!c || c.phase !== 'player' || c.combatOver || st.busy) return
+    const mp = c.players.length > 1
+    const myTurn = !mp || st.net.myIdx === c.activeIdx
+    if (!myTurn) return
+    const P = AP(c)
+    if (/^[1-9]$/.test(e.key)) {
+      const card = P.hand[Number(e.key) - 1]
+      if (!card) return
+      const def = CARDS[card.id]
+      const living = c.enemies.filter(en => !en.dying && en.hp > 0)
+      if (def.target === 'enemy' && living.length > 1) { g().clickCard(card.uid); return }
+      g().playCard(card.uid, def.target === 'enemy' ? living[0]?.uid ?? null : null)
+      e.preventDefault()
+      return
+    }
+    if (e.key === 'e' || e.key === 'E' || e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault()
+      g().endTurn()
+    }
+  })
 }
 
 // ============ 事件委托 ============
 const ACTIONS: Record<string, (el: HTMLElement) => void> = {
   startRun: () => g().startRun(selectedChar),
+  gotoMenu: (el) => g().gotoMenuScreen(el.dataset.screen as any),
+  continueRun: () => g().continueRun(),
+  closeMenu: () => g().toggleMenu(false),
+  menuSettings: () => {
+    // 菜单内快捷设置：切换面板显示
+    const panel = document.getElementById('ingame-menu-settings')
+    if (panel) panel.style.display = panel.style.display === 'none' ? 'flex' : 'none'
+  },
+  abandon: (el) => {
+    if (el.dataset.confirm !== '1') {
+      el.dataset.confirm = '1'
+      setText(el, '确认放弃本局？')
+      setTimeout(() => { el.dataset.confirm = '0'; setText(el, '放 弃 本 局') }, 2500)
+      return
+    }
+    g().abandonRun()
+  },
+  mpLeaveMenu: () => g().netLeave(),
+  continueAct: () => g().continueFromActTransition(),
+  fullscreen: () => {
+    const doc = document as any
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+    else document.documentElement.requestFullscreen().catch(() => {})
+  },
+  mpCreate: () => {
+    const name = (document.getElementById('mp-name') as HTMLInputElement)?.value?.trim() || loadSettings().playerName
+    g().netCreateRoom(name)
+  },
+  mpJoin: () => {
+    const name = (document.getElementById('mp-name') as HTMLInputElement)?.value?.trim() || loadSettings().playerName
+    const code = (document.getElementById('mp-code') as HTMLInputElement)?.value?.trim() || ''
+    if (code.length < 4) return
+    g().netJoinRoom(name, code)
+  },
+  mpLeave: () => g().netLeave(),
+  lobbyPick: (el) => g().lobbyPickChar(el.dataset.char as any),
+  lobbyStart: () => g().lobbyStart(),
+  mpSkipCard: () => g().mpSkipCard(),
   pickChar: (el) => {
     const c = el.dataset.char as CharacterId
     if (c && CHARACTER_INFO[c]) {
@@ -1388,6 +1831,18 @@ function setupControls() {
   const wrap = document.createElement('div')
   wrap.style.cssText = 'position:absolute;top:10px;right:10px;z-index:500;display:flex;gap:6px;align-items:center'
 
+  // 齿轮菜单按钮（游戏内）
+  const gearBtn = document.createElement('button')
+  gearBtn.className = 'sts-btn'
+  gearBtn.style.cssText = 'font-size:15px;padding:4px 10px;min-width:38px'
+  gearBtn.textContent = '⚙'
+  gearBtn.title = '菜单 (Esc)'
+  gearBtn.addEventListener('click', () => {
+    const st = g()
+    if (st.run) st.toggleMenu(true)
+  })
+  wrap.appendChild(gearBtn)
+
   // 全屏按钮
   const fsBtn = document.createElement('button')
   fsBtn.className = 'sts-btn'
@@ -1450,12 +1905,27 @@ function setupControls() {
   })
 }
 
+// ============ 输入框事件（昵称/房间码/音量） ============
+document.addEventListener('input', (e) => {
+  const el = e.target as HTMLElement
+  const kind = el.dataset?.input
+  if (kind === 'mpName') savePlayerName((el as HTMLInputElement).value.trim().slice(0, 10))
+  if (kind === 'mpCode') { (el as HTMLInputElement).value = (el as HTMLInputElement).value.toUpperCase() }
+  if (kind === 'musicVol') {
+    const v = Number((el as HTMLInputElement).value)
+    music.setVolume(v)
+    const lb = document.getElementById('vol-label')
+    if (lb) setText(lb, String(Math.round(v * 100)))
+  }
+})
+
 // ============ 启动 ============
 setupStage()
 setupControls()
+setupKeyboard()
 useGame.subscribe(render)
 render()
-console.log('[STS standalone] 游戏就绪')
+console.log('[STS standalone] 游戏就绪 v1.4（单人 + 联机合作）')
 
 
 

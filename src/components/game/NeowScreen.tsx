@@ -1,5 +1,5 @@
 'use client'
-// ============ 涅奥祝福界面（大鲸鱼） ============
+// ============ 涅奥祝福界面（大鲸鱼；联机：双人顺序选择） ============
 import { useGame } from '@/store/gameStore'
 
 const A = '/assets'
@@ -7,8 +7,14 @@ const A = '/assets'
 export function NeowScreen() {
   const run = useGame(s => s.run)
   const chooseNeow = useGame(s => s.chooseNeow)
+  const net = useGame(s => s.net)
   if (!run?.neow) return null
-  const chosen = run.neow.chosen
+  const mp = run.players.length > 1
+  const chooserIdx = mp ? (run.neow.chooserIdx ?? 0) : 0
+  const isMyChoice = !mp || chooserIdx === net.myIdx
+  const chosen = mp ? run.neow.mpChosen?.[chooserIdx] ?? null : run.neow.chosen
+  const options = mp ? (run.neow.mpOptions?.[chooserIdx] ?? []) : run.neow.options
+  const chooserName = mp ? run.players[chooserIdx]?.name : ''
 
   return (
     <div
@@ -40,14 +46,25 @@ export function NeowScreen() {
       </div>
       <div className="relative sts-body text-center" style={{ color: '#a8b8d8', fontSize: 16, lineHeight: 1.9, maxWidth: 640, marginTop: 6, marginBottom: 22, textShadow: '1px 1px 0 #000' }}>
         巨鲸涅奥在尖塔脚下苏醒。<br />
-        「<span style={{ color: '#ffd980' }}>{CHARACTER_GREETING(run.character)}</span>，我将赐予你一份祝福——选择吧。」
+        {mp
+          ? (isMyChoice
+            ? `「${run.players[chooserIdx]?.name}，轮到你了——选择你的祝福。」`
+            : `「${chooserName} 正在选择祝福…」`)
+          : <>「<span style={{ color: '#ffd980' }}>{CHARACTER_GREETING(run.character)}</span>，我将赐予你一份祝福——选择吧。」</>}
       </div>
+
+      {/* 联机等待提示 */}
+      {mp && !isMyChoice && (
+        <div className="relative sts-title flex items-center gap-3" style={{ fontSize: 22, color: '#ffe9a0', marginBottom: 20 }}>
+          <span className="sts-wait-dot">●</span> 等待 {chooserName} 选择祝福…
+        </div>
+      )}
 
       {/* 四个祝福选项 */}
       <div className="relative flex items-stretch justify-center gap-4 flex-wrap" style={{ maxWidth: 1160 }}>
-        {run.neow.options.map((opt, i) => {
+        {options.map((opt, i) => {
           const picked = chosen === opt.id
-          const disabled = !!chosen
+          const disabled = !!chosen || (mp && !isMyChoice)
           return (
             <button
               key={opt.id}

@@ -14,7 +14,7 @@ function state() {
     combat: r.combat ? {
       phase: r.combat.phase, over: r.combat.combatOver,
       enemies: r.combat.enemies.map((e: any) => `${e.id}:${e.hp}/${e.maxHp}${e.dying ? 'D' : ''}`).join(','),
-      hand: r.combat.hand.length, energy: r.combat.player.energy, turn: r.combat.turn,
+      hand: r.combat.players[r.combat.activeIdx].hand.length, energy: r.combat.players[r.combat.activeIdx].energy, turn: r.combat.turn,
     } : null,
     select: g.getState().select ? g.getState().select.kind : null,
   }
@@ -123,7 +123,7 @@ async function main() {
       const okPowers = powers.filter((ci: any) => !tried.has(ci.uid))
       const okBlocks = blocks.filter((ci: any) => !tried.has(ci.uid))
       let before = cc.hand.length
-      if (willDie && okBlocks.length) { g.getState().playCard(okBlocks[0].uid, null); played = true; if (g.getState().run.combat.hand.length === before) tried.add(okBlocks[0].uid) }
+      if (willDie && okBlocks.length) { g.getState().playCard(okBlocks[0].uid, null); played = true; if (g.getState().run.combat.players[g.getState().run.combat.activeIdx].hand.length === before) tried.add(okBlocks[0].uid) }
       else if (okAttacks.length) { g.getState().playCard(okAttacks[0].uid, weakest.uid); played = true; if (g.getState().run.combat?.hand.length === before) tried.add(okAttacks[0].uid) }
       else if (okPowers.length && cc.turn <= 3) { g.getState().playCard(okPowers[0].uid, null); played = true; if (g.getState().run.combat?.hand.length === before) tried.add(okPowers[0].uid) }
       else if (okBlocks.length && energy >= 1) { g.getState().playCard(okBlocks[0].uid, null); played = true; if (g.getState().run.combat?.hand.length === before) tried.add(okBlocks[0].uid) }
