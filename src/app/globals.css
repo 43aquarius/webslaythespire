@@ -405,6 +405,12 @@
   50% { opacity: 0.45; }
 }
 
+/* ============ 创建/连接中呼吸闪烁（房间码占位） ============ */
+@keyframes sts-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
 /* ============ 原版风格主菜单 ============ */
 .main-menu-fog {
   position: absolute; inset: 0; pointer-events: none;

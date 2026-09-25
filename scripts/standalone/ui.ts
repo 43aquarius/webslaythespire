@@ -11,7 +11,7 @@ import { EVENTS } from '@/game/events'
 import { CHARACTER_INFO } from '@/game/run'
 import { STATUS_INFO, STATUS_IMG_FIX, statusImgPath } from '@/game/statusInfo'
 import { hasSave, loadStats, loadSettings, savePlayerName } from '@/game/persist'
-import { net, getServerUrl, setServerUrl } from '@/game/net'
+import { net, getServerUrl, setServerUrl, netMode, setNetMode, OFFICIAL_SERVER } from '@/game/net'
 import type { RoomInfo } from '@/game/net'
 import type { CharacterId } from '@/game/types'
 import type { RunState, CombatState, CardInstance, EnemyInstance } from '@/game/types'
@@ -39,15 +39,23 @@ function setText(el: HTMLElement | null, text: string) {
   if (el && el.textContent !== text) el.textContent = text
 }
 
-// ============ 舞台（1600×900 等比缩放，不拦截竖屏） ============
+// ============ 舞台（1600×900 等比缩放，不拦截竖屏；支持 180 度翻转） ============
 const STAGE_W = 1600, STAGE_H = 900
 let stageEl: HTMLElement
 let fxLayer: HTMLElement
+let stageFlipped = false          // 180 度翻转状态（localStorage 持久化）
 const app = document.getElementById('app')!
+
+function loadFlip(): boolean {
+  try { return localStorage.getItem('stsFlip180') === '1' } catch { return false }
+}
+function saveFlip(v: boolean) {
+  try { v ? localStorage.setItem('stsFlip180', '1') : localStorage.removeItem('stsFlip180') } catch { /* noop */ }
+}
 
 function fitStage() {
   const k = Math.min(window.innerWidth / STAGE_W, window.innerHeight / STAGE_H)
-  stageEl.style.transform = `translate(-50%, -50%) scale(${k})`
+  stageEl.style.transform = `translate(-50%, -50%) scale(${k})${stageFlipped ? ' rotate(180deg)' : ''}`
 }
 
 function setupStage() {
@@ -64,6 +72,7 @@ function setupStage() {
   stage.appendChild(ov)
   stageEl = stage
   fxLayer = fx
+  stageFlipped = loadFlip()
   fitStage()
   window.addEventListener('resize', fitStage)
   window.addEventListener('orientationchange', () => {
@@ -460,7 +469,7 @@ function rMainMenu(): string {
       ${items.map(it => `<button class="menu-btn sts-title ${it.dis ? 'dis' : ''}" data-act="${it.act}" ${it.arg ? `data-screen="${it.arg}"` : ''} ${it.dis ? 'disabled' : ''}
         style="opacity:${it.dis ? 1 : ''}"><span style="opacity:${it.dis ? .45 : 1};display:block">${it.label}</span></button>`).join('')}
     </div>
-    <div class="sts-body" style="color:#8a7458;font-size:12px;position:absolute;left:16px;bottom:12px">Web 复刻版 v1.7</div>
+    <div class="sts-body" style="color:#8a7458;font-size:12px;position:absolute;left:16px;bottom:12px">Web 复刻版 v1.8</div>
   </div>
   <a class="github-btn" href="https://github.com/43aquarius/webslaythespire" target="_blank" rel="noreferrer" title="GitHub 仓库">${GITHUB_SVG}<span>43aquarius/webslaythespire</span></a>
 </div>`
@@ -570,7 +579,7 @@ function lobbyRoomsHtml(): string {
     return `<div class="sts-body" style="color:${lobbySrvOk ? '#8a7458' : '#a87868'};font-size:13px;text-align:center;padding:18px 0">
       ${lobbySrvOk
         ? '暂无开放房间 —— 创建一个，或输入房间码加入好友'
-        : '无法连接联机服务器：请先运行 node scripts/ws-server.js，<br>或点击「服务器」填写地址（填好后点保存）'}</div>`
+        : '无法连接联机服务器：请检查网络，<br>或点击「服务器」填写地址（填好后点保存），也可改用 P2P 直连'}</div>`
   }
   return lobbyRooms.map(r => `
     <div style="display:flex;align-items:center;gap:12px;background:rgba(0,0,0,.32);border:1px solid #4a3520;border-radius:8px;padding:7px 12px">
@@ -588,16 +597,27 @@ function rMpLobby(): string {
   const n = st.net
   if (!n.role) {
     const s = loadSettings()
+    const mode = netMode()
+    const modeBtn = (m: 'server' | 'p2p', title: string, desc: string) => `
+      <button class="sts-body" data-act="mpMode" data-mode="${m}"
+        style="font-size:13px;padding:5px 14px;border-radius:8px;line-height:1.3;cursor:pointer;
+        border:1.5px solid ${mode === m ? '#ffd980' : '#6b4a2e'};
+        background:${mode === m ? 'rgba(80,56,20,.55)' : 'rgba(0,0,0,.4)'};
+        color:${mode === m ? '#ffd980' : '#a89070'}">${title} <span style="font-size:11px;opacity:.75">${desc}</span></button>`
     return `<div class="screen bg-cover" style="background-image:url('${A('bg/combat.jpg')}')">
     <div class="shade" style="background:rgba(6,3,2,.64)"></div>
     <div class="center-col" style="padding-top:0;gap:14px">
       <div class="sts-title" style="font-size:34px;color:#ffd980;letter-spacing:8px">联 机 合 作</div>
       <div class="sts-body" style="color:#c8b090;font-size:14px;line-height:1.8;max-width:520px;text-align:center">
         仿照《杀戮尖塔 2》的合作模式：与好友一起攀登尖塔。<br>共享地图与敌人，各自拥有独立的牌组、生命与能量，轮流行动，共同战斗。</div>
+      <div class="row" style="gap:8px"><span class="sts-body" style="color:#a89070;font-size:13px">连接方式</span>
+        ${modeBtn('server', '服务器中转', '推荐·支持大厅')}
+        ${modeBtn('p2p', 'P2P 直连', '无需服务器')}</div>
       <div class="row" style="gap:10px"><span class="sts-body" style="color:#c8b090;font-size:15px">昵称</span>
         <input class="sts-body" id="mp-name" value="${esc(s.playerName)}" maxlength="10" data-input="mpName"
           style="background:rgba(0,0,0,.5);border:1.5px solid #6b4a2e;border-radius:8px;color:#e8d8b8;padding:8px 12px;font-size:15px;width:170px"></div>
       <button class="sts-btn sts-title" data-act="mpCreate" style="font-size:22px;letter-spacing:4px;padding:10px 66px">创 建 房 间</button>
+      ${mode === 'server' ? `
       <div class="sts-panel" style="padding:12px 16px;display:flex;flex-direction:column;gap:8px;width:620px;max-width:92vw">
         <div class="row" style="justify-content:space-between">
           <div class="sts-title" style="font-size:16px;color:#e8d8b8;letter-spacing:3px">房间大厅</div>
@@ -609,7 +629,7 @@ function rMpLobby(): string {
         </div>
         ${lobbyShowSrv ? `<div class="row" style="gap:8px;background:rgba(0,0,0,.3);border-radius:8px;padding:8px 10px">
           <span class="sts-body" style="font-size:12px;color:#a89070;white-space:nowrap">服务器地址</span>
-          <input class="sts-body" data-input="mpSrv" placeholder="ws://localhost:3001" value="${esc(getServerUrl())}"
+          <input class="sts-body" data-input="mpSrv" placeholder="${OFFICIAL_SERVER}" value="${esc(getServerUrl())}"
             style="flex:1;background:rgba(0,0,0,.5);border:1px solid #6b4a2e;border-radius:6px;color:#e8d8b8;padding:5px 8px;font-size:12px">
           <button class="sts-btn sts-body" data-act="mpSrvSave" style="font-size:12px;padding:4px 12px">保存</button>
         </div>` : ''}
@@ -620,7 +640,19 @@ function rMpLobby(): string {
             style="background:rgba(0,0,0,.5);border:1.5px solid #6b4a2e;border-radius:8px;color:#e8d8b8;padding:6px 10px;font-size:16px;width:130px;letter-spacing:3px;text-align:center;text-transform:uppercase">
           <button class="sts-btn sts-body" data-act="mpJoin" style="font-size:13px;padding:6px 16px">加入房间</button>
         </div>
-      </div>
+      </div>` : `
+      <div class="sts-panel" style="padding:14px 20px;display:flex;flex-direction:column;align-items:center;gap:10px;width:620px;max-width:92vw">
+        <div class="sts-body" style="color:#c8b090;font-size:14px;line-height:1.9;text-align:center">
+          P2P 直连模式：通过 WebRTC 与好友直接连接，<b style="color:#ffd980">无需服务器</b>。<br>
+          创建房间后把 4 位房间码告诉好友，好友输入房间码即可加入。<br>
+          <span style="color:#8a7458;font-size:13px">提示：P2P 模式无大厅房间列表；部分网络环境可能无法打洞，建议优先使用服务器中转。</span></div>
+        <div class="row" style="gap:8px;border-top:1px solid rgba(90,64,32,.6);padding-top:8px">
+          <span class="sts-body" style="font-size:13px;color:#a89070">房间码加入</span>
+          <input class="sts-body" id="mp-code" placeholder="房间码" maxlength="6" data-input="mpCode"
+            style="background:rgba(0,0,0,.5);border:1.5px solid #6b4a2e;border-radius:8px;color:#e8d8b8;padding:6px 10px;font-size:16px;width:130px;letter-spacing:3px;text-align:center;text-transform:uppercase">
+          <button class="sts-btn sts-body" data-act="mpJoin" style="font-size:13px;padding:6px 16px">加入房间</button>
+        </div>
+      </div>`}
       <button class="sts-btn sts-body" data-act="gotoMenu" data-screen="title" style="font-size:15px;padding:6px 28px">返回主菜单</button>
       ${n.error ? `<div class="sts-body" style="color:#ff9a8a;font-size:14px">${esc(n.error)}</div>` : ''}
     </div>
@@ -630,6 +662,7 @@ function rMpLobby(): string {
   const myChar = isHost ? n.lobby.hostChar : n.lobby.guestChar
   const otherName = n.peerName || '等待加入…'
   const both = !!(n.lobby.hostChar && n.lobby.guestChar)
+  const starting = n.status === 'starting' || n.status === 'connecting'
   const slot = (title: string, char: string | null, pickable: boolean, active: boolean) => `
     <div style="display:flex;flex-direction:column;align-items:center;gap:6px;opacity:${active ? 1 : 0.55}">
       <div class="sts-body" style="color:#e8d8b8;font-size:15px">${esc(title)}</div>
@@ -644,8 +677,8 @@ function rMpLobby(): string {
   <div class="center-col" style="padding-top:0;gap:16px">
     <div class="sts-title" style="font-size:30px;color:#ffd980;letter-spacing:6px">合 作 房 间</div>
     <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
-      <div class="sts-body" style="color:#a89070;font-size:13px">房间码（告诉你的好友，或在大厅列表中找到它）</div>
-      <div class="sts-title" style="font-size:44px;color:#8ee8ff;letter-spacing:12px;text-shadow:0 0 24px rgba(100,200,255,.5),3px 3px 0 #000">${n.roomCode}</div>
+      <div class="sts-body" style="color:#a89070;font-size:13px">${starting ? (isHost ? '正在创建房间…' : '正在连接房间…') : '房间码（告诉你的好友，或在大厅列表中找到它）'}</div>
+      <div class="sts-title" style="font-size:44px;color:#8ee8ff;letter-spacing:12px;text-shadow:0 0 24px rgba(100,200,255,.5),3px 3px 0 #000;${starting ? 'animation:blink 1.2s ease-in-out infinite' : ''}">${starting ? '····' : esc(n.roomCode)}</div>
     </div>
     <div class="row" style="gap:52px;align-items:center">
       ${slot(n.myName + '（你）', myChar, true, true)}
@@ -653,7 +686,10 @@ function rMpLobby(): string {
       ${slot(otherName, isHost ? n.lobby.guestChar : n.lobby.hostChar, false, n.connected)}
     </div>
     <div class="sts-body" style="color:${n.connected ? '#8ee888' : '#c8a878'};font-size:14px">
-      ${!n.connected ? (isHost ? '等待好友加入…（房间已显示在大厅列表中）' : '正在连接房间…')
+      ${starting ? '正在与联机服务器建立连接…'
+        : !n.connected ? (isHost
+          ? (netMode() === 'p2p' ? '等待好友加入…（把房间码告诉好友）' : '等待好友加入…（房间已显示在大厅列表中）')
+          : '正在连接房间…')
         : both ? (isHost ? '双方已就绪，可以出发！' : '等待房主出发…')
         : (isHost ? '等待双方选择角色…' : '选择你的角色，等待房主出发…')}</div>
     <div class="row" style="gap:22px">
@@ -665,10 +701,10 @@ function rMpLobby(): string {
 </div>`
 }
 
-/** 大厅屏签名（含服务器面板开关，保证状态与签名一致） */
+/** 大厅屏签名（含服务器面板开关与连接方式，保证状态与签名一致） */
 function lobbySig(): string {
   const n = g().net
-  return `lobby:${n.role ?? ''}:${n.status}:${n.roomCode}:${n.connected}:${n.lobby?.hostChar}:${n.lobby?.guestChar}:${n.peerName}:${n.error ?? ''}:srv${lobbyShowSrv ? 1 : 0}`
+  return `lobby:${netMode()}:${n.role ?? ''}:${n.status}:${n.roomCode}:${n.connected}:${n.lobby?.hostChar}:${n.lobby?.guestChar}:${n.peerName}:${n.error ?? ''}:srv${lobbyShowSrv ? 1 : 0}`
 }
 
 /** 大厅差异更新：房间列表 + 服务器状态（不重建整屏，避免打断输入框） */
@@ -687,15 +723,15 @@ function updateLobbyDynamics() {
   }
 }
 
-/** 大厅订阅管理：进入 mpLobby 屏时开始，离开时停止 */
+/** 大厅订阅管理：进入 mpLobby 屏时开始，离开时停止；P2P 模式无列表 */
 function lobbyWatchTick(screen: string) {
-  const want = screen === 'mpLobby' && !g().net.role
+  const want = screen === 'mpLobby' && !g().net.role && netMode() === 'server'
   if (want && !lobbyWatching) {
     lobbyWatching = true
     lobbyWatchScreen = screen
     lobbySrvOk = null
     net.watchLobby().then(() => { lobbySrvOk = true; updateLobbyDynamics() }).catch(() => { lobbySrvOk = false; updateLobbyDynamics() })
-  } else if (!want && lobbyWatching) {
+  } else if ((!want || netMode() !== 'server') && lobbyWatching) {
     lobbyWatching = false
     lobbyWatchScreen = ''
     net.unwatchLobby()
@@ -1837,6 +1873,17 @@ const ACTIONS: Record<string, (el: HTMLElement) => void> = {
     sigScreen(lobbySig(), () => rMpLobby())
     updateLobbyDynamics()
   },
+  mpMode: (el) => {
+    if (g().net.role) return   // 房间内不允许切换
+    const m = el.dataset.mode === 'p2p' ? 'p2p' : 'server'
+    if (m !== netMode()) {
+      setNetMode(m)
+      lobbySrvOk = null
+      lobbyRooms = []
+      sigScreen(lobbySig(), () => rMpLobby())
+      lobbyWatchTick('mpLobby')
+    }
+  },
   mpSrvSave: () => {
     const input = document.querySelector('[data-input="mpSrv"]') as HTMLInputElement | null
     setServerUrl(input?.value || '')
@@ -1935,11 +1982,16 @@ document.addEventListener('mousemove', (e) => {
     const w = tipEl.offsetWidth, h = tipEl.offsetHeight
     if (x + w > innerWidth - 8) x = e.clientX - w - pad
     if (y + h > innerHeight - 8) y = e.clientY - h - pad
+    // 钳制在屏幕内（修复手机端窄屏提示框跑出屏幕）
+    if (w >= innerWidth - 16) x = (innerWidth - w) / 2
+    else x = Math.max(8, Math.min(innerWidth - w - 8, x))
+    if (h >= innerHeight - 16) y = (innerHeight - h) / 2
+    else y = Math.max(8, Math.min(innerHeight - h - 8, y))
     tipEl.style.left = x + 'px'
     tipEl.style.top = y + 'px'
   }
 })
-// 触屏：轻点显示提示 2 秒
+// 触屏：轻点显示提示 2 秒（上方优先，放不下改下方；整体钳制在屏幕内）
 document.addEventListener('touchstart', (e) => {
   const el = (e.target as HTMLElement).closest('[data-tip]') as HTMLElement | null
   if (!el) return
@@ -1950,8 +2002,15 @@ document.addEventListener('touchstart', (e) => {
   requestAnimationFrame(() => {
     const r = el.getBoundingClientRect()
     const w = tipEl.offsetWidth, h = tipEl.offsetHeight
-    tipEl.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px'
-    tipEl.style.top = Math.max(8, r.top - h - 10) + 'px'
+    let x = r.left + r.width / 2 - w / 2
+    let y = r.top - h - 10
+    if (y < 8) y = r.bottom + 10                    // 上方放不下 → 移到下方
+    if (w >= innerWidth - 16) x = (innerWidth - w) / 2
+    else x = Math.max(8, Math.min(innerWidth - w - 8, x))
+    if (h >= innerHeight - 16) y = (innerHeight - h) / 2
+    else y = Math.max(8, Math.min(innerHeight - h - 8, y))
+    tipEl.style.left = x + 'px'
+    tipEl.style.top = y + 'px'
   })
   if (tipTimer) clearTimeout(tipTimer)
   tipTimer = setTimeout(() => { tipEl.style.display = 'none' }, 2000)
@@ -1974,16 +2033,20 @@ function setupControls() {
   })
   wrap.appendChild(gearBtn)
 
-  // 横竖屏切换按钮（仅触屏设备；替代旧的竖屏拦截提示）
+  // 旋转 180 度按钮（仅触屏设备；点击后整个画面翻转 180 度，适配手机倒拿场景）
   if (typeof matchMedia !== 'undefined' && matchMedia('(hover: none)').matches) {
     const rotBtn = document.createElement('button')
     rotBtn.className = 'sts-btn'
     rotBtn.style.cssText = 'font-size:15px;padding:4px 10px;min-width:38px'
     rotBtn.textContent = '🔄'
-    rotBtn.title = '切换横竖屏（自动进入全屏）'
+    rotBtn.title = '旋转 180 度（手机倒拿时点此翻转画面）'
+    const syncRotIcon = () => { rotBtn.style.transform = stageFlipped ? 'rotate(180deg)' : '' }
+    syncRotIcon()
     rotBtn.addEventListener('click', () => {
-      const portrait = window.innerHeight > window.innerWidth
-      tryOrient(portrait ? 'landscape' : 'portrait')
+      stageFlipped = !stageFlipped
+      saveFlip(stageFlipped)
+      fitStage()
+      syncRotIcon()
     })
     wrap.appendChild(rotBtn)
   }
@@ -2076,7 +2139,7 @@ net.onRooms(list => {
 })
 useGame.subscribe(render)
 render()
-console.log('[STS standalone] 游戏就绪 v1.7（单人 + 联机合作 · WebSocket 服务器中转 + 房间大厅）')
+console.log('[STS standalone] 游戏就绪 v1.8（单人 + 联机合作 · 服务器中转/P2P双通道 + 房间大厅）')
 
 
 

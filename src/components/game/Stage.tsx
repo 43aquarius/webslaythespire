@@ -1,11 +1,21 @@
 'use client'
 // ============ 舞台缩放系统 ============
 // 所有游戏画面按 1600×900 逻辑分辨率绘制，再整体等比缩放适配任意屏幕
-// 不再拦截竖屏（无"请横屏游玩"提示），提供横竖屏切换按钮
+// 旋转按钮：点击后整个画面旋转 180 度（适配手机倒拿/充电口朝上等场景）
 import { ReactNode, useCallback, useEffect, useState } from 'react'
 
 export const STAGE_W = 1600
 export const STAGE_H = 900
+
+const FLIP_KEY = 'stsFlip180'
+
+/** 读取持久化的 180 度翻转状态 */
+function loadFlip(): boolean {
+  try { return localStorage.getItem(FLIP_KEY) === '1' } catch { return false }
+}
+function saveFlip(v: boolean) {
+  try { v ? localStorage.setItem(FLIP_KEY, '1') : localStorage.removeItem(FLIP_KEY) } catch { /* noop */ }
+}
 
 function useViewport() {
   const [size, setSize] = useState({ w: 1280, h: 720 })
@@ -25,7 +35,7 @@ function useViewport() {
   return size
 }
 
-// 尝试切换到指定方向（全屏 + orientation.lock；iOS 不支持时静默失败）
+// 尝试全屏 + 锁定横屏（仅全屏按钮使用）
 async function tryOrient(lock: 'landscape' | 'portrait') {
   try {
     const d = document as unknown as { fullscreenElement?: Element; documentElement: HTMLElement & { requestFullscreen?: () => Promise<void> } }
@@ -67,24 +77,22 @@ function FullscreenBtn() {
   )
 }
 
-// ============ 横竖屏切换按钮（替代旧的竖屏拦截提示） ============
-function RotateBtn() {
-  // 仅触屏设备显示（桌面无法旋转屏幕）
+// ============ 旋转 180 度按钮（点击翻转整个画面；仅触屏设备显示） ============
+function RotateBtn({ flipped, onToggle }: { flipped: boolean; onToggle: () => void }) {
   const [isTouch, setIsTouch] = useState(false)
   useEffect(() => {
     setIsTouch(typeof matchMedia !== 'undefined' && matchMedia('(hover: none)').matches)
   }, [])
   if (!isTouch) return null
-  const toggle = () => {
-    const portrait = window.innerHeight > window.innerWidth
-    tryOrient(portrait ? 'landscape' : 'portrait')
-  }
   return (
     <button
       className="sts-btn"
-      style={{ fontSize: 15, padding: '4px 10px', minWidth: 38 }}
-      onClick={toggle}
-      title="切换横竖屏（自动进入全屏）"
+      style={{
+        fontSize: 15, padding: '4px 10px', minWidth: 38,
+        transform: flipped ? 'rotate(180deg)' : undefined,   // 画面倒转后按钮图标转正，方便识别
+      }}
+      onClick={onToggle}
+      title="旋转 180 度（手机倒拿时点此翻转画面）"
     >
       🔄
     </button>
@@ -94,7 +102,17 @@ function RotateBtn() {
 export function Stage({ children }: { children: ReactNode }) {
   const { w, h } = useViewport()
   const [mounted, setMounted] = useState(false)
+  const [flipped, setFlipped] = useState(false)
   useEffect(() => setMounted(true), [])
+  useEffect(() => setFlipped(loadFlip()), [])
+
+  const toggleFlip = useCallback(() => {
+    setFlipped(f => {
+      const next = !f
+      saveFlip(next)
+      return next
+    })
+  }, [])
 
   // 预加载关键背景图，避免首次切屏白闪
   useEffect(() => {
@@ -113,15 +131,16 @@ export function Stage({ children }: { children: ReactNode }) {
 
   return (
     <div className="fixed inset-0 overflow-hidden" style={{ background: '#050302', touchAction: 'manipulation' }}>
-      {/* 游戏舞台：1600×900 逻辑分辨率，等比缩放居中 */}
+      {/* 游戏舞台：1600×900 逻辑分辨率，等比缩放居中；点击🔄可整屏旋转180度 */}
       <div
+        data-stage
         className="absolute"
         style={{
           width: STAGE_W,
           height: STAGE_H,
           left: '50%',
           top: '50%',
-          transform: `translate(-50%, -50%) scale(${mounted ? scale : 1})`,
+          transform: `translate(-50%, -50%) scale(${mounted ? scale : 1})${flipped ? ' rotate(180deg)' : ''}`,
           transformOrigin: 'center center',
           background: '#0a0604',
           boxShadow: '0 0 80px rgba(0,0,0,0.9)',
@@ -129,9 +148,9 @@ export function Stage({ children }: { children: ReactNode }) {
         onClick={onStageClick}
       >
         {children}
-        {/* 右上角控制簇：横竖屏切换 + 全屏 */}
+        {/* 右上角控制簇：旋转180度 + 全屏 */}
         <div className="absolute flex gap-1.5 items-center" style={{ top: 10, right: 10, zIndex: 500 }}>
-          <RotateBtn />
+          <RotateBtn flipped={flipped} onToggle={toggleFlip} />
           <FullscreenBtn />
         </div>
       </div>

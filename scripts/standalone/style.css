@@ -245,10 +245,13 @@ img { -webkit-user-drag: none; }
 /* ============ Toast / 提示 ============ */
 #toast { position: absolute; left: 50%; top: 100px; transform: translateX(-50%); z-index: 200; }
 #toast .sts-panel { padding: 10px 24px; font-size: 16px; color: #ffe9c0; }
-.tooltip { position: fixed; display: none; max-width: 260px; padding: 10px 14px; border-radius: 8px; z-index: 300;
+.tooltip { position: fixed; display: none; max-width: min(260px, calc(100vw - 24px)); padding: 10px 14px; border-radius: 8px; z-index: 300;
   background: linear-gradient(180deg, #2b1a12, #1a0e08); border: 1.5px solid #7a5a3a; color: #f5e8d2; font-size: 13px; line-height: 1.5;
   box-shadow: 0 6px 20px rgba(0,0,0,.8); pointer-events: none; }
 .tooltip b { color: #ffd980; }
+
+/* 创建/连接中呼吸闪烁（房间码占位） */
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 
 /* 触屏：关闭 hover 位移，避免粘滞态 */
 @media (hover: none) {

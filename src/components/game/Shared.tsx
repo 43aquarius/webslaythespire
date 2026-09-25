@@ -1,6 +1,6 @@
 'use client'
 // ============ 战斗共享小组件 ============
-import { ReactNode, useEffect, useRef, useState } from 'react'
+import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { StatusMap } from '@/game/types'
 import { RELICS } from '@/game/relics'
 import { POTIONS } from '@/game/potions'
@@ -8,6 +8,7 @@ import { useGame } from '@/store/gameStore'
 import { AP } from '@/game/engine'
 
 import { STATUS_INFO, statusImgPath } from '@/game/statusInfo'
+import { STAGE_W, STAGE_H } from './Stage'
 export { STATUS_INFO }
 const A = '/assets'
 
@@ -19,18 +20,53 @@ export function statusImg(id: string): string {
 
 
 
-// ============ 悬浮提示（支持触屏：轻点显示 2 秒） ============
+// ============ 悬浮提示（支持触屏：轻点显示 2 秒；舞台逻辑坐标钳制，永不跑出屏幕） ============
 export function Tip({ children, tip, className = '' }: { children: ReactNode; tip: ReactNode; className?: string }) {
   const [show, setShow] = useState(false)
   const touchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const anchorRef = useRef<HTMLSpanElement>(null)
+  const tipRef = useRef<HTMLSpanElement>(null)
+  const [offset, setOffset] = useState<{ l: number; t: number } | null>(null)
   useEffect(() => () => { if (touchTimer.current) clearTimeout(touchTimer.current) }, [])
   const onTouchStart = () => {
     setShow(true)
     if (touchTimer.current) clearTimeout(touchTimer.current)
     touchTimer.current = setTimeout(() => setShow(false), 2000)
   }
+
+  // 显示时计算钳制位置：以上方居中为基准，放不下改下方，水平/垂直均钳制在舞台内
+  useLayoutEffect(() => {
+    if (!show) { setOffset(null); return }
+    const anchor = anchorRef.current
+    const tipEl = tipRef.current
+    if (!anchor || !tipEl) return
+    const stage = anchor.closest('[data-stage]') as HTMLElement | null
+    if (!stage) { setOffset(null); return }   // 不在舞台内：退化为默认样式（居中上方）
+    const sr = stage.getBoundingClientRect()
+    const ar = anchor.getBoundingClientRect()
+    const tr = tipEl.getBoundingClientRect()
+    const scale = sr.width / STAGE_W
+    if (!(scale > 0)) return
+    // 全部换算为舞台逻辑坐标（等比缩放前的 1600×900 坐标系）
+    const tw = tr.width / scale, th = tr.height / scale
+    const ax = (ar.left - sr.left) / scale + ar.width / scale / 2
+    const aTop = (ar.top - sr.top) / scale
+    const aBottom = (ar.bottom - sr.top) / scale
+    const aLeft = (ar.left - sr.left) / scale
+    const gap = 8, pad = 8
+    let x = ax - tw / 2
+    let y = aTop - th - gap
+    if (y < pad) y = aBottom + gap                 // 上方放不下 → 移到下方
+    if (x + tw > STAGE_W - pad) x = STAGE_W - pad - tw
+    if (x < pad) x = pad
+    if (y + th > STAGE_H - pad) y = Math.max(pad, STAGE_H - pad - th)
+    setOffset({ l: x - aLeft, t: y - aTop })
+  }, [show, tip])
+
+  const placed = show && offset !== null
   return (
     <span
+      ref={anchorRef}
       className="relative"
       onMouseEnter={() => setShow(true)}
       onMouseLeave={() => setShow(false)}
@@ -39,8 +75,15 @@ export function Tip({ children, tip, className = '' }: { children: ReactNode; ti
       {children}
       {show && (
         <span
-          className={`sts-body absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 rounded-lg z-[300] block w-max max-w-[260px] text-left ${className}`}
+          ref={tipRef}
+          className={`sts-body absolute px-3 py-2 rounded-lg z-[300] block w-max max-w-[260px] text-left ${className}`}
           style={{
+            left: placed ? offset.l : '50%',
+            top: placed ? offset.t : undefined,
+            bottom: placed ? undefined : '100%',
+            transform: placed ? undefined : 'translateX(-50%)',
+            marginTop: placed ? undefined : 8,
+            visibility: placed ? undefined : 'hidden',
             background: 'linear-gradient(180deg, #2b1a12 0%, #1a0e08 100%)',
             border: '1.5px solid #7a5a3a',
             color: '#f5e8d2',

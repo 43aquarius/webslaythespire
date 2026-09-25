@@ -1558,18 +1558,19 @@ export const useGame = create<GameStore>((set, get) => {
 
     // ============ 联机大厅 ============
     netCreateRoom: (name) => {
-      net.host(name).then(() => {
-        set(s => ({ menuScreen: 'mpLobby', net: { ...s.net, role: 'host', status: 'waiting', roomCode: net.roomCode, myName: name, myIdx: 0 } }))
-      }).catch(err => {
+      // 立即进入房间界面（显示"创建中…"，房间码到达后立即显示）
+      set(s => ({ menuScreen: 'mpLobby', net: { ...s.net, role: 'host', status: 'starting', roomCode: '', myName: name, myIdx: 0, error: null } }))
+      net.host(name).catch(err => {
         net.toastError(String(err?.message || err))
+        set(s => ({ net: { ...s.net, role: null, status: 'idle', roomCode: '' } }))
       })
     },
 
     netJoinRoom: (name, code) => {
-      net.join(name, code.trim().toUpperCase()).then(() => {
-        set(s => ({ menuScreen: 'mpLobby', net: { ...s.net, role: 'guest', status: 'connected', connected: true, myIdx: 1, myName: name } }))
-      }).catch(err => {
+      set(s => ({ menuScreen: 'mpLobby', net: { ...s.net, role: 'guest', status: 'connecting', roomCode: code.trim().toUpperCase(), myName: name, myIdx: 1, error: null } }))
+      net.join(name, code).catch(err => {
         net.toastError(String(err?.message || err))
+        set(s => ({ net: { ...s.net, role: null, status: 'idle', roomCode: '' } }))
       })
     },
 

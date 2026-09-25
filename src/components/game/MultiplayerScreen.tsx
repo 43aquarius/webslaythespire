@@ -1,12 +1,12 @@
 'use client'
 // ============ 联机合作大厅（仿杀戮尖塔2合作模式） ============
-// 大厅：房间列表（实时刷新）+ 创建房间 + 房间码加入 → 双方选角色 → 出发
+// 大厅：连接方式（服务器中转 / P2P直连）+ 房间列表（服务器模式）+ 创建/加入 → 双方选角色 → 出发
 import { useEffect, useRef, useState } from 'react'
 import { useGame } from '@/store/gameStore'
 import { CHARACTER_INFO } from '@/game/run'
 import { CharacterId } from '@/game/types'
 import { loadSettings } from '@/game/persist'
-import { net as netMgr, RoomInfo, getServerUrl, setServerUrl, wsCandidates } from '@/game/net'
+import { net as netMgr, RoomInfo, getServerUrl, setServerUrl, serverCandidates, netMode, setNetMode, NetMode, OFFICIAL_SERVER } from '@/game/net'
 
 const A = '/assets'
 
@@ -27,6 +27,7 @@ export function MultiplayerScreen() {
   const [name, setName] = useState('玩家')
   const [code, setCode] = useState('')
   const [copied, setCopied] = useState(false)
+  const [mode, setMode] = useState<NetMode>('server')
 
   // ===== 大厅状态 =====
   const [rooms, setRooms] = useState<RoomInfo[]>([])
@@ -35,22 +36,35 @@ export function MultiplayerScreen() {
   const [srvInput, setSrvInput] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { setName(loadSettings().playerName); setSrvInput(getServerUrl()) }, [])
-
-  // 进入界面：订阅房间列表；离开界面：退订
   useEffect(() => {
+    setName(loadSettings().playerName)
+    setSrvInput(getServerUrl())
+    setMode(netMode())
+  }, [])
+
+  // 进入界面：服务器模式订阅房间列表；P2P 模式无列表；离开界面：退订
+  useEffect(() => {
+    if (mode !== 'server') { setSrvOk(null); setRooms([]); return }
     netMgr.onRooms(list => setRooms(list))
     netMgr.watchLobby().then(() => setSrvOk(true)).catch(() => setSrvOk(false))
     const tick = setInterval(() => {
-      netMgr.listRooms().catch(() => {})
+      netMgr.listRooms().catch(() => setSrvOk(false))
     }, 3000)
     return () => {
       clearInterval(tick)
       netMgr.unwatchLobby()
     }
-  }, [])
+  }, [mode])
 
-  // ===== 阶段1：大厅（选择创建/浏览/加入） =====
+  const switchMode = (m: NetMode) => {
+    if (net.role) return            // 房间内不允许切换
+    setMode(m)
+    setNetMode(m)
+    setSrvOk(null)
+    setRooms([])
+  }
+
+  // ===== 阶段1：大厅（选择连接方式 + 创建/浏览/加入） =====
   if (!net.role) {
     return (
       <Shell>
@@ -60,7 +74,14 @@ export function MultiplayerScreen() {
           共享地图与敌人，各自拥有独立的牌组、生命与能量，轮流行动，共同战斗。
         </div>
 
-        {/* 昵称 */}
+        {/* 连接方式切换 */}
+        <div className="flex items-center gap-2">
+          <span className="sts-body" style={{ color: '#a89070', fontSize: 13 }}>连接方式</span>
+          <ModeBtn active={mode === 'server'} onClick={() => switchMode('server')} title="服务器中转" desc="推荐·支持大厅" />
+          <ModeBtn active={mode === 'p2p'} onClick={() => switchMode('p2p')} title="P2P 直连" desc="无需服务器" />
+        </div>
+
+        {/* 昵称 + 创建房间 */}
         <div className="flex items-center gap-3">
           <span className="sts-body" style={{ color: '#c8b090', fontSize: 15 }}>昵称</span>
           <input
@@ -75,85 +96,110 @@ export function MultiplayerScreen() {
           </button>
         </div>
 
-        {/* 房间大厅列表 */}
-        <div className="sts-panel flex flex-col" style={{ width: 620, padding: '14px 18px', gap: 8 }}>
-          <div className="flex items-center justify-between">
-            <div className="sts-title" style={{ fontSize: 17, color: '#e8d8b8', letterSpacing: 3 }}>房间大厅</div>
-            <div className="flex items-center gap-2">
-              <span className="sts-body" style={{ fontSize: 12, color: srvOk === null ? '#c8a878' : srvOk ? '#8ee888' : '#ff9a8a' }}>
-                {srvOk === null ? '连接服务器中…' : srvOk ? '● 服务器已连接' : '○ 服务器离线'}
-              </span>
-              <button className="sts-btn sts-body" style={{ fontSize: 12, padding: '3px 12px' }}
-                onClick={() => netMgr.listRooms().catch(() => setSrvOk(false))}>
-                刷新
-              </button>
-              <button className="sts-btn sts-body" style={{ fontSize: 12, padding: '3px 12px' }}
-                onClick={() => setShowSrv(s => !s)} title="联机服务器设置">
-                服务器
-              </button>
-            </div>
-          </div>
-
-          {showSrv && (
-            <div className="flex items-center gap-2" style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 8, padding: '8px 10px' }}>
-              <span className="sts-body" style={{ fontSize: 12, color: '#a89070', whiteSpace: 'nowrap' }}>服务器地址</span>
-              <input
-                className="sts-body" style={{ flex: 1, background: 'rgba(0,0,0,0.5)', border: '1px solid #6b4a2e', borderRadius: 6, color: '#e8d8b8', padding: '5px 8px', fontSize: 12 }}
-                placeholder={srvInput ? '' : wsCandidates()[1] || 'ws://localhost:3001'}
-                value={srvInput} onChange={e => setSrvInput(e.target.value)}
-              />
-              <button className="sts-btn sts-body" style={{ fontSize: 12, padding: '4px 12px' }}
-                onClick={() => { setServerUrl(srvInput); location.reload() }}>保存</button>
-            </div>
-          )}
-
-          <div ref={listRef} className="flex flex-col gap-1.5" style={{ maxHeight: 190, overflowY: 'auto' }}>
-            {rooms.length === 0 && (
-              <div className="sts-body text-center" style={{ color: srvOk ? '#8a7458' : '#a87868', fontSize: 13, padding: '20px 0' }}>
-                {srvOk ? '暂无开放房间 —— 创建一个，或输入房间码加入好友' : '无法连接联机服务器：自托管用户请运行 node scripts/ws-server.js，或点击右上角「服务器」填写地址'}
-              </div>
-            )}
-            {rooms.map(r => (
-              <div key={r.code} className="flex items-center gap-3"
-                style={{ background: 'rgba(0,0,0,0.32)', border: '1px solid #4a3520', borderRadius: 8, padding: '7px 12px' }}>
-                <span className="sts-title" style={{ fontSize: 19, color: '#8ee8ff', letterSpacing: 5, width: 84, textShadow: '2px 2px 0 #000' }}>{r.code}</span>
-                <span className="sts-body" style={{ fontSize: 14, color: '#e8d8b8', flex: 1 }}>
-                  {r.host} 的房间
-                  <span className="sts-body" style={{ fontSize: 12, color: '#8a7458', marginLeft: 8 }}>
-                    {r.guests > 0 ? '2/2' : '1/2'} 人
-                  </span>
+        {mode === 'server' ? (
+          /* 房间大厅列表（服务器模式） */
+          <div className="sts-panel flex flex-col" style={{ width: 620, padding: '14px 18px', gap: 8 }}>
+            <div className="flex items-center justify-between">
+              <div className="sts-title" style={{ fontSize: 17, color: '#e8d8b8', letterSpacing: 3 }}>房间大厅</div>
+              <div className="flex items-center gap-2">
+                <span className="sts-body" style={{ fontSize: 12, color: srvOk === null ? '#c8a878' : srvOk ? '#8ee888' : '#ff9a8a' }}>
+                  {srvOk === null ? '连接服务器中…' : srvOk ? '● 服务器已连接' : '○ 服务器离线'}
                 </span>
-                <span className="sts-body" style={{ fontSize: 12, color: r.status === 'open' ? '#8ee888' : '#8a7458' }}>
-                  {r.status === 'open' ? '等待中' : '已满'}
-                </span>
-                <button
-                  className="sts-btn sts-body"
-                  style={{ fontSize: 13, padding: '5px 18px' }}
-                  disabled={r.status !== 'open'}
-                  onClick={() => netJoinRoom(name, r.code)}
-                >
-                  加入
+                <button className="sts-btn sts-body" style={{ fontSize: 12, padding: '3px 12px' }}
+                  onClick={() => netMgr.listRooms().catch(() => setSrvOk(false))}>
+                  刷新
+                </button>
+                <button className="sts-btn sts-body" style={{ fontSize: 12, padding: '3px 12px' }}
+                  onClick={() => setShowSrv(s => !s)} title="联机服务器设置">
+                  服务器
                 </button>
               </div>
-            ))}
-          </div>
+            </div>
 
-          {/* 房间码加入 */}
-          <div className="flex items-center gap-2 justify-center" style={{ borderTop: '1px solid rgba(90,64,32,0.6)', paddingTop: 10 }}>
-            <span className="sts-body" style={{ fontSize: 13, color: '#a89070' }}>房间码加入</span>
-            <input
-              className="sts-body"
-              style={{ background: 'rgba(0,0,0,0.5)', border: '1.5px solid #6b4a2e', borderRadius: 8, color: '#e8d8b8', padding: '6px 10px', fontSize: 16, width: 130, letterSpacing: 3, textAlign: 'center' }}
-              value={code} maxLength={6} placeholder="ABCD"
-              onChange={e => setCode(e.target.value.toUpperCase())}
-            />
-            <button className="sts-btn sts-body" style={{ fontSize: 13, padding: '6px 16px' }}
-              disabled={code.trim().length < 4}
-              onClick={() => netJoinRoom(name, code)}>
-              加入房间
-            </button>
+            {showSrv && (
+              <div className="flex items-center gap-2" style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 8, padding: '8px 10px' }}>
+                <span className="sts-body" style={{ fontSize: 12, color: '#a89070', whiteSpace: 'nowrap' }}>服务器地址</span>
+                <input
+                  className="sts-body" style={{ flex: 1, background: 'rgba(0,0,0,0.5)', border: '1px solid #6b4a2e', borderRadius: 6, color: '#e8d8b8', padding: '5px 8px', fontSize: 12 }}
+                  placeholder={srvInput ? '' : OFFICIAL_SERVER}
+                  value={srvInput} onChange={e => setSrvInput(e.target.value)}
+                />
+                <button className="sts-btn sts-body" style={{ fontSize: 12, padding: '4px 12px' }}
+                  onClick={() => { setServerUrl(srvInput); location.reload() }}>保存</button>
+              </div>
+            )}
+
+            <div ref={listRef} className="flex flex-col gap-1.5" style={{ maxHeight: 170, overflowY: 'auto' }}>
+              {rooms.length === 0 && (
+                <div className="sts-body text-center" style={{ color: srvOk ? '#8a7458' : '#a87868', fontSize: 13, padding: '20px 0' }}>
+                  {srvOk ? '暂无开放房间 —— 创建一个，或输入房间码加入好友' : '无法连接联机服务器：请检查网络，或点击右上角「服务器」填写地址，也可改用 P2P 直连'}
+                </div>
+              )}
+              {rooms.map(r => (
+                <div key={r.code} className="flex items-center gap-3"
+                  style={{ background: 'rgba(0,0,0,0.32)', border: '1px solid #4a3520', borderRadius: 8, padding: '7px 12px' }}>
+                  <span className="sts-title" style={{ fontSize: 19, color: '#8ee8ff', letterSpacing: 5, width: 84, textShadow: '2px 2px 0 #000' }}>{r.code}</span>
+                  <span className="sts-body" style={{ fontSize: 14, color: '#e8d8b8', flex: 1 }}>
+                    {r.host} 的房间
+                    <span className="sts-body" style={{ fontSize: 12, color: '#8a7458', marginLeft: 8 }}>
+                      {r.guests > 0 ? '2/2' : '1/2'} 人
+                    </span>
+                  </span>
+                  <span className="sts-body" style={{ fontSize: 12, color: r.status === 'open' ? '#8ee888' : '#8a7458' }}>
+                    {r.status === 'open' ? '等待中' : '已满'}
+                  </span>
+                  <button
+                    className="sts-btn sts-body"
+                    style={{ fontSize: 13, padding: '5px 18px' }}
+                    disabled={r.status !== 'open'}
+                    onClick={() => netJoinRoom(name, r.code)}
+                  >
+                    加入
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* 房间码加入 */}
+            <div className="flex items-center gap-2 justify-center" style={{ borderTop: '1px solid rgba(90,64,32,0.6)', paddingTop: 10 }}>
+              <span className="sts-body" style={{ fontSize: 13, color: '#a89070' }}>房间码加入</span>
+              <input
+                className="sts-body"
+                style={{ background: 'rgba(0,0,0,0.5)', border: '1.5px solid #6b4a2e', borderRadius: 8, color: '#e8d8b8', padding: '6px 10px', fontSize: 16, width: 130, letterSpacing: 3, textAlign: 'center' }}
+                value={code} maxLength={6} placeholder="ABCD"
+                onChange={e => setCode(e.target.value.toUpperCase())}
+              />
+              <button className="sts-btn sts-body" style={{ fontSize: 13, padding: '6px 16px' }}
+                disabled={code.trim().length < 4}
+                onClick={() => netJoinRoom(name, code)}>
+                加入房间
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          /* P2P 模式说明 */
+          <div className="sts-panel flex flex-col items-center" style={{ width: 620, padding: '16px 20px', gap: 10 }}>
+            <div className="sts-body text-center" style={{ color: '#c8b090', fontSize: 14, lineHeight: 1.9 }}>
+              P2P 直连模式：通过 WebRTC 与好友直接连接，<b style={{ color: '#ffd980' }}>无需服务器</b>。<br />
+              创建房间后把 4 位房间码告诉好友，好友输入房间码即可加入。<br />
+              <span style={{ color: '#8a7458', fontSize: 13 }}>提示：P2P 模式无大厅房间列表；部分网络环境（如公司/校园网）可能无法打洞，建议优先使用服务器中转。</span>
+            </div>
+            <div className="flex items-center gap-2" style={{ borderTop: '1px solid rgba(90,64,32,0.6)', paddingTop: 10 }}>
+              <span className="sts-body" style={{ fontSize: 13, color: '#a89070' }}>房间码加入</span>
+              <input
+                className="sts-body"
+                style={{ background: 'rgba(0,0,0,0.5)', border: '1.5px solid #6b4a2e', borderRadius: 8, color: '#e8d8b8', padding: '6px 10px', fontSize: 16, width: 130, letterSpacing: 3, textAlign: 'center' }}
+                value={code} maxLength={6} placeholder="ABCD"
+                onChange={e => setCode(e.target.value.toUpperCase())}
+              />
+              <button className="sts-btn sts-body" style={{ fontSize: 13, padding: '6px 16px' }}
+                disabled={code.trim().length < 4}
+                onClick={() => netJoinRoom(name, code)}>
+                加入房间
+              </button>
+            </div>
+          </div>
+        )}
 
         <button className="sts-btn sts-body" style={{ fontSize: 15, padding: '6px 30px' }} onClick={() => gotoMenuScreen('title')}>
           返回主菜单
@@ -163,12 +209,13 @@ export function MultiplayerScreen() {
     )
   }
 
-  // ===== 阶段2：房间内（等待 / 已连接） =====
+  // ===== 阶段2：房间内（创建中 / 等待 / 已连接） =====
   const isHost = net.role === 'host'
   const myChar = isHost ? net.lobby.hostChar : net.lobby.guestChar
   const otherChar = isHost ? net.lobby.guestChar : net.lobby.hostChar
   const otherName = net.peerName || '等待加入…'
   const bothReady = !!(net.lobby.hostChar && net.lobby.guestChar)
+  const starting = net.status === 'starting' || net.status === 'connecting'
 
   return (
     <Shell>
@@ -176,12 +223,20 @@ export function MultiplayerScreen() {
 
       {/* 房间码 */}
       <div className="flex flex-col items-center gap-1">
-        <div className="sts-body" style={{ color: '#a89070', fontSize: 13 }}>房间码（告诉你的好友，或在大厅列表中找到它）</div>
+        <div className="sts-body" style={{ color: '#a89070', fontSize: 13 }}>
+          {starting ? (isHost ? '正在创建房间…' : '正在连接房间…') : '房间码（告诉你的好友，或在大厅列表中找到它）'}
+        </div>
         <div className="flex items-center gap-3">
-          <div className="sts-title" style={{ fontSize: 46, color: '#8ee8ff', letterSpacing: 12, textShadow: '0 0 24px rgba(100,200,255,0.5), 3px 3px 0 #000' }}>
-            {net.roomCode || '····'}
-          </div>
-          {isHost && (
+          {starting ? (
+            <div className="sts-title" style={{ fontSize: 46, color: '#8ee8ff', letterSpacing: 12, textShadow: '0 0 24px rgba(100,200,255,0.5), 3px 3px 0 #000', animation: 'sts-blink 1.2s ease-in-out infinite' }}>
+              ····
+            </div>
+          ) : (
+            <div className="sts-title" style={{ fontSize: 46, color: '#8ee8ff', letterSpacing: 12, textShadow: '0 0 24px rgba(100,200,255,0.5), 3px 3px 0 #000' }}>
+              {net.roomCode || '····'}
+            </div>
+          )}
+          {isHost && !starting && (
             <button className="sts-btn sts-body" style={{ fontSize: 13, padding: '6px 14px' }}
               onClick={() => {
                 navigator.clipboard?.writeText(net.roomCode).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) }).catch(() => {})
@@ -201,11 +256,15 @@ export function MultiplayerScreen() {
 
       {/* 状态提示 */}
       <div className="sts-body text-center" style={{ color: net.connected ? '#8ee888' : '#c8a878', fontSize: 14, minHeight: 22 }}>
-        {!net.connected
-          ? (isHost ? '等待好友加入…（房间已显示在大厅列表中）' : '正在连接房间…')
-          : bothReady
-            ? (isHost ? '双方已就绪，可以出发！' : '等待房主出发…')
-            : (isHost ? '等待双方选择角色…' : '选择你的角色，等待房主出发…')}
+        {starting
+          ? '正在与联机服务器建立连接…'
+          : !net.connected
+            ? (isHost
+              ? (netMode() === 'p2p' ? '等待好友加入…（把房间码告诉好友）' : '等待好友加入…（房间已显示在大厅列表中）')
+              : '正在连接房间…')
+            : bothReady
+              ? (isHost ? '双方已就绪，可以出发！' : '等待房主出发…')
+              : (isHost ? '等待双方选择角色…' : '选择你的角色，等待房主出发…')}
       </div>
 
       {/* 操作 */}
@@ -228,6 +287,25 @@ export function MultiplayerScreen() {
 
       {net.error && <div className="sts-body" style={{ color: '#ff9a8a', fontSize: 14 }}>{net.error}</div>}
     </Shell>
+  )
+}
+
+// ============ 连接方式按钮 ============
+function ModeBtn({ active, onClick, title, desc }: { active: boolean; onClick: () => void; title: string; desc: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className="sts-body"
+      style={{
+        fontSize: 13, padding: '5px 14px', borderRadius: 8, lineHeight: 1.3,
+        border: active ? '1.5px solid #ffd980' : '1.5px solid #6b4a2e',
+        background: active ? 'rgba(80,56,20,0.55)' : 'rgba(0,0,0,0.4)',
+        color: active ? '#ffd980' : '#a89070',
+        cursor: 'pointer',
+      }}
+    >
+      {title} <span style={{ fontSize: 11, opacity: 0.75 }}>{desc}</span>
+    </button>
   )
 }
 
