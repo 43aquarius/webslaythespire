@@ -179,3 +179,24 @@ Stage Summary:
 - 第七批6项+新需求全部完成：①药水金钱左上角+按钮不再重合 ②菜单设置可用(齿轮面板补全) ③联机改WebSocket服务端中转(ws-server.js,不再纯P2P) ④联机大厅(房间列表实时刷新+一键加入+服务器地址设置,两版本) ⑤两处文字清理 ⑥预见/牌堆弹窗滚动条根修 ⑦玩家血量改原版78/80红字样式(头像+血量+金币+药水全左上,敌人保留血条)
 - 双版本(Next.js/单文件19.03MB)完全同步；跨版本联机实测互通(单文件房主↔Next.js客机)
 - 附带修复：3/4幕Boss药水掉落(原版无消耗品奖励)既有flaky bug
+
+---
+Task ID: 10
+Agent: main
+Task: 第八批需求：默认联机服务器slaythespire.space-z.ai + 房间码不显示修复 + 保留P2P + 遗物提示框手机端跑出屏幕 + 旋转按钮改180度翻转
+
+Work Log:
+- 【平台网络诊断（本批核心发现）】逐层排查证实：①公网域名(slaythespire.space-z.ai)是独立部署的生产实例(FC函数计算, 10:18随上会话结束自动部署)；②平台网关对WebSocket升级做假应答——无论后端是否存在都回101但双向数据帧全部丢弃(9999端口无监听也回101)；③XTransformPort端口转发公网不可用(3001返回的426来自平台自身而非后端服务, 3002+全部502)；④唯一稳定通道=3000端口(Next.js)的HTTP GET/POST；⑤本容器后台进程会被会话回收(setsid+nohup均被杀)，须double-fork(detached+unref)才能存活
+- 【联机架构重做】废弃外置ws-server.js方案 → 中转服务内置Next.js：新建/api/mp路由(房间管理+消息信箱+大厅列表+CORS全开放+OPTIONS预检, globalThis状态持久化抗热重载, 15s清扫器: 4小时房间TTL+45秒玩家掉线判定)；客户端HttpRelay后端：候选地址依次尝试(自定义→官方→同源→localhost), 发送泵180ms保序+轮询700ms收件, 4连败判掉线, leave用keepalive fetch
+- 【需求1: 默认服务器】OFFICIAL_SERVER='https://slaythespire.space-z.ai'为默认候选；normalizeServerBase自动补全/api/mp后缀；单文件版file://实测：官方服务器(旧部署无/api/mp返回404)→自动回退localhost成功连接
+- 【需求2: 房间码不显示】根因=公网WS假应答导致'created'确认永不到达+创建期间界面无反馈。修复：netCreateRoom/netJoinRoom立即切换房间界面显示"创建中…"呼吸闪烁占位(sts-blink动画), 房间码到达即显；实测建房UMZ5房间码秒显
+- 【需求3: 保留P2P】PeerJS后端完整恢复(动态import按需加载, 房间码冲突自动重试)；大厅新增"连接方式"切换(服务器中转·推荐·支持大厅 / P2P直连·无需服务器), localStorage持久化(stsNetMode)；P2P模式隐藏大厅列表显示直连说明；实测X784房双浏览器WebRTC直连+双端选角同步
+- 【需求4: 遗物提示框】Next.js版Tip重写: 舞台逻辑坐标定位(data-stage标记+scale换算), 上方放不下自动改下方, 四向钳制[8,1592]×[8,892]；单文件版tooltip: mousemove负坐标修复+触屏上方放不下改下方+max-width:min(260px,calc(100vw-24px))；iPhone14横竖屏实测均inScreen:true
+- 【需求5: 旋转180度】两版本🔄按钮改为整屏rotate(180deg)翻转(替代原全屏+orientation.lock), localStorage持久化(stsFlip180), 翻转后按钮图标反向旋转便于识别；实测翻转/恢复/持久化/再点击全部正常
+- 【清理】删除sse-test诊断路由与9个网络诊断脚本；P2P模式等待文案修正(不再提"大厅列表")；README新增联机架构说明；版本v1.7→v1.8
+
+Stage Summary:
+- 5项需求全部完成，联机从"平台不兼容的WS方案"彻底迁移到"内置HTTP轮询中转"（这是房间码不显示的根本原因）
+- 测试: api/mp协议19/19(dev+生产3100端口双环境), regression 16/16, regression5 412/412, mptest 22/22, tsc 0错误, 生产构建通过
+- 三浏览器E2E全绿: 服务器模式全流程(建房→加入→选角→涅奥轮转→战斗双方出牌→独立奖励), P2P模式(直连+选角同步), 跨版本互通(单文件房主↔Next.js客机), 手机视口tooltip与180度翻转
+- 提交66020b3已推送GitHub；注意: 公网站点需等平台随本会话结束自动重新部署后, /api/mp才会生效(部署后单文件版将默认直连官方服务器)
