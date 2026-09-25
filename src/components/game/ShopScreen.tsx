@@ -66,7 +66,9 @@ export function ShopScreen() {
                     color: canAfford && !item.sold ? '#ffe9a0' : '#a89070',
                     border: '1.5px solid #8a6a2e', fontSize: 15,
                   }}>
-                  {item.sold ? '已售出' : `💰 ${item.price}`}
+                  {item.sold ? '已售出' : item.discount ? (
+                    <>💰 {item.price} <span style={{ color: '#8ee888', fontSize: 12 }}>5折</span></>
+                  ) : `💰 ${item.price}`}
                 </div>
               </div>
             )

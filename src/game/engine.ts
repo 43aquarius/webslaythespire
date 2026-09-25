@@ -626,7 +626,14 @@ export function startCombat(run: RunState, encounterName: string, enemyIds: stri
     turn: 0, phase: 'player',
     encounterName, isElite, isBoss,
     goldReward: isBoss ? rnd(95, 105) : isElite ? rnd(25, 35) : rnd(10, 20),
-    potionDrop: !run.players.some(rp => rp.relics.includes('sozu')) && (isBoss ? true : Math.random() < (isElite ? 0.6 : 0.4)),
+    // 药水掉率（原版递变制：基准40%，掉落-10%/未掉+10%，每幕重置；苏珠免疫）
+    potionDrop: (() => {
+      if (run.players.some(rp => rp.relics.includes('sozu'))) return false
+      const luck = run.potionLuck ?? 0.4
+      const drop = Math.random() < luck
+      run.potionLuck = Math.round(Math.max(0.1, Math.min(1, luck + (drop ? -0.1 : 0.1))) * 100) / 100
+      return drop
+    })(),
     fx: [], log: [],
     combatOver: false, playerWon: false, combatEndTriggered: false,
   }
@@ -659,6 +666,13 @@ export function startCombat(run: RunState, encounterName: string, enemyIds: stri
     combat.enemies.push(inst)
   })
   initEncounter(combat, enemyIds)
+
+  // 涅奥哀歌：接下来的 N 场战斗敌人以 1 点生命开始（原版涅奥的哀歌）
+  if (run.neowLament && run.neowLament > 0) {
+    combat.enemies.forEach(e => { if (e.hp > 1) e.hp = 1 })
+    run.neowLament -= 1
+    fx(combat, 'text', ptgt(combat), undefined, '涅奥的哀歌…')
+  }
 
   // ===== 战斗开始时遗物（每位玩家独立结算） =====
   const prevActive = run.activeIdx
@@ -808,6 +822,15 @@ export function endPlayerTurn(combat: CombatState, run: RunState) {
       damagePlayer(combat, run, dmg, null, false)
     }
   })
+  // 懊悔（诅咒）：回合结束时失去等同手牌数的生命（含其自身，原版在按结束回合时结算）
+  const regrets = AP(combat).hand.filter(c => c.id === 'regret').length
+  if (regrets > 0) {
+    const dmg = AP(combat).hand.length * regrets
+    damagePlayer(combat, run, dmg, null, false)
+    fx(combat, 'text', ptgt(combat), undefined, `懊悔 -${dmg}`)
+  }
+  // 疑虑（诅咒）：标记（在手牌弃置前捕获；虚弱在递减后施加，保证下回合生效）
+  const hasDoubt = AP(combat).hand.some(c => c.id === 'doubt')
   // 虚空：失去能量
   const voids = AP(combat).hand.filter(c => c.id === 'void').length
   if (voids > 0) {
@@ -878,6 +901,11 @@ export function endPlayerTurn(combat: CombatState, run: RunState) {
       if (P.statuses[s] <= 0) delete P.statuses[s]
     }
   })
+  // 疑虑（诅咒）：递减后施加 1 层虚弱（保证下回合生效，对齐原版表现）
+  if (hasDoubt) {
+    applyStatus(combat, 'player', 'weak', 1)
+    fx(combat, 'text', ptgt(combat), undefined, '疑虑…')
+  }
 }
 
 // ============ 敌人回合（分步执行，供 UI 播放动画） ============

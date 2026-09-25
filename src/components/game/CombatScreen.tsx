@@ -181,7 +181,9 @@ function EnemyView({ enemy }: { enemy: EnemyInstance }) {
   }, [lungeId])
 
   if (!combat || !run) return null
-  const targetable = !!selectedCard || selectedPotion !== null
+  // 选牌/选药水时的红框提示只对存活敌人生效（死亡怪不再出现红框，避免视觉干扰）
+  const alive = !enemy.dying && enemy.hp > 0
+  const targetable = alive && (!!selectedCard || selectedPotion !== null)
   const myFx = fxList.filter(f => f.target === enemy.uid && f.kind !== 'slash' && f.kind !== 'lunge')
   const mySlashes = fxList.filter(f => f.target === enemy.uid && f.kind === 'slash')
   const spriteW = def.boss ? 340 : def.elite ? 260 : def.small ? 150 : 210

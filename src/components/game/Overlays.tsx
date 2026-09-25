@@ -57,16 +57,18 @@ export function CardSelectOverlay() {
   if (!run || !select) return null
 
   const findCard = (uid: string): CardInstance | undefined => {
+    if (select.source === 'offer') return select.offerCards?.find(c => c.uid === uid)
     if (select.source === 'deck') return run.deck.find(c => c.uid === uid)
     if (select.source === 'hand') return AP(run.combat!).hand.find(c => c.uid === uid)
     if (select.source === 'discard') return AP(run.combat!).discardPile.find(c => c.uid === uid)
     return undefined
   }
-  // 保持牌堆顺序展示
+  // 保持牌堆顺序展示（offer：直接展示提供的卡）
   const ordered: CardInstance[] =
-    select.source === 'deck' ? run.deck
-      : select.source === 'hand' ? (run.combat ? AP(run.combat).hand : [])
-        : (run.combat ? AP(run.combat).discardPile : [])
+    select.source === 'offer' ? (select.offerCards ?? [])
+      : select.source === 'deck' ? run.deck
+        : select.source === 'hand' ? (run.combat ? AP(run.combat).hand : [])
+          : (run.combat ? AP(run.combat).discardPile : [])
   const cards = ordered.filter(c => select.cardUids.includes(c.uid))
 
   const cancellable = select.kind === 'eventUpgrade' || select.kind === 'eventRemove' ||

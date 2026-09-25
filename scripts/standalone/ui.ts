@@ -37,26 +37,15 @@ function setText(el: HTMLElement | null, text: string) {
   if (el && el.textContent !== text) el.textContent = text
 }
 
-// ============ 舞台（1600×900 等比缩放 + 竖屏提示） ============
+// ============ 舞台（1600×900 等比缩放，不拦截竖屏） ============
 const STAGE_W = 1600, STAGE_H = 900
 let stageEl: HTMLElement
 let fxLayer: HTMLElement
 const app = document.getElementById('app')!
 
-let portraitForceContinue = false
-function isPortraitNeed() {
-  // 双信号：任一判定竖屏且小屏才提示（平板竖屏不提示）
-  const bySize = window.innerHeight > window.innerWidth
-  const byMq = matchMedia('(orientation: portrait)').matches
-  const small = Math.min(window.innerWidth, window.innerHeight) < 760
-  return small && (bySize || byMq) && !portraitForceContinue
-}
-
 function fitStage() {
   const k = Math.min(window.innerWidth / STAGE_W, window.innerHeight / STAGE_H)
   stageEl.style.transform = `translate(-50%, -50%) scale(${k})`
-  const rp = document.getElementById('rotate-prompt')
-  if (rp) rp.style.display = isPortraitNeed() ? 'flex' : 'none'
 }
 
 function setupStage() {
@@ -71,26 +60,6 @@ function setupStage() {
   stage.appendChild(toast)
   const ov = document.createElement('div'); ov.id = 'overlay-layer'
   stage.appendChild(ov)
-  // 竖屏提示（含逃生按钮：永不卡死）
-  const rp = document.createElement('div'); rp.id = 'rotate-prompt'
-  rp.innerHTML = `<div class="rotate-phone"></div>
-    <div class="sts-title" style="font-size:30px;color:#ffd980;text-shadow:2px 2px 0 #000">请横屏游玩</div>
-    <div class="sts-body" style="color:#a89070;font-size:15px;line-height:1.8;text-align:center">杀戮尖塔为横屏游戏<br>旋转设备以获得最佳体验</div>
-    <button class="sts-btn sts-title" id="rp-try-landscape" style="font-size:18px;padding:9px 30px">⛶ 自动切换横屏</button>
-    <button class="sts-btn" id="rp-continue" style="font-size:15px;padding:7px 22px;opacity:.85">竖屏继续游玩 →</button>`
-  document.body.appendChild(rp)
-  rp.querySelector('#rp-try-landscape')?.addEventListener('click', async () => {
-    try {
-      const d = document as any
-      if (!d.fullscreenElement) await d.documentElement.requestFullscreen().catch(() => { })
-      const so = (screen as any).orientation
-      await so?.lock?.('landscape')?.catch(() => { })
-    } catch { /* iOS 不支持，静默 */ }
-  })
-  rp.querySelector('#rp-continue')?.addEventListener('click', () => {
-    portraitForceContinue = true
-    fitStage()
-  })
   stageEl = stage
   fxLayer = fx
   fitStage()
@@ -101,7 +70,17 @@ function setupStage() {
   })
   if (window.visualViewport) window.visualViewport.addEventListener('resize', fitStage)
   // 预加载关键背景，避免首次切屏白闪
-  for (const k of ['bg/combat.jpg', 'bg/map.jpg']) { const img = new Image(); img.src = A(k) }
+  for (const k of ['bg/combat.jpg', 'bg/map.jpg', 'bg/menu.jpg']) { const img = new Image(); img.src = A(k) }
+}
+
+// 尝试切换到指定方向（全屏 + orientation.lock；iOS 不支持时静默失败）
+async function tryOrient(lock: 'landscape' | 'portrait') {
+  try {
+    const d = document as any
+    if (!d.fullscreenElement) await d.documentElement.requestFullscreen().catch(() => { })
+    const so = (screen as any).orientation
+    await so?.lock?.(lock)?.catch(() => { })
+  } catch { /* iOS 不支持，静默 */ }
 }
 
 // ============ BGM 引擎（曲目映射自原版反编译源码） ============
@@ -431,7 +410,7 @@ const CHARACTERS: CharacterId[] = ['ironclad', 'silent', 'defect', 'watcher']
 const CHAR_COLOR: Record<string, string> = { ironclad: '#b03828', silent: '#3a9a5a', defect: '#3a7ac8', watcher: '#9a5ab8' }
 let selectedChar: CharacterId = 'ironclad'
 
-// ---- 主菜单（原版风格竖排菜单） ----
+// ---- 主菜单（原版风格：官方Logo + 尖塔主视觉 + 石板按钮） ----
 function rMainMenu(): string {
   const canCont = hasSave()
   const items = [
@@ -442,43 +421,43 @@ function rMainMenu(): string {
     { label: '设　　置', act: 'gotoMenu', arg: 'settings', dis: false },
     { label: '制 作 名 单', act: 'gotoMenu', arg: 'credits', dis: false },
   ]
-  return `<div class="screen bg-cover" style="background-image:url('${A('bg/combat.jpg')}')">
-  <div class="shade" style="background:rgba(6,3,2,.62)"></div>
+  return `<div class="screen">
+  <div class="main-menu-bg" style="background-image:url('${A('bg/menu.jpg')}')"></div>
+  <div class="main-menu-fog"></div>
   <div class="center-col" style="padding-top:0;gap:14px">
-    <h1 class="sts-title game-title">杀戮尖塔</h1>
-    <div class="sts-title subtitle">—— SLAY THE SPIRE · WEB 复刻版 ——</div>
-    <div style="display:flex;flex-direction:column;gap:11px;margin-top:26px">
-      ${items.map(it => `<button class="sts-btn menu-item sts-title" data-act="${it.act}" ${it.arg ? `data-screen="${it.arg}"` : ''} ${it.dis ? 'disabled' : ''}
-        style="font-size:23px;letter-spacing:5px;padding:10px 80px;min-width:320px;${it.dis ? 'opacity:.4;cursor:not-allowed' : ''}">${it.label}</button>`).join('')}
+    <img class="menu-logo" src="${A('bg/logo.png')}" alt="Slay the Spire" draggable="false" style="width:286px">
+    <div class="sts-title" style="font-size:17px;color:#c8a878;text-shadow:2px 2px 0 #000;letter-spacing:5px;margin-top:-6px">WEB 复刻版 · 单人 + 联机合作</div>
+    <div style="display:flex;flex-direction:column;gap:13px;margin-top:22px">
+      ${items.map(it => `<button class="menu-btn sts-title ${it.dis ? 'dis' : ''}" data-act="${it.act}" ${it.arg ? `data-screen="${it.arg}"` : ''} ${it.dis ? 'disabled' : ''}
+        style="opacity:${it.dis ? 1 : ''}"><span style="opacity:${it.dis ? .45 : 1};display:block">${it.label}</span></button>`).join('')}
     </div>
-    <div class="sts-body" style="color:#8a7458;font-size:12px;position:absolute;left:16px;bottom:12px">Web 复刻版 v1.4 · 单人 + 联机合作</div>
+    <div class="sts-body" style="color:#8a7458;font-size:12px;position:absolute;left:16px;bottom:12px">Web 复刻版 v1.5 · 基于 Slay the Spire 玩法复刻</div>
   </div>
-  <a class="github-btn" href="https://github.com/43aquaris/webslaythespire" target="_blank" rel="noreferrer" title="GitHub 仓库">${GITHUB_SVG}<span>43aquarius/webslaythespire</span></a>
+  <a class="github-btn" href="https://github.com/43aquarius/webslaythespire" target="_blank" rel="noreferrer" title="GitHub 仓库">${GITHUB_SVG}<span>43aquarius/webslaythespire</span></a>
 </div>`
 }
 
-// ---- 角色选择（原版：角色站立 + 出发/返回） ----
+// ---- 角色选择（原版：无框立绘站立 + 出发/返回） ----
 function rCharSelect(): string {
   const info = CHARACTER_INFO[selectedChar]
   const cards = CHARACTERS.map(c => {
     const sel = selectedChar === c
     const col = CHAR_COLOR[c]
-    return `<div class="char-card ${sel ? 'sel' : ''}" data-act="pickChar" data-char="${c}" style="${sel ? `border-color:${col};box-shadow:0 0 22px ${col}66` : ''}">
-      <img src="${A('hero/' + c + '.png')}" alt="${info.name}" draggable="false">
-      <div class="sts-title" style="font-size:20px;color:${sel ? col : '#d8c8a8'};text-shadow:1px 1px 0 #000">${CHARACTER_INFO[c].name}</div>
-      <div class="sts-body" style="font-size:12px;color:#a89878;line-height:1.5">${CHARACTER_INFO[c].desc}<br>❤ ${CHARACTER_INFO[c].hp} 生命 · ${RELICS[CHARACTER_INFO[c].relic]?.name ?? ''}</div>
+    return `<div class="char-card ${sel ? 'sel' : ''}" data-act="pickChar" data-char="${c}" style="${sel ? `transform:translateY(-10px) scale(1.06)` : ''}">
+      <img src="${A('hero/' + c + '.png')}" alt="${CHARACTER_INFO[c].name}" draggable="false">
+      <div class="sts-title" style="font-size:19px;margin-top:2px;letter-spacing:3px;color:${sel ? '#ffd980' : '#a89070'};text-shadow:2px 2px 0 #000">${CHARACTER_INFO[c].name}</div>
     </div>`
   }).join('')
-  return `<div class="screen bg-cover" style="background-image:url('${A('bg/combat.jpg')}')">
-  <div class="shade" style="background:rgba(6,3,2,.58)"></div>
+  return `<div class="screen bg-cover" style="background-image:url('${A('bg/menu.jpg')}')">
+  <div class="shade" style="background:rgba(6,3,2,.5)"></div>
   <div class="center-col" style="padding-top:0;gap:16px">
-    <div class="sts-title" style="font-size:38px;color:#ffd980;text-shadow:3px 3px 0 #000;letter-spacing:8px">选 择 你 的 角 色</div>
+    <div class="sts-title" style="font-size:36px;color:#ffd980;text-shadow:3px 3px 0 #000;letter-spacing:8px">选 择 你 的 角 色</div>
     <div class="char-row">${cards}</div>
-    <div class="sts-body" style="color:#c8b090;font-size:14px;max-width:560px;text-align:center;line-height:1.7">
-      <span style="color:#ffd980">${info.name}</span> · ${info.desc}<br>全 4 幕 · 220+ 卡牌 · 60+ 敌人 · 12 首领</div>
+    <div class="sts-body" style="color:#c8b090;font-size:14px;max-width:580px;text-align:center;line-height:1.8">
+      <span style="color:#ffd980">${info.name}</span> · ${info.desc}<br>生命值 <span style="color:#ff8a7a">${info.hp}</span> · 初始遗物「<span style="color:#9ad8f0">${RELICS[info.relic]?.name ?? ''}</span>」 · 全 4 幕 · 220+ 卡牌 · 60+ 敌人 · 12 首领</div>
     <div class="row" style="gap:36px;margin-top:6px">
       <button class="sts-btn sts-title" data-act="gotoMenu" data-screen="title" style="font-size:20px;padding:10px 44px;letter-spacing:4px">返 回</button>
-      <button class="sts-btn sts-title" data-act="startRun" style="font-size:26px;padding:12px 68px;letter-spacing:6px">出 发</button>
+      <button class="sts-btn sts-btn-gold sts-title" data-act="startRun" style="font-size:26px;padding:12px 68px;letter-spacing:6px">出 发</button>
     </div>
   </div>
 </div>`
@@ -543,7 +522,7 @@ function rCredits(): string {
     <div class="sts-panel sts-body" style="padding:28px 52px;max-width:560px;color:#c8b090;font-size:15px;line-height:2;text-align:center">
       <b style="color:#e8d8b8">Web 复刻版</b><br>基于 Mega Crit Games 的《杀戮尖塔》玩法复刻<br>仅供学习交流使用 · 请支持正版原作<br>
       <b style="color:#e8d8b8">技术</b><br>原生 JS · Zustand · Web Animations · PeerJS 联机<br>
-      <b style="color:#e8d8b8">开源</b><br>github.com/43aquaris/webslaythespire</div>
+      <b style="color:#e8d8b8">开源</b><br>github.com/43aquarius/webslaythespire</div>
     <button class="sts-btn sts-title" data-act="gotoMenu" data-screen="title" style="font-size:20px;padding:10px 60px">返 回</button>
   </div>
 </div>`
@@ -750,7 +729,7 @@ function updateEnemies(run: RunState) {
   const row = document.getElementById('enemies-row')
   if (!row || !run.combat) return
   const c = run.combat
-  const targetable = !!g().selectedCardUid || g().selectedPotionIdx !== null
+  const hasSel = !!g().selectedCardUid || g().selectedPotionIdx !== null
   const seen = new Set<string>()
   for (const e of c.enemies) {
     seen.add(e.uid)
@@ -770,7 +749,9 @@ function updateEnemies(run: RunState) {
         </div>`
       row.appendChild(el)
     }
-    // 类与可点击状态
+    // 类与可点击状态（红框提示仅对存活敌人；死亡怪不再被 target-pulse 动画复活显示）
+    const alive = !e.dying && e.hp > 0
+    const targetable = hasSel && alive
     const cls = `enemy ${e.dying ? 'dying' : ''} ${targetable ? 'targetable' : ''}`
     if (el.className !== cls) el.className = cls
     if (targetable) { el.dataset.act = 'clickEnemy'; el.dataset.uid = e.uid }
@@ -1158,8 +1139,9 @@ function buildShopScreen(): string {
 </div>`
 }
 
-function shopPriceTag(sold: boolean, price: number, gold: number): string {
-  return sold ? `<span class="price-tag">已售出</span>` : `<span class="price-tag ${gold >= price ? 'ok' : ''}">💰 ${price}</span>`
+function shopPriceTag(sold: boolean, price: number, gold: number, discount?: boolean): string {
+  if (sold) return `<span class="price-tag">已售出</span>`
+  return `<span class="price-tag ${gold >= price ? 'ok' : ''}">💰 ${price}${discount ? ' <i style="font-style:normal;color:#8ee888;font-size:12px">5折</i>' : ''}</span>`
 }
 
 function updateShopScreen(run: RunState) {
@@ -1185,7 +1167,7 @@ function updateShopScreen(run: RunState) {
       el.className = `shop-card ${item.sold ? 'sold' : ''}`
       if (item.sold) delete el.dataset.act
       else el.dataset.act = 'buyCard'
-      setHtml(el.querySelector('.shop-price'), shopPriceTag(item.sold, item.price, meS.gold))
+      setHtml(el.querySelector('.shop-price'), shopPriceTag(item.sold, item.price, meS.gold, item.discount))
     })
   }
   // 遗物
@@ -1375,9 +1357,10 @@ function overlayHtml(st: ReturnType<typeof g>): { html: string; sig: string } {
   }
   if (st.select) {
     const sel = st.select
-    const ordered: CardInstance[] = sel.source === 'deck' ? run.deck
-      : sel.source === 'hand' ? (run.combat ? AP(run.combat).hand : [])
-        : (run.combat ? AP(run.combat).discardPile : [])
+    const ordered: CardInstance[] = sel.source === 'offer' ? (sel.offerCards ?? [])
+      : sel.source === 'deck' ? run.deck
+        : sel.source === 'hand' ? (run.combat ? AP(run.combat).hand : [])
+          : (run.combat ? AP(run.combat).discardPile : [])
     const cards = ordered.filter(c => sel.cardUids.includes(c.uid))
     const cancellable = ['eventUpgrade', 'eventRemove', 'sacrifice', 'restSmith', 'shopRemove'].includes(sel.kind)
     const sig = `select:${sel.kind}:${sel.title}:${cards.length}`
@@ -1720,7 +1703,8 @@ const ACTIONS: Record<string, (el: HTMLElement) => void> = {
     const c = el.dataset.char as CharacterId
     if (c && CHARACTER_INFO[c]) {
       selectedChar = c
-      sigScreen('title:' + c, () => rTitle())
+      // 差异更新角色选择界面（修复：旧代码误渲染 rTitle 导致退回主菜单）
+      sigScreen('charSelect:' + c, () => rCharSelect())
     }
   },
   chooseNeow: (el) => g().chooseNeow(Number(el.dataset.idx)),
@@ -1843,6 +1827,20 @@ function setupControls() {
   })
   wrap.appendChild(gearBtn)
 
+  // 横竖屏切换按钮（仅触屏设备；替代旧的竖屏拦截提示）
+  if (typeof matchMedia !== 'undefined' && matchMedia('(hover: none)').matches) {
+    const rotBtn = document.createElement('button')
+    rotBtn.className = 'sts-btn'
+    rotBtn.style.cssText = 'font-size:15px;padding:4px 10px;min-width:38px'
+    rotBtn.textContent = '🔄'
+    rotBtn.title = '切换横竖屏（自动进入全屏）'
+    rotBtn.addEventListener('click', () => {
+      const portrait = window.innerHeight > window.innerWidth
+      tryOrient(portrait ? 'landscape' : 'portrait')
+    })
+    wrap.appendChild(rotBtn)
+  }
+
   // 全屏按钮
   const fsBtn = document.createElement('button')
   fsBtn.className = 'sts-btn'
@@ -1925,7 +1923,7 @@ setupControls()
 setupKeyboard()
 useGame.subscribe(render)
 render()
-console.log('[STS standalone] 游戏就绪 v1.4（单人 + 联机合作）')
+console.log('[STS standalone] 游戏就绪 v1.5（单人 + 联机合作 · 机制对照原版修正）')
 
 
 

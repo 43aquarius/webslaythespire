@@ -54,47 +54,131 @@ export const CHARACTER_INFO: Record<CharacterId, {
   watcher: { name: '观者', nameEn: 'Watcher', hp: 72, relic: 'pureWater', desc: '盲眼修女，以姿态与真言审判。', sprite: 'watcher' },
 }
 
-// ============ 涅奥祝福选项 ============
-export function makeNeowOptions(): NeowOption[] {
+// ============ 涅奥祝福选项（还原原版四槽结构） ============
+// 第一祝福：卡牌相关 / 第二祝福：普通增益 / 第三祝福：代价+强力奖励 / 第四祝福：Boss交换
+const NEOW_MAXHP: Record<CharacterId, [number, number]> = {
+  // [第二祝福加值, 第三祝福代价减值]（原版：铁甲+8/6/7/7）
+  ironclad: [8, 8], silent: [6, 7], defect: [7, 7], watcher: [7, 7],
+}
+const NEOW_TRADE_MAXHP: Record<CharacterId, [number, number]> = {
+  // 第三祝福：[代价 -maxHP, 奖励 +maxHP]（原版 +16/12/14/14）
+  ironclad: [8, 16], silent: [7, 12], defect: [7, 14], watcher: [7, 14],
+}
+const CURSE_IDS = ['regret', 'injury', 'doubt']
+
+export function makeNeowOptions(character: CharacterId = 'ironclad'): NeowOption[] {
   const opts: NeowOption[] = []
-  // 槽位1：力量（随机遗物）
-  opts.push({
-    id: 'power', title: '「我会赐予你力量」',
-    desc: '获得一件随机普通遗物。', effect: 'relic',
-  })
-  // 槽位2：生命（最大生命提升 或 痊愈）
-  if (Math.random() < 0.5) {
-    opts.push({
-      id: 'maxhp', title: '「我会强化你的身躯」',
-      desc: '最大生命值提高 8 点。', effect: 'maxHp', value: 8,
-    })
-  } else {
-    opts.push({
-      id: 'heal', title: '「我会治愈你的伤痛」',
-      desc: '回复所有生命值。', effect: 'heal',
-    })
-  }
-  // 槽位3：财富（金币 或 药水）
-  if (Math.random() < 0.6) {
-    opts.push({
-      id: 'gold', title: '「我会赐予你财富」',
-      desc: '获得 100 金币。', effect: 'gold', value: 100,
-    })
-  } else {
-    opts.push({
-      id: 'potions', title: '「我会赐予你补给」',
-      desc: '获得 3 瓶随机药水。', effect: 'potions', value: 3,
-    })
-  }
-  // 槽位4：卡牌（移除/升级/转化/复制）
-  const cardEffects = [
-    { id: 'remove', title: '「我会净化你的卡组」', desc: '移除一张牌。', effect: 'removeCard' },
-    { id: 'upgrade', title: '「我会锤炼你的卡牌」', desc: '升级一张牌。', effect: 'upgradeCard' },
-    { id: 'transform', title: '「我会改变你的命运」', desc: '转化一张牌（变为随机牌）。', effect: 'transformCard' },
-    { id: 'duplicate', title: '「我会复制你的精华」', desc: '复制一张牌。', effect: 'duplicateCard' },
+
+  // ---- 第一祝福（卡牌类，随机一种） ----
+  const firstPool: NeowOption[] = [
+    { id: 'n1_remove', title: '「我会净化你的卡组」', desc: '移除一张牌。', effect: 'removeCard' },
+    { id: 'n1_transform', title: '「我会改变你的命运」', desc: '转化一张牌（变为随机牌）。', effect: 'transformCard' },
+    { id: 'n1_upgrade', title: '「我会锤炼你的卡牌」', desc: '升级一张牌。', effect: 'upgradeCard' },
+    { id: 'n1_gain', title: '「我会赠予你卡牌」', desc: '从 3 张随机卡牌中选择一张获得。', effect: 'gainCard' },
+    { id: 'n1_rare', title: '「我会赐予你珍宝」', desc: '获得一张随机稀有卡牌。', effect: 'randomRareCard' },
   ]
-  opts.push(pick(cardEffects))
+  opts.push(pick(firstPool))
+
+  // ---- 第二祝福（普通增益，随机一种） ----
+  const secondPool: NeowOption[] = [
+    { id: 'n2_maxhp', title: '「我会强化你的身躯」', desc: `最大生命值提高 ${NEOW_MAXHP[character][0]} 点。`, effect: 'maxHp', value: NEOW_MAXHP[character][0] },
+    { id: 'n2_lament', title: '「我为你哀歌」', desc: '接下来 3 场战斗中，敌人以 1 点生命值开始。', effect: 'neowLament', value: 3 },
+    { id: 'n2_relic', title: '「我会赐予你力量」', desc: '获得一件随机普通遗物。', effect: 'relic' },
+    { id: 'n2_gold', title: '「我会赐予你财富」', desc: '获得 100 金币。', effect: 'gold', value: 100 },
+    { id: 'n2_potions', title: '「我会赐予你补给」', desc: '获得 3 瓶随机药水。', effect: 'potions', value: 3 },
+  ]
+  opts.push(pick(secondPool))
+
+  // ---- 第三祝福（代价 + 强力奖励；遵循原版配对例外） ----
+  const disadv: Array<{ id: string; title: string; effect: string }> = [
+    { id: 'd_maxhp', title: `最大生命值 -${NEOW_TRADE_MAXHP[character][0]}`, effect: 'loseMaxHp' },
+    { id: 'd_damage', title: '受到伤害（当前生命的约 30%）', effect: 'takeDamage' },
+    { id: 'd_curse', title: '获得一张诅咒', effect: 'curseCard' },
+    { id: 'd_gold', title: '失去所有金币', effect: 'loseGold' },
+  ]
+  const adv: Array<{ id: string; title: string; effect: string }> = [
+    { id: 'a_remove2', title: '移除 2 张牌', effect: 'removeCard2' },
+    { id: 'a_transform2', title: '转化 2 张牌', effect: 'transformCard2' },
+    { id: 'a_gold', title: '获得 250 金币', effect: 'gold' },
+    { id: 'a_rare', title: '从 3 张稀有卡牌中选择一张获得', effect: 'chooseRareCard' },
+    { id: 'a_relic', title: '获得一件随机罕见遗物', effect: 'rareRelic' },
+    { id: 'a_maxhp', title: `最大生命值 +${NEOW_TRADE_MAXHP[character][1]}`, effect: 'gainMaxHp' },
+  ]
+  let d = pick(disadv)
+  let a = pick(adv)
+  // 原版配对例外：移除2×诅咒 / +250金币×失去金币 / +maxHP×-maxHP 不共存
+  const badPair = (d: string, a: string) =>
+    (d === 'd_curse' && a === 'a_remove2') ||
+    (d === 'd_gold' && a === 'a_gold') ||
+    (d === 'd_maxhp' && a === 'a_maxhp')
+  let guard = 0
+  while (badPair(d.id, a.id) && guard++ < 10) {
+    if (guard % 2 === 1) a = pick(adv.filter(x => !badPair(d.id, x.id)))
+    else d = pick(disadv.filter(x => !badPair(x.id, a.id)))
+  }
+  opts.push({
+    id: 'n3_trade',
+    title: '「一切皆有代价」',
+    desc: `${d.title}，但${a.title}。`,
+    effect: 'tradeoff',
+    disadvantage: d.effect,
+    advantage: a.effect,
+    value: NEOW_TRADE_MAXHP[character][1],
+  })
+
+  // ---- 第四祝福（Boss 交换，恒定出现） ----
+  opts.push({
+    id: 'n4_bossswap',
+    title: '「与我交换力量吧」',
+    desc: '用你的初始遗物交换一件随机 Boss 遗物。',
+    effect: 'bossSwap',
+  })
   return opts
+}
+
+// 3 张随机卡（第一祝福：从角色卡池任意稀有度；第三祝福：稀有卡池）
+export function neowOfferCards(character: CharacterId, rareOnly: boolean): string[] {
+  const out: string[] = []
+  const picked = new Set<string>()
+  const drawOne = (rarity: 'common' | 'uncommon' | 'rare'): string | null => {
+    const pool = shuffle(poolByRarity(rarity, character)).filter(id => !picked.has(id))
+    if (!pool.length) return null
+    picked.add(pool[0])
+    return pool[0]
+  }
+  if (rareOnly) {
+    for (let i = 0; i < 3; i++) { const id = drawOne('rare'); if (id) out.push(id) }
+  } else {
+    // 任意稀有度：按战斗奖励概率近似（60/37/3 不含偏移）
+    for (let i = 0; i < 3; i++) {
+      const roll = Math.random()
+      let id: string | null = null
+      if (roll < 0.03) id = drawOne('rare')
+      else if (roll < 0.40) id = drawOne('uncommon')
+      else id = drawOne('common')
+      if (!id) id = drawOne('uncommon') ?? drawOne('common') ?? drawOne('rare')
+      if (id) out.push(id)
+    }
+  }
+  return out
+}
+
+// 加权随机药水（原版概率：普通 65% / 罕见 25% / 稀有 10%）
+export function weightedPotionPick(exclude: string[] = []): string {
+  const pools: Array<[string[], number]> = [
+    [potionPool().filter(id => POTIONS[id].rarity === 'common' && !exclude.includes(id)), 65],
+    [potionPool().filter(id => POTIONS[id].rarity === 'uncommon' && !exclude.includes(id)), 25],
+    [potionPool().filter(id => POTIONS[id].rarity === 'rare' && !exclude.includes(id)), 10],
+  ]
+  const total = pools.reduce((s, [p]) => s + p.length, 0)
+  if (!total) return pick(potionPool())
+  let roll = Math.random() * 100
+  for (const [p, w] of pools) {
+    if (!p.length) continue
+    if (roll < w) return pick(p)
+    roll -= w
+  }
+  return pick(pools.find(([p]) => p.length)?.[0] ?? potionPool())
 }
 
 // ============ 新开一局（单人） ============
@@ -124,8 +208,10 @@ export function newRun(character: CharacterId = 'ironclad'): RunState {
     removalCount: 0, eliteKilled: 0, monsterKilled: 0, goldEarned: 0,
     act: 1,
     relicCounters: {},
+    rarePity: 0,
+    potionLuck: 0.4,
     gameOverInfo: null,
-    neow: { options: makeNeowOptions(), chosen: null },
+    neow: { options: makeNeowOptions(character), chosen: null },
     bossesSeen: [],
     nextActInfo: null,
   }
@@ -157,7 +243,7 @@ export function newMultiRun(
     gameOverInfo: null,
     neow: {
       options: [], chosen: null,
-      mpOptions: [makeNeowOptions(), makeNeowOptions()],
+      mpOptions: [makeNeowOptions(hostChar), makeNeowOptions(guestChar)],
       chooserIdx: 0,
       mpChosen: [null, null],
     },
@@ -176,6 +262,7 @@ export function advanceAct(run: RunState): void {
   run.reward = null
   run.shop = null
   run.mpRest = null
+  run.potionLuck = 0.4   // 原版：药水掉率每幕重置为 40%
   run.map = run.act >= 4
     ? generateAct4Map(Math.floor(Math.random() * 1e9))
     : generateMap(Math.floor(Math.random() * 1e9))
@@ -215,41 +302,57 @@ export function pickEncounter(run: RunState, isElite: boolean, isBoss: boolean):
   return enc
 }
 
-// ============ 战斗奖励生成 ============
+// ============ 战斗奖励生成（数值对照原版 Wiki） ============
 export function makeCombatReward(run: RunState, isElite: boolean, isBoss: boolean): RewardState {
   const reward: RewardState = { taken: [] }
   const mp = run.players.length > 1
   const anyRelic = (id: string) => run.players.some(p => p.relics.includes(id))
+  const act = run.act
 
-  // 金币（联机：每位玩家各自获得一份）
-  let gold = run.combat?.goldReward ?? 10
-  gold = Math.floor(gold * (1 + 0.1 * (run.act - 1)))
-  if (anyRelic('goldenIdol')) gold = Math.floor(gold * 1.25)
-  reward.gold = gold
+  // 金币（原版：普通 10-20 / 精英 25-35 / Boss 95-105；第3、4幕Boss无任何消耗品奖励）
+  if (!(isBoss && act >= 3)) {
+    let gold = run.combat?.goldReward ?? 10
+    if (anyRelic('goldenIdol')) gold = Math.floor(gold * 1.25)
+    reward.gold = gold
+  }
 
-  // 卡牌奖励（3 张，按稀有度概率；按角色卡池）
-  let rareChance = 0.04 + (isElite ? 0.10 : 0) + Math.min(0.08, run.monsterKilled * 0.005)
+  // 卡牌奖励：第1、2幕Boss = 3 张稀有卡三选一（原版）；普通 3%/精英 10% 基础 + 偏移系统
   const rollCards = (character: CharacterId, hasBustedCrown: boolean): string[] => {
     const nCards = hasBustedCrown ? 2 : 3
+    // Boss（1-2幕）：全部稀有
+    if (isBoss && act <= 2) return shuffle(poolByRarity('rare', character)).slice(0, nCards)
+    const baseRare = isElite ? 0.10 : 0.03
+    const uncommonC = isElite ? 0.40 : 0.37
     const cards: string[] = []
     const poolCommon = shuffle(poolByRarity('common', character))
     const poolUncommon = shuffle(poolByRarity('uncommon', character))
     const poolRare = shuffle(poolByRarity('rare', character))
     for (let i = 0; i < nCards; i++) {
+      // 原版偏移系统：稀有概率 = 基础-5%+1%×(自上次稀有后逐出的普通卡数)
+      const rareChance = Math.max(0, baseRare - 0.05 + 0.01 * (run.rarePity ?? 0))
       const r = Math.random()
-      if (r < rareChance && poolRare.length) cards.push(poolRare.pop()!)
-      else if (r < rareChance + 0.37 && poolUncommon.length) cards.push(poolUncommon.pop()!)
-      else if (poolCommon.length) cards.push(poolCommon.pop()!)
-      else if (poolUncommon.length) cards.push(poolUncommon.pop()!)
+      if (r < rareChance && poolRare.length) {
+        cards.push(poolRare.pop()!)
+        run.rarePity = 0   // 出稀有卡后偏移重置
+      } else if (r < rareChance + uncommonC && poolUncommon.length) {
+        cards.push(poolUncommon.pop()!)
+      } else if (poolCommon.length) {
+        cards.push(poolCommon.pop()!)
+        run.rarePity = (run.rarePity ?? 0) + 1   // 每逐出一张普通卡，稀有概率+1%
+      } else if (poolUncommon.length) {
+        cards.push(poolUncommon.pop()!)
+      }
     }
     return cards
   }
-  if (mp) {
-    // 联机：每位玩家从自己角色卡池独立获得一份三选一
-    reward.mpCards = run.players.map(p => rollCards(p.character, p.relics.includes('bustedCrown')))
-    reward.mpDone = run.players.map(() => false)
-  } else {
-    reward.cards = rollCards(run.character, run.relics.includes('bustedCrown'))
+  if (!(isBoss && act >= 3)) {
+    if (mp) {
+      // 联机：每位玩家从自己角色卡池独立获得一份三选一
+      reward.mpCards = run.players.map(p => rollCards(p.character, p.relics.includes('bustedCrown')))
+      reward.mpDone = run.players.map(() => false)
+    } else {
+      reward.cards = rollCards(run.character, run.relics.includes('bustedCrown'))
+    }
   }
 
   // 精英掉遗物（联机：先到先得，点击者获得）
@@ -259,44 +362,66 @@ export function makeCombatReward(run: RunState, isElite: boolean, isBoss: boolea
     if (pool.length) reward.relic = pool[0]
   }
 
-  // 药水掉落（联机：点击者获得）
+  // 药水掉落（原版：40%基础，掉落-10%/未掉+10%，每幕重置；按稀有度 65/25/10 加权）
   if (run.combat?.potionDrop && !anyRelic('sozu')) {
-    reward.potion = pick(potionPool())
+    reward.potion = weightedPotionPick()
   }
 
   return reward
 }
 
-// ============ 商店生成 ============
+// ============ 商店生成（对照原版：2攻2技1能 + 随机50%折扣 + 按稀有度定价） ============
 export function makeShop(run: RunState): ShopState {
   const owned = new Set(run.relics)
   const cards: ShopState['cards'] = []
   const seen = new Set<string>()
-  // 5 张卡：2 普通 2 罕见 1 稀有（近似原版；按角色卡池）
-  const slots: Array<'common' | 'common' | 'uncommon' | 'uncommon' | 'rare'> = ['common', 'common', 'uncommon', 'uncommon', 'rare']
-  slots.forEach(rar => {
-    const pool = shuffle(poolByRarity(rar, run.character).filter(id => !seen.has(id)))
-    if (!pool.length) return
-    const id = pool[0]
+  // 5 张卡：原版固定 2 攻击 + 2 技能 + 1 能力，稀有度按商店权重 9/37/54（受偏移影响但不改变偏移）
+  const slots: Array<'attack' | 'attack' | 'skill' | 'skill' | 'power'> = ['attack', 'attack', 'skill', 'skill', 'power']
+  for (const type of slots) {
+    const pools = {
+      common: shuffle(poolByRarity('common', run.character)).filter(id => !seen.has(id) && CARDS[id].type === type),
+      uncommon: shuffle(poolByRarity('uncommon', run.character)).filter(id => !seen.has(id) && CARDS[id].type === type),
+      rare: shuffle(poolByRarity('rare', run.character)).filter(id => !seen.has(id) && CARDS[id].type === type),
+    }
+    const rareChance = Math.max(0, 0.09 - 0.05 + 0.01 * (run.rarePity ?? 0))
+    const roll = Math.random()
+    let id: string | undefined
+    if (roll < rareChance && pools.rare.length) id = pools.rare[0]
+    else if (roll < rareChance + 0.37 && pools.uncommon.length) id = pools.uncommon[0]
+    else if (pools.common.length) id = pools.common[0]
+    else if (pools.uncommon.length) id = pools.uncommon[0]
+    else if (pools.rare.length) id = pools.rare[0]
+    if (!id) continue
     seen.add(id)
-    const base = rar === 'common' ? rnd(45, 55) : rar === 'uncommon' ? rnd(68, 82) : rnd(135, 165)
+    const def = CARDS[id]
+    const base = def.rarity === 'common' ? rnd(45, 55) : def.rarity === 'uncommon' ? rnd(68, 83) : rnd(135, 165)
     cards.push({ cardId: id, price: base, sold: false, upgraded: false })
-  })
+  }
+  // 原版：一张随机卡 50% 折扣
+  if (cards.length) {
+    const lucky = cards[Math.floor(Math.random() * cards.length)]
+    lucky.price = Math.max(1, Math.floor(lucky.price / 2))
+    lucky.discount = true
+  }
 
+  // 3 件遗物（原版价格：普通 143-158 / 罕见 238-263 / 稀有 285-315）
   const relics: ShopState['relics'] = []
   const relicPool = shuffle(shopRelicPool().filter(id => !owned.has(id)))
   for (let i = 0; i < 3 && i < relicPool.length; i++) {
     const def = RELICS[relicPool[i]]
-    const price = def.rarity === 'common' ? rnd(143, 167) : rnd(231, 273)
+    const price = def.rarity === 'common' ? rnd(143, 158) : def.rarity === 'uncommon' ? rnd(238, 263) : rnd(285, 315)
     relics.push({ relicId: relicPool[i], price, sold: false })
   }
 
+  // 3 瓶药水（原版权重 65/25/10；价格：普通 48-53 / 罕见 71-79 / 稀有 95-105）
   const potions: ShopState['potions'] = []
-  const potPool = shuffle(potionPool())
+  const potSeen = new Set<string>()
   for (let i = 0; i < 3; i++) {
-    const def = POTIONS[potPool[i]]
-    const price = def.rarity === 'common' ? rnd(48, 58) : def.rarity === 'uncommon' ? rnd(65, 79) : rnd(95, 111)
-    potions.push({ potionId: potPool[i], price, sold: false })
+    const pid = weightedPotionPick([...potSeen])
+    potSeen.add(pid)
+    const def = POTIONS[pid]
+    const price = def.rarity === 'common' ? rnd(48, 53) : def.rarity === 'uncommon' ? rnd(71, 79) : rnd(95, 105)
+    potions.push({ potionId: pid, price, sold: false })
   }
 
   return {

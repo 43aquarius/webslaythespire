@@ -200,4 +200,17 @@ export const STATUS_CARDS: Record<string, CardDef> = {
     id: 'slimed', name: '粘液', nameEn: 'Slimed', type: 'skill', rarity: 'special', cost: -99, target: 'none', exhaustOnDiscard: true,
     desc: '不可打出。消耗。', upDesc: '不可打出。消耗。', art: 'curse', values: [], upValues: [],
   },
+  // 诅咒牌（涅奥第三祝福等来源）
+  regret: {
+    id: 'regret', name: '懊悔', nameEn: 'Regret', type: 'skill', rarity: 'special', cost: -99, target: 'none', curse: true,
+    desc: '诅咒。不可打出。在你的回合结束时，失去等同手牌数量的生命。', upDesc: '诅咒。不可打出。在你的回合结束时，失去等同手牌数量的生命。', art: 'curse', values: [], upValues: [],
+  },
+  injury: {
+    id: 'injury', name: '损伤', nameEn: 'Injury', type: 'skill', rarity: 'special', cost: -99, target: 'none', curse: true,
+    desc: '状态。不可打出。', upDesc: '状态。不可打出。', art: 'curse', values: [], upValues: [],
+  },
+  doubt: {
+    id: 'doubt', name: '疑虑', nameEn: 'Doubt', type: 'skill', rarity: 'special', cost: -99, target: 'none', curse: true,
+    desc: '诅咒。不可打出。在你的回合结束时，获得 1 层虚弱。', upDesc: '诅咒。不可打出。在你的回合结束时，获得 1 层虚弱。', art: 'curse', values: [], upValues: [],
+  },
 }

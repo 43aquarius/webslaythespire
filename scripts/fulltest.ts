@@ -48,7 +48,7 @@ async function main() {
           enemies: r.combat.enemies.map(e => e.id + ':' + e.hp + '/' + e.maxHp + (e.dying ? 'D' : '')).join(','),
           hand: r.combat.players[r.combat.activeIdx].hand.length, energy: r.combat.players[r.combat.activeIdx].energy, turn: r.combat.turn,
         } : null,
-        select: g.select ? g.select.kind : null, banner: g.endBanner,
+        select: g.select ? g.select.kind : null, selectUids: g.select ? g.select.cardUids.slice(0, 3) : null, banner: g.endBanner,
       })
     })()`)
 
@@ -66,9 +66,17 @@ async function main() {
     if (sig === lastAction) { /* 同状态重复出现是允许的（等待动画），超过一定次数会由 MAX_STEPS 兜底 */ }
     lastAction = sig
 
+    // 选牌遮罩（涅奥/事件/篝火等）：选第一张
+    if (s.select && s.selectUids && s.selectUids.length > 0) {
+      ev(`window.__sts.getState().resolveSelect(${JSON.stringify(s.selectUids[0])})`)
+      log.push('SELECT:' + s.select)
+      await sleep(600)
+      continue
+    }
+
     if (s.scr === 'neow') {
-      // 涅奥祝福：选第一项（通常是最大生命/金币类）
-      ev(`window.__sts.getState().chooseNeow(0)`)
+      // 涅奥祝福：优先选第4槽（Boss交换，无需选牌）以推进流程
+      ev(`window.__sts.getState().chooseNeow(3)`)
       log.push('NEOW')
       await sleep(800)
       continue

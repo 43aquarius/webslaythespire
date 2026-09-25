@@ -12,11 +12,11 @@ import {
 } from '@/game/engine'
 import {
   newRun, newMultiRun, pickEncounter, makeCombatReward, makeShop, applyEventEffect, bossRelicChoices,
-  gainRelic, addPotion, advanceAct, transformCardId, EventResult,
+  gainRelic, addPotion, advanceAct, transformCardId, EventResult, neowOfferCards, weightedPotionPick,
 } from '@/game/run'
 import { setRunActive, syncRunActive, nextActorIdx, firstActorIdx, consistentRun } from '@/game/mp'
 import { EVENTS as EVENTS_POOL } from '@/game/events'
-import { RELICS } from '@/game/relics'
+import { RELICS, bossRelicPool } from '@/game/relics'
 import { POTIONS } from '@/game/potions'
 import { net, NetState, NetMsg } from '@/game/net'
 import { saveRun, loadSave, clearSave, saveableMoment, recordRunResult } from '@/game/persist'
@@ -24,14 +24,16 @@ import { saveRun, loadSave, clearSave, saveableMoment, recordRunResult } from '@
 export type SelectKind = 'armaments' | 'headbutt' | 'warcry' | 'trueGrit'
   | 'eventRemove' | 'eventUpgrade' | 'restSmith' | 'shopRemove' | 'sacrifice'
   | 'nightmare' | 'seek' | 'omniscience' | 'hologram' | 'neowRemove' | 'neowUpgrade' | 'neowTransform' | 'neowDuplicate'
+  | 'neowGainCard'
 
 export interface SelectState {
   kind: SelectKind
   title: string
   cardUids: string[]   // 可选的卡
-  source: 'deck' | 'hand' | 'discard' | 'draw'
+  source: 'deck' | 'hand' | 'discard' | 'draw' | 'offer'
   remaining?: number    // 多选剩余次数（搜寻）
   owner?: number        // 联机：发起选牌的玩家（单人恒 0）
+  offerCards?: import('@/game/types').CardInstance[] // source='offer'：直接展示的卡（获得类选牌）
 }
 
 export interface FxItem extends FxEvent { ts: number }
@@ -167,6 +169,8 @@ export const useGame = create<GameStore>((set, get) => {
         run.players.forEach(p => {
           if (p.relics.includes('burningBlood')) p.hp = Math.min(p.maxHp, p.hp + 6)
           if (p.relics.includes('meatOnTheBone') && p.hp < p.maxHp * 0.5) p.hp = Math.min(p.maxHp, p.hp + 12)
+          // 原版：Boss 战后回复全部已损失生命（单人局）
+          if (c.isBoss && run.players.length === 1) p.hp = p.maxHp
           // 联机：阵亡队友战后复活（保持双人可玩性，仿合作游戏惯例）
           if (run.players.length > 1 && p.hp <= 0) {
             p.hp = Math.floor(p.maxHp * 0.5)
@@ -175,6 +179,22 @@ export const useGame = create<GameStore>((set, get) => {
           if (run.players.length > 1) p.dead = false
         })
         syncRunActive(run)
+        // 第 4 幕 Boss（腐朽之心）：无任何奖励，直接胜利（原版）
+        if (c.isBoss && run.act >= 4) {
+          run.gameOverInfo = {
+            victory: true,
+            floor: run.visitedNodes.length,
+            monstersSlain: run.monsterKilled,
+            elitesSlain: run.eliteKilled,
+            goldEarned: run.players.reduce((a, p) => a + p.goldEarned, 0),
+          }
+          run.screen = 'victory'
+          run.combat = null
+          recordRunResult(run.players.map(p => p.character), true, run.visitedNodes.length, run.monsterKilled, run.eliteKilled, run.gameOverInfo.goldEarned)
+          if (run.players.length === 1) clearSave()
+          set({ run, fxList: [] })
+          return
+        }
         run.reward = makeCombatReward(run, c.isElite, c.isBoss)
         run.screen = 'reward'
         set({ run, fxList: [] })
@@ -453,6 +473,43 @@ export const useGame = create<GameStore>((set, get) => {
       if (!mp) r.neow!.chosen = opt.id
       else if (r.neow!.mpChosen) r.neow!.mpChosen[chooser] = opt.id
       let toast = ''
+      // 第三祝福：先结算代价
+      if (opt.effect === 'tradeoff' && opt.disadvantage) {
+        const char = r.players[chooser].character
+        const NEOW_TRADE_LOSE: Record<CharacterId, number> = { ironclad: 8, silent: 7, defect: 7, watcher: 7 }
+        switch (opt.disadvantage) {
+          case 'loseMaxHp': {
+            const v = NEOW_TRADE_LOSE[char]
+            r.maxHp = Math.max(1, r.maxHp - v)
+            r.hp = Math.min(r.hp, r.maxHp)
+            r.players[chooser].maxHp = r.maxHp
+            r.players[chooser].hp = r.hp
+            toast = `代价：最大生命 -${v}`
+            break
+          }
+          case 'takeDamage': {
+            const dmg = Math.max(0, Math.floor(r.hp / 10) * 3)
+            if (dmg > 0) {
+              r.hp = Math.max(1, r.hp - dmg)
+              r.players[chooser].hp = r.hp
+            }
+            toast = `代价：失去 ${dmg} 生命`
+            break
+          }
+          case 'curseCard': {
+            const curseId = ['regret', 'injury', 'doubt'][Math.floor(Math.random() * 3)]
+            r.deck.push(makeCard(curseId))
+            r.players[chooser].deck = r.deck
+            toast = '代价：一张诅咒进入了你的卡组'
+            break
+          }
+          case 'loseGold':
+            r.gold = 0
+            r.players[chooser].gold = 0
+            toast = '代价：失去了所有金币'
+            break
+        }
+      }
       switch (opt.effect) {
         case 'relic': {
           const owned = new Set(r.relics)
@@ -460,16 +517,27 @@ export const useGame = create<GameStore>((set, get) => {
             .filter(id => !owned.has(id))
           if (pool.length) {
             gainRelic(r, pool[Math.floor(Math.random() * pool.length)])
-            toast = '获得了一件遗物！'
-          } else toast = '涅奥沉默了…'
+            toast = (toast ? toast + '；' : '') + '获得了一件遗物！'
+          } else toast = (toast ? toast + '；' : '') + '涅奥沉默了…'
+          break
+        }
+        case 'rareRelic': {
+          // 第三祝福奖励：随机罕见遗物
+          const owned = new Set(r.relics)
+          const pool = Object.values(RELICS).filter(x => x.rarity === 'uncommon' && !owned.has(x.id)).map(x => x.id)
+          if (pool.length) {
+            gainRelic(r, pool[Math.floor(Math.random() * pool.length)])
+            toast = (toast ? toast + '；' : '') + '获得了一件罕见遗物！'
+          } else toast = (toast ? toast + '；' : '') + '涅奥沉默了…'
           break
         }
         case 'maxHp':
+        case 'gainMaxHp':
           r.maxHp += opt.value || 8
           r.hp += opt.value || 8
           r.players[chooser].maxHp = r.maxHp
           r.players[chooser].hp = r.hp
-          toast = `最大生命值 +${opt.value || 8}`
+          toast = (toast ? toast + '；' : '') + `最大生命值 +${opt.value || 8}`
           break
         case 'heal':
           r.hp = r.maxHp
@@ -481,15 +549,58 @@ export const useGame = create<GameStore>((set, get) => {
           r.goldEarned += opt.value || 100
           r.players[chooser].gold = r.gold
           r.players[chooser].goldEarned = r.goldEarned
-          toast = `获得 ${opt.value || 100} 金币`
+          toast = (toast ? toast + '；' : '') + `获得 ${opt.value || 100} 金币`
           break
         case 'potions': {
           let added = 0
           for (let i = 0; i < (opt.value || 3); i++) {
-            if (addPotion(r, ['firePotion', 'blockPotion', 'strengthPotion', 'energyPotion', 'swiftPotion', 'poisonPotion', 'weakPotion', 'fearPotion', 'explosivePotion'][Math.floor(Math.random() * 9)])) added++
+            if (addPotion(r, weightedPotionPick())) added++
           }
           r.players[chooser].potions = r.potions
-          toast = `获得了 ${added} 瓶药水`
+          toast = (toast ? toast + '；' : '') + `获得了 ${added} 瓶药水`
+          break
+        }
+        case 'neowLament':
+          r.neowLament = opt.value || 3
+          toast = '涅奥的哀歌将伴随你 3 场战斗'
+          break
+        case 'bossSwap': {
+          // 第四祝福：用初始遗物交换随机 Boss 遗物（原版 Boss Swap）
+          const starter = r.players[chooser].relics[0]
+          const pool = bossRelicPool().filter(id => !r.relics.includes(id))
+          if (pool.length) {
+            const sw = pool[Math.floor(Math.random() * pool.length)]
+            // 移除初始遗物（保留其它）
+            r.relics = r.relics.filter(id => id !== starter)
+            r.players[chooser].relics = r.relics
+            gainRelic(r, sw)
+            r.players[chooser].relics = r.relics
+            toast = `失去了「${RELICS[starter]?.name ?? '初始遗物'}」，获得「${RELICS[sw].name}」！`
+          } else toast = '涅奥沉默了…'
+          break
+        }
+        case 'randomRareCard': {
+          // 第一祝福：获得随机稀有卡
+          const pools = neowOfferCards(r.players[chooser].character, true)
+          if (pools.length) {
+            r.deck.push(makeCard(pools[0]))
+            r.players[chooser].deck = r.deck
+            toast = `获得了「${CARDS[pools[0]].name}」`
+          } else toast = '涅奥沉默了…'
+          break
+        }
+        case 'gainCard': {
+          // 第一祝福：3 张随机卡三选一
+          const ids = neowOfferCards(r.players[chooser].character, false).slice(0, 3)
+          if (ids.length) {
+            const offer = ids.map(id => makeCard(id))
+            set({ run: r, select: {
+              kind: 'neowGainCard', title: `涅奥：${r.players[chooser].name} 选择一张卡牌获得`,
+              cardUids: offer.map(c => c.uid), source: 'offer', owner: chooser, offerCards: offer,
+            } })
+            return
+          }
+          toast = '涅奥沉默了…'
           break
         }
         case 'removeCard':
@@ -516,6 +627,58 @@ export const useGame = create<GameStore>((set, get) => {
             cardUids: r.players[chooser].deck.map(c => c.uid), source: 'deck', owner: chooser,
           } })
           return
+      }
+      // 第三祝福奖励中的选牌类（代价已在上方结算）
+      if (opt.effect === 'tradeoff') {
+        const adv = opt.advantage!
+        if (adv === 'removeCard2') {
+          set({ run: r, select: {
+            kind: 'neowRemove', title: `涅奥：${r.players[chooser].name} 选择要移除的牌（第 1/2 张）`,
+            cardUids: r.players[chooser].deck.map(c => c.uid), source: 'deck', owner: chooser, remaining: 2,
+          } })
+          return
+        }
+        if (adv === 'transformCard2') {
+          set({ run: r, select: {
+            kind: 'neowTransform', title: `涅奥：${r.players[chooser].name} 选择要转化的牌（第 1/2 张）`,
+            cardUids: r.players[chooser].deck.map(c => c.uid), source: 'deck', owner: chooser, remaining: 2,
+          } })
+          return
+        }
+        if (adv === 'chooseRareCard') {
+          const ids = neowOfferCards(r.players[chooser].character, true).slice(0, 3)
+          if (ids.length) {
+            const offer = ids.map(id => makeCard(id))
+            set({ run: r, select: {
+              kind: 'neowGainCard', title: `涅奥：${r.players[chooser].name} 选择一张稀有卡牌获得`,
+              cardUids: offer.map(c => c.uid), source: 'offer', owner: chooser, offerCards: offer,
+            } })
+            return
+          }
+        }
+        if (adv === 'gold') {
+          r.gold += 250
+          r.goldEarned += 250
+          r.players[chooser].gold = r.gold
+          r.players[chooser].goldEarned = r.goldEarned
+          toast = (toast ? toast + '；' : '') + '获得 250 金币'
+        }
+        if (adv === 'gainMaxHp') {
+          const v = opt.value || 14
+          r.maxHp += v
+          r.hp += v
+          r.players[chooser].maxHp = r.maxHp
+          r.players[chooser].hp = r.hp
+          toast = (toast ? toast + '；' : '') + `最大生命值 +${v}`
+        }
+        if (adv === 'rareRelic') {
+          const owned = new Set(r.relics)
+          const pool = Object.values(RELICS).filter(x => x.rarity === 'uncommon' && !owned.has(x.id)).map(x => x.id)
+          if (pool.length) {
+            gainRelic(r, pool[Math.floor(Math.random() * pool.length)])
+            toast = (toast ? toast + '；' : '') + '获得了一件罕见遗物！'
+          }
+        }
       }
       advanceNeow(r)
       if (r.screen === 'map') toast = toast || '祝福已生效'
@@ -871,7 +1034,16 @@ export const useGame = create<GameStore>((set, get) => {
         const i = r.deck.findIndex(x => x.uid === cardUid)
         if (i >= 0) r.deck.splice(i, 1)
         r.players[owner].deck = r.deck
-        finishNeowSelect(r, owner, '涅奥净化了一张牌')
+        // 第三祝福「移除 2 张」：顺序选择
+        const left = (select.remaining || 1) - 1
+        if (left > 0 && r.players[owner].deck.length > 0) {
+          set({ run: r, select: {
+            kind: 'neowRemove', title: `涅奥：${r.players[owner].name} 选择要移除的牌（还剩 ${left} 张）`,
+            cardUids: r.players[owner].deck.map(c => c.uid), source: 'deck', owner, remaining: left,
+          } })
+          return
+        }
+        finishNeowSelect(r, owner, select.remaining ? '涅奥净化了两张牌' : '涅奥净化了一张牌')
         return
       }
       if (select.kind === 'neowUpgrade') {
@@ -889,7 +1061,28 @@ export const useGame = create<GameStore>((set, get) => {
           c.upgraded = 0
         }
         r.players[owner].deck = r.deck
-        finishNeowSelect(r, owner, '涅奥改变了你的命运')
+        // 第三祝福「转化 2 张」：顺序选择
+        const left = (select.remaining || 1) - 1
+        if (left > 0 && r.players[owner].deck.length > 0) {
+          set({ run: r, select: {
+            kind: 'neowTransform', title: `涅奥：${r.players[owner].name} 选择要转化的牌（还剩 ${left} 张）`,
+            cardUids: r.players[owner].deck.map(c => c.uid), source: 'deck', owner, remaining: left,
+          } })
+          return
+        }
+        finishNeowSelect(r, owner, select.remaining ? '涅奥改变了你的命运（2 张）' : '涅奥改变了你的命运')
+        return
+      }
+      if (select.kind === 'neowGainCard') {
+        // 第一/第三祝福：从提供的卡中获得选中的一张
+        const c = select.offerCards?.find(x => x.uid === cardUid)
+        if (c) {
+          r.deck.push({ ...c })
+          r.players[owner].deck = r.deck
+          finishNeowSelect(r, owner, `获得了「${CARDS[c.id]?.name ?? '卡牌'}」`)
+        } else {
+          finishNeowSelect(r, owner, '祝福已生效')
+        }
         return
       }
       if (select.kind === 'neowDuplicate') {

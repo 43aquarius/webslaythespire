@@ -350,25 +350,6 @@
 }
 .sts-screen-fade { animation: sts-fade .28s ease-out; }
 
-/* 竖屏提示手机图标 */
-@keyframes sts-rotate-phone {
-  0%, 25% { transform: rotate(0deg); }
-  55%, 100% { transform: rotate(90deg); }
-}
-.sts-rotate-phone {
-  width: 74px; height: 120px;
-  border: 5px solid #8a6a3e;
-  border-radius: 12px;
-  box-shadow: 0 0 24px rgba(255, 200, 100, 0.25), inset 0 0 12px rgba(0,0,0,0.6);
-  position: relative;
-  animation: sts-rotate-phone 1.8s ease-in-out infinite;
-}
-.sts-rotate-phone::after {
-  content: '';
-  position: absolute; left: 50%; bottom: 7px; transform: translateX(-50%);
-  width: 22px; height: 5px; border-radius: 3px; background: #8a6a3e;
-}
-
 /* 数字字体变体 */
 .sts-num { font-variant-numeric: tabular-nums; }
 
@@ -418,18 +399,31 @@
   100% { opacity: 1; transform: scale(1) translateY(0); letter-spacing: 14px; }
 }
 
-/* ============ 主菜单按钮（原版质感：悬浮提亮 + 金边呼吸） ============ */
+/* ============ 原版风格主菜单 ============ */
+.main-menu-fog {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(8,4,6,.25) 0%, rgba(8,4,6,0) 34%, rgba(6,3,4,.55) 78%, rgba(4,2,3,.9) 100%);
+}
+.menu-logo {
+  filter: drop-shadow(0 10px 26px rgba(0,0,0,.85)) drop-shadow(0 0 34px rgba(255,190,70,.18));
+}
+/* 原版菜单按钮：暗色石板 + 青铜描边 + 金字 */
 .menu-item {
-  background: linear-gradient(180deg, rgba(72,52,32,0.95), rgba(38,26,16,0.98));
-  border: 2px solid #6b4a2e;
-  box-shadow: 0 3px 0 #1a0f08, inset 0 1px 0 rgba(255,220,160,0.14), 0 4px 14px rgba(0,0,0,0.55);
-  color: #e8d5ae;
-  transition: all .15s ease;
+  background: linear-gradient(180deg, rgba(38,28,20,.94), rgba(22,15,10,.94));
+  border: 2px solid #5e4626;
+  border-radius: 6px;
+  box-shadow: inset 0 1px 0 rgba(255,214,140,.14), inset 0 -6px 14px rgba(0,0,0,.5), 0 4px 10px rgba(0,0,0,.65);
+  color: #d9c48f;
+  transition: all .14s ease;
 }
 .menu-item:hover:not(:disabled) {
-  background: linear-gradient(180deg, rgba(104,76,44,0.98), rgba(56,38,22,1));
-  border-color: #a87a44;
-  color: #ffe9b8;
-  box-shadow: 0 3px 0 #1a0f08, inset 0 1px 0 rgba(255,220,160,0.25), 0 0 22px rgba(255,190,90,0.35);
+  background: linear-gradient(180deg, rgba(52,38,24,.96), rgba(30,20,13,.96));
+  border-color: #a8842e;
+  color: #ffe9ad;
+  box-shadow: inset 0 1px 0 rgba(255,214,140,.22), inset 0 -6px 14px rgba(0,0,0,.5), 0 0 18px rgba(255,200,90,.28), 0 4px 10px rgba(0,0,0,.65);
   transform: translateY(-1px);
 }
+/* 角色选择：无框立绘（原版站位） */
+.char-stand { transition: all .16s ease; }
+.char-stand:not(.active) { filter: brightness(.62) saturate(.8); }
+.char-stand.active img { filter: drop-shadow(0 0 26px rgba(255,205,90,.4)) drop-shadow(0 10px 14px rgba(0,0,0,.7)); }

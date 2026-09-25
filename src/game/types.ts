@@ -108,6 +108,7 @@ export interface CardDef {
   artTheme?: string
   color?: CardColor     // 所属角色色（默认 red）
   unplayable?: boolean  // 不可主动打出（Reflex/Void）
+  curse?: boolean       // 诅咒牌（涅奥代价等来源）
   onDiscardDraw?: number // 被弃时抽牌（Reflex）
   isToken?: boolean     // 衍生牌（小刀/奇迹/惩罚等）
 }
@@ -334,7 +335,7 @@ export type Screen =
   | 'rest' | 'treasure' | 'event' | 'gameover' | 'victory' | 'bossRelic' | 'actTransition'
 
 export interface ShopState {
-  cards: { cardId: string; price: number; sold: boolean; upgraded: boolean }[]
+  cards: { cardId: string; price: number; sold: boolean; upgraded: boolean; discount?: boolean }[]
   relics: { relicId: string; price: number; sold: boolean }[]
   potions: { potionId: string; price: number; sold: boolean }[]
   removalUsed: boolean
@@ -371,8 +372,10 @@ export interface NeowOption {
   id: string
   title: string
   desc: string
-  effect: string   // 'maxHp' | 'gold' | 'heal' | 'relic' | 'removeCard' | 'upgradeCard' | 'transformCard' | 'duplicateCard' | 'potions'
+  effect: string   // 'maxHp' | 'gold' | 'heal' | 'relic' | 'removeCard' | 'upgradeCard' | 'transformCard' | 'duplicateCard' | 'potions' | 'neowLament' | 'bossSwap' | 'tradeoff' | 'gainCard' | 'randomRareCard' | ...
   value?: number
+  disadvantage?: string  // 第三祝福：代价效果
+  advantage?: string     // 第三祝福：奖励效果
 }
 
 export interface NeowState {
@@ -410,6 +413,10 @@ export interface RunState {
   goldEarned: number
   act: number
   relicCounters: Record<string, number>
+  // 机制计数（对照原版）：
+  rarePity?: number        // 卡牌奖励稀有度偏移：自上次稀有卡后已逐出的普通卡数（稀有概率 = 基础-5%+1%*此值）
+  potionLuck?: number      // 当前药水掉率（基准40%，掉落-10%/未掉+10%，每幕重置）
+  neowLament?: number      // 涅奥哀歌：接下来的 N 场战斗敌人以 1 点生命开始
   gameOverInfo: { victory: boolean; floor: number; monstersSlain: number; elitesSlain: number; goldEarned: number } | null
   neow?: NeowState | null
   bossesSeen: string[]   // 本局已遭遇的 boss（避免重复）

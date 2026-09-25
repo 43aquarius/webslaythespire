@@ -7,6 +7,7 @@ import { useGame } from '@/store/gameStore'
 import { CHARACTER_INFO } from '@/game/run'
 import { CharacterId } from '@/game/types'
 import { hasSave, loadStats, loadSettings, savePlayerName, saveMusicVolume, StatsData } from '@/game/persist'
+import { RELICS } from '@/game/relics'
 import { music } from '@/game/music'
 import { GitHubIcon } from './TitleScreen'
 
@@ -28,7 +29,7 @@ export function MainMenuScreen() {
   const [canContinue, setCanContinue] = useState(false)
   useEffect(() => { setCanContinue(hasSave()) }, [])
 
-  const items: { label: string; onClick: () => void; disabled?: boolean; small?: boolean }[] = [
+  const items: { label: string; onClick: () => void; disabled?: boolean }[] = [
     { label: '开 始 冒 险', onClick: () => gotoMenuScreen('charSelect') },
     { label: '继 续 冒 险', onClick: () => continueRun(), disabled: !canContinue },
     { label: '联 机 合 作', onClick: () => gotoMenuScreen('mpLobby') },
@@ -38,59 +39,57 @@ export function MainMenuScreen() {
   ]
 
   return (
-    <div
-      className="w-full h-full relative flex flex-col items-center justify-center select-none overflow-hidden sts-screen-fade"
-      style={{
-        backgroundImage: `url(${A}/bg/combat.jpg)`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center 20%',
-      }}
-    >
-      <div className="absolute inset-0" style={{ background: 'rgba(6,3,2,0.62)' }} />
+    <div className="w-full h-full relative flex flex-col items-center justify-center select-none overflow-hidden sts-screen-fade">
+      {/* 原版主视觉背景：尖塔剪影 */}
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage: `url(${A}/bg/menu.jpg)`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center 38%',
+        }}
+      />
+      <div className="main-menu-fog" />
 
-      {/* 标题 Logo */}
-      <div className="relative flex flex-col items-center gap-1" style={{ marginBottom: 34 }}>
-        <h1
-          className="sts-title"
-          style={{
-            fontSize: 78,
-            color: '#ffd980',
-            textShadow: '4px 4px 0 #000, 0 0 80px rgba(255,180,60,0.45)',
-            letterSpacing: 10,
-          }}
-        >
-          杀戮尖塔
-        </h1>
-        <div className="sts-title" style={{ fontSize: 19, color: '#c8a878', textShadow: '2px 2px 0 #000', letterSpacing: 5 }}>
-          —— SLAY THE SPIRE · WEB 复刻版 ——
+      {/* 官方 Logo */}
+      <div className="relative flex flex-col items-center" style={{ marginBottom: 30 }}>
+        <img
+          src={`${A}/bg/logo.png`}
+          alt="Slay the Spire"
+          draggable={false}
+          className="menu-logo"
+          style={{ width: 286 }}
+        />
+        <div className="sts-title" style={{ fontSize: 17, color: '#c8a878', textShadow: '2px 2px 0 #000', letterSpacing: 5, marginTop: 6 }}>
+          WEB 复刻版 · 单人 + 联机合作
         </div>
       </div>
 
-      {/* 竖排菜单（原版风格） */}
-      <div className="relative flex flex-col items-center gap-3">
+      {/* 竖排菜单（原版石板按钮） */}
+      <div className="relative flex flex-col items-center" style={{ gap: 13 }}>
         {items.map(it => (
           <button
             key={it.label}
-            className="sts-btn sts-title menu-item"
+            className="menu-item sts-title"
             style={{
-              fontSize: 24,
-              letterSpacing: 6,
-              padding: '10px 88px',
-              minWidth: 330,
-              opacity: it.disabled ? 0.4 : 1,
+              fontSize: 21,
+              letterSpacing: 7,
+              padding: '11px 0',
+              width: 340,
+              opacity: it.disabled ? 1 : undefined,
               cursor: it.disabled ? 'not-allowed' : 'pointer',
             }}
             disabled={it.disabled}
             onClick={it.onClick}
           >
-            {it.label}
+            <span style={{ opacity: it.disabled ? 0.45 : 1, display: 'block' }}>{it.label}</span>
           </button>
         ))}
       </div>
 
       {/* 版本信息（左下角，原版样式） */}
       <div className="absolute sts-body" style={{ left: 16, bottom: 12, color: '#8a7458', fontSize: 12 }}>
-        Web 复刻版 v1.4 · 单人 + 联机合作
+        Web 复刻版 v1.5 · 基于 Slay the Spire 玩法复刻
       </div>
 
       {/* GitHub 入口（右下角） */}
@@ -129,29 +128,28 @@ export function CharacterSelectScreen() {
     <div
       className="w-full h-full relative flex flex-col items-center justify-center gap-6 select-none overflow-hidden sts-screen-fade"
       style={{
-        backgroundImage: `url(${A}/bg/combat.jpg)`,
+        backgroundImage: `url(${A}/bg/menu.jpg)`,
         backgroundSize: 'cover',
         backgroundPosition: 'center 30%',
       }}
     >
-      <div className="absolute inset-0" style={{ background: 'rgba(6,3,2,0.58)' }} />
+      <div className="absolute inset-0" style={{ background: 'rgba(6,3,2,0.5)' }} />
 
-      <div className="relative sts-title" style={{ fontSize: 40, color: '#ffd980', textShadow: '3px 3px 0 #000', letterSpacing: 8, marginTop: 8 }}>
+      <div className="relative sts-title" style={{ fontSize: 36, color: '#ffd980', textShadow: '3px 3px 0 #000', letterSpacing: 8, marginTop: 8 }}>
         选 择 你 的 角 色
       </div>
 
-      {/* 角色立绘一排（原版站位） */}
-      <div className="relative flex items-end justify-center gap-8" style={{ marginTop: 4 }}>
+      {/* 角色立绘一排（原版站位：无框站立，选中发光） */}
+      <div className="relative flex items-end justify-center gap-9" style={{ marginTop: 4 }}>
         {CHARACTERS.map(cid => {
           const c = CHARACTER_INFO[cid]
           const active = selectedCharacter === cid
           return (
             <button
               key={cid}
-              className="relative flex flex-col items-center transition-transform"
+              className={`relative flex flex-col items-center char-stand ${active ? 'active' : ''}`}
               style={{
-                transform: active ? 'translateY(-12px) scale(1.1)' : 'none',
-                filter: active ? 'drop-shadow(0 0 20px rgba(255,200,80,0.5))' : 'brightness(0.72) drop-shadow(0 8px 10px rgba(0,0,0,0.7))',
+                transform: active ? 'translateY(-10px) scale(1.06)' : 'none',
                 transition: 'transform .18s ease, filter .18s ease',
               }}
               onClick={() => selectCharacter(cid)}
@@ -161,20 +159,15 @@ export function CharacterSelectScreen() {
               <img
                 src={`${A}/hero/${c.sprite}.png`}
                 alt={c.name}
-                width={200}
-                height={142}
+                width={210}
+                height={150}
                 draggable={false}
-                style={{
-                  objectFit: 'contain',
-                  borderRadius: 12,
-                  border: active ? `3px solid ${CHAR_BORDER[cid]}` : '3px solid transparent',
-                  background: 'radial-gradient(ellipse at 50% 70%, rgba(40,26,14,0.9), rgba(10,6,4,0.95))',
-                }}
+                style={{ objectFit: 'contain' }}
               />
               <div
                 className="sts-title"
                 style={{
-                  fontSize: 19, marginTop: 8, letterSpacing: 2,
+                  fontSize: 19, marginTop: 2, letterSpacing: 3,
                   color: active ? '#ffd980' : '#a89070',
                   textShadow: '2px 2px 0 #000',
                 }}
@@ -189,7 +182,7 @@ export function CharacterSelectScreen() {
       {/* 选中角色信息 */}
       <div className="relative sts-body text-center" style={{ color: '#c8b090', fontSize: 14, lineHeight: 1.8, maxWidth: 580, minHeight: 46 }}>
         <span style={{ color: '#ffd980' }}>{info.name}</span> · {info.desc}<br />
-        生命值 <span style={{ color: '#ff8a7a' }}>{info.hp}</span> · 专属遗物 · 全 4 幕 · 200+ 卡牌 · 45+ 怪物 · 12 首领
+        生命值 <span style={{ color: '#ff8a7a' }}>{info.hp}</span> · 初始遗物「<span style={{ color: '#9ad8f0' }}>{RELICS[info.relic]?.name}</span>」 · 全 4 幕 · 220+ 卡牌 · 60+ 敌人 · 12 首领
       </div>
 
       {/* 底部按钮（原版：左侧返回、右侧出发） */}
@@ -202,7 +195,7 @@ export function CharacterSelectScreen() {
           返 回
         </button>
         <button
-          className="sts-btn sts-title"
+          className="sts-btn sts-btn-gold sts-title"
           style={{ fontSize: 26, padding: '12px 72px', letterSpacing: 6 }}
           onClick={() => startRun()}
         >
