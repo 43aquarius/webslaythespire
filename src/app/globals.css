@@ -399,6 +399,12 @@
   100% { opacity: 1; transform: scale(1) translateY(0); letter-spacing: 14px; }
 }
 
+/* ============ 低血量闪烁（原版 78/80 红字脉冲） ============ */
+@keyframes sts-hp-low {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
 /* ============ 原版风格主菜单 ============ */
 .main-menu-fog {
   position: absolute; inset: 0; pointer-events: none;

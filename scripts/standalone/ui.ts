@@ -11,6 +11,8 @@ import { EVENTS } from '@/game/events'
 import { CHARACTER_INFO } from '@/game/run'
 import { STATUS_INFO, STATUS_IMG_FIX, statusImgPath } from '@/game/statusInfo'
 import { hasSave, loadStats, loadSettings, savePlayerName } from '@/game/persist'
+import { net, getServerUrl, setServerUrl } from '@/game/net'
+import type { RoomInfo } from '@/game/net'
 import type { CharacterId } from '@/game/types'
 import type { RunState, CombatState, CardInstance, EnemyInstance } from '@/game/types'
 
@@ -339,26 +341,52 @@ function potionHtml(pid: string | null, idx: number, combat: boolean): string {
   </span>`
 }
 
-// ============ 顶部 HUD（参照原版：左上 金币+药水+遗物，右上 牌组+血条+层数） ============
+// ============ 玩家血量文字（原版：无血条，红色 78/80 样式） ============
+function hpNumShell(id: string, size: number): string {
+  return `<div class="hp-num" ${id ? `id="${id}"` : ''} style="font-size:${size}px">
+    <span class="block-badge hud-block" style="display:none"><img src="${A('status/block.png')}" alt=""><i></i></span>
+    <b class="hp-num-val"></b>
+    <span class="hp-num-name" style="display:none"></span>
+  </div>`
+}
+function updateHpNum(el: HTMLElement | null, hp: number, maxHp: number, block?: number, name?: string) {
+  if (!el) return
+  const low = hp > 0 && hp <= maxHp * 0.3
+  el.classList.toggle('low', low)
+  setText(el.querySelector('.hp-num-val'), `${hp}/${maxHp}`)
+  const bb = el.querySelector('.block-badge') as HTMLElement
+  if (bb) {
+    if (block !== undefined && block > 0) { bb.style.display = ''; setText(bb.querySelector('i'), String(block)) }
+    else bb.style.display = 'none'
+  }
+  const nm = el.querySelector('.hp-num-name') as HTMLElement
+  if (nm) {
+    if (name) { nm.style.display = ''; setText(nm, name) }
+    else nm.style.display = 'none'
+  }
+}
+
+// ============ 顶部 HUD（参照原版：左上 头像+血量78/80+金币+药水+遗物 / 右上 牌组+层数） ============
 function topHudShell(): string {
-  // 参照原版：左上 金币+药水+遗物 / 右上 牌组+血条+层数（避开右上控制按钮）
+  // 参照原版：左上 头像+血量+金币+药水+遗物 / 右上 牌组+层数（避开右上控制按钮）
   return `<div class="top-hud"><div class="hud-row">
-    <div class="hud-left">
-      <div class="hud-gold-pots">
-        <span class="gold-stat sts-body sts-num" id="hud-gold"></span>
-        <span class="pots-row" id="hud-potions"></span>
+    <div class="hud-left-col">
+      <div class="hud-id-row">
+        <span class="hud-portrait" id="hud-portrait" data-tip=""><img src="" alt=""></span>
+        <div class="hud-hp-gold">
+          ${hpNumShell('hud-hp', 21)}
+          <div class="gold-stat sts-body sts-num" id="hud-gold"></div>
+        </div>
       </div>
+      <span class="pots-row" id="hud-potions"></span>
       <span class="relics hud-relics" id="hud-relics"></span>
     </div>
     <div class="hud-right">
       <button class="sts-btn deck-btn" data-act="openPile" data-pile="deck" data-tip="<b>查看牌组</b>">
         <img src="${A('frames/cardRedOrb.png')}" alt=""><b class="sts-num" id="hud-deck-count"></b>
       </button>
-      <div class="hud-hp-holder">
-        ${hpBarShell('hud-hp', 290)}
-        <div class="floor-stat" id="hud-floor" style="display:none"></div>
-        <div id="hud-mp-hp" style="display:none"></div>
-      </div>
+      <div class="floor-stat" id="hud-floor" style="display:none"></div>
+      <div id="hud-mp-hp" style="display:none"></div>
     </div>
   </div></div>`
 }
@@ -372,7 +400,15 @@ function updateHud(run: RunState, combat: boolean) {
   const me = run.players[myIdx] || run.players[0]
   setText(deck, String(me.deck.length))
   const myBlock = combat && run.combat && run.combat.activeIdx === myIdx ? AP(run.combat).block : 0
-  updateHpBar(document.getElementById('hud-hp'), me.hp, me.maxHp, myBlock)
+  // 头像 + 悬浮名（角色变化时才换图）
+  const po = document.getElementById('hud-portrait')
+  if (po) {
+    const img = po.querySelector('img') as HTMLImageElement | null
+    const want = A('hero/' + me.character + '.png')
+    if (img && img.getAttribute('src') !== want) img.src = want
+    po.setAttribute('data-tip', `<b>${esc(me.name)}${mp ? '（你）' : ''}</b>`)
+  }
+  updateHpNum(document.getElementById('hud-hp'), me.hp, me.maxHp, myBlock)
   const floorEl = document.getElementById('hud-floor')
   if (floorEl) {
     if (combat) floorEl.style.display = 'none'
@@ -381,17 +417,14 @@ function updateHud(run: RunState, combat: boolean) {
   setText(document.getElementById('hud-gold'), mp ? `💰 ${me.gold}（队友 ${run.players[1 - myIdx]?.gold ?? '-'}）` : `💰 ${me.gold}`)
   setHtml(document.getElementById('hud-potions'), me.potions.map((p, i) => potionHtml(p, i, combat)).join(''))
   setHtml(document.getElementById('hud-relics'), me.relics.map(id => relicIcon(id)).join(''))
-  // 联机：双人迷你血条（只显示队友，自己的血条在上方主位）
+  // 联机：队友血量（78/80 样式小字，右上角）
   const mini = document.getElementById('hud-mp-hp')
   if (mini) {
     if (mp) {
       mini.style.display = ''
       setHtml(mini, run.players.map((rp, i) => i === myIdx ? '' : `
-        <div style="display:flex;align-items:center;gap:5px;margin-top:3px">
-          <span class="sts-body" style="font-size:11px;font-weight:700;color:#c8a878;text-shadow:1px 1px 0 #000;min-width:32px">${esc(rp.name)}</span>
-          ${hpBarShell('hud-mp-hp-' + i, 180)}
-        </div>`).join(''))
-      run.players.forEach((rp, i) => { if (i !== myIdx) updateHpBar(document.getElementById('hud-mp-hp-' + i), rp.hp, rp.maxHp) })
+        <div style="margin-top:3px">${hpNumShell('hud-mp-hp-' + i, 16)}</div>`).join(''))
+      run.players.forEach((rp, i) => { if (i !== myIdx) updateHpNum(document.getElementById('hud-mp-hp-' + i), rp.hp, rp.maxHp, undefined, rp.name) })
     } else {
       mini.style.display = 'none'
       setHtml(mini, '')
@@ -427,7 +460,7 @@ function rMainMenu(): string {
       ${items.map(it => `<button class="menu-btn sts-title ${it.dis ? 'dis' : ''}" data-act="${it.act}" ${it.arg ? `data-screen="${it.arg}"` : ''} ${it.dis ? 'disabled' : ''}
         style="opacity:${it.dis ? 1 : ''}"><span style="opacity:${it.dis ? .45 : 1};display:block">${it.label}</span></button>`).join('')}
     </div>
-    <div class="sts-body" style="color:#8a7458;font-size:12px;position:absolute;left:16px;bottom:12px">Web 复刻版 v1.6</div>
+    <div class="sts-body" style="color:#8a7458;font-size:12px;position:absolute;left:16px;bottom:12px">Web 复刻版 v1.7</div>
   </div>
   <a class="github-btn" href="https://github.com/43aquarius/webslaythespire" target="_blank" rel="noreferrer" title="GitHub 仓库">${GITHUB_SVG}<span>43aquarius/webslaythespire</span></a>
 </div>`
@@ -524,7 +557,32 @@ function rCredits(): string {
 </div>`
 }
 
-// ---- 联机大厅 ----
+// ---- 联机大厅（房间列表 + 创建/加入，WebSocket 服务器中转） ----
+let lobbyRooms: RoomInfo[] = []
+let lobbySrvOk: boolean | null = null      // null=检测中
+let lobbyShowSrv = false                   // 服务器地址面板
+let lobbyWatching = false
+let lobbyWatchScreen = ''
+
+/** 房间列表内容（差异更新，不打扰输入框） */
+function lobbyRoomsHtml(): string {
+  if (!lobbyRooms.length) {
+    return `<div class="sts-body" style="color:${lobbySrvOk ? '#8a7458' : '#a87868'};font-size:13px;text-align:center;padding:18px 0">
+      ${lobbySrvOk
+        ? '暂无开放房间 —— 创建一个，或输入房间码加入好友'
+        : '无法连接联机服务器：请先运行 node scripts/ws-server.js，<br>或点击「服务器」填写地址（填好后点保存）'}</div>`
+  }
+  return lobbyRooms.map(r => `
+    <div style="display:flex;align-items:center;gap:12px;background:rgba(0,0,0,.32);border:1px solid #4a3520;border-radius:8px;padding:7px 12px">
+      <span class="sts-title" style="font-size:19px;color:#8ee8ff;letter-spacing:5px;width:82px;text-shadow:2px 2px 0 #000">${esc(r.code)}</span>
+      <span class="sts-body" style="font-size:14px;color:#e8d8b8;flex:1">${esc(r.host)} 的房间
+        <span style="font-size:12px;color:#8a7458;margin-left:8px">${r.guests > 0 ? '2/2' : '1/2'} 人</span></span>
+      <span class="sts-body" style="font-size:12px;color:${r.status === 'open' ? '#8ee888' : '#8a7458'}">${r.status === 'open' ? '等待中' : '已满'}</span>
+      <button class="sts-btn sts-body" data-act="mpJoinRoom" data-code="${r.code}" ${r.status !== 'open' ? 'disabled' : ''}
+        style="font-size:13px;padding:5px 18px;${r.status !== 'open' ? 'opacity:.4' : ''}">加入</button>
+    </div>`).join('')
+}
+
 function rMpLobby(): string {
   const st = g()
   const n = st.net
@@ -532,22 +590,38 @@ function rMpLobby(): string {
     const s = loadSettings()
     return `<div class="screen bg-cover" style="background-image:url('${A('bg/combat.jpg')}')">
     <div class="shade" style="background:rgba(6,3,2,.64)"></div>
-    <div class="center-col" style="padding-top:0;gap:16px">
+    <div class="center-col" style="padding-top:0;gap:14px">
       <div class="sts-title" style="font-size:34px;color:#ffd980;letter-spacing:8px">联 机 合 作</div>
-      <div class="sts-body" style="color:#c8b090;font-size:15px;line-height:1.9;max-width:480px;text-align:center">
-        仿照《杀戮尖塔 2》的合作模式：与好友一起攀登尖塔。<br>共享地图与敌人，各自拥有独立的牌组、生命与能量；<br>轮流行动，共同战斗（P2P 直连，无需服务器）。</div>
+      <div class="sts-body" style="color:#c8b090;font-size:14px;line-height:1.8;max-width:520px;text-align:center">
+        仿照《杀戮尖塔 2》的合作模式：与好友一起攀登尖塔。<br>共享地图与敌人，各自拥有独立的牌组、生命与能量，轮流行动，共同战斗。</div>
       <div class="row" style="gap:10px"><span class="sts-body" style="color:#c8b090;font-size:15px">昵称</span>
         <input class="sts-body" id="mp-name" value="${esc(s.playerName)}" maxlength="10" data-input="mpName"
           style="background:rgba(0,0,0,.5);border:1.5px solid #6b4a2e;border-radius:8px;color:#e8d8b8;padding:8px 12px;font-size:15px;width:170px"></div>
-      <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px">
-        <button class="sts-btn sts-title" data-act="mpCreate" style="font-size:22px;letter-spacing:4px;padding:10px 66px">创 建 房 间</button>
-        <div class="row" style="gap:8px">
+      <button class="sts-btn sts-title" data-act="mpCreate" style="font-size:22px;letter-spacing:4px;padding:10px 66px">创 建 房 间</button>
+      <div class="sts-panel" style="padding:12px 16px;display:flex;flex-direction:column;gap:8px;width:620px;max-width:92vw">
+        <div class="row" style="justify-content:space-between">
+          <div class="sts-title" style="font-size:16px;color:#e8d8b8;letter-spacing:3px">房间大厅</div>
+          <div class="row" style="gap:8px">
+            <span class="sts-body" id="lobby-srv-status" style="font-size:12px;color:#c8a878"></span>
+            <button class="sts-btn sts-body" data-act="mpRefresh" style="font-size:12px;padding:3px 12px">刷新</button>
+            <button class="sts-btn sts-body" data-act="mpSrvToggle" style="font-size:12px;padding:3px 12px">服务器</button>
+          </div>
+        </div>
+        ${lobbyShowSrv ? `<div class="row" style="gap:8px;background:rgba(0,0,0,.3);border-radius:8px;padding:8px 10px">
+          <span class="sts-body" style="font-size:12px;color:#a89070;white-space:nowrap">服务器地址</span>
+          <input class="sts-body" data-input="mpSrv" placeholder="ws://localhost:3001" value="${esc(getServerUrl())}"
+            style="flex:1;background:rgba(0,0,0,.5);border:1px solid #6b4a2e;border-radius:6px;color:#e8d8b8;padding:5px 8px;font-size:12px">
+          <button class="sts-btn sts-body" data-act="mpSrvSave" style="font-size:12px;padding:4px 12px">保存</button>
+        </div>` : ''}
+        <div id="lobby-rooms" style="display:flex;flex-direction:column;gap:6px;max-height:170px;overflow-y:auto;overflow-x:hidden"></div>
+        <div class="row" style="gap:8px;justify-content:center;border-top:1px solid rgba(90,64,32,.6);padding-top:8px">
+          <span class="sts-body" style="font-size:13px;color:#a89070">房间码加入</span>
           <input class="sts-body" id="mp-code" placeholder="房间码" maxlength="6" data-input="mpCode"
-            style="background:rgba(0,0,0,.5);border:1.5px solid #6b4a2e;border-radius:8px;color:#e8d8b8;padding:8px 12px;font-size:17px;width:140px;letter-spacing:3px;text-align:center;text-transform:uppercase">
-          <button class="sts-btn sts-body" data-act="mpJoin" style="font-size:14px;padding:8px 16px">加入房间</button>
+            style="background:rgba(0,0,0,.5);border:1.5px solid #6b4a2e;border-radius:8px;color:#e8d8b8;padding:6px 10px;font-size:16px;width:130px;letter-spacing:3px;text-align:center;text-transform:uppercase">
+          <button class="sts-btn sts-body" data-act="mpJoin" style="font-size:13px;padding:6px 16px">加入房间</button>
         </div>
       </div>
-      <button class="sts-btn sts-body" data-act="gotoMenu" data-screen="title" style="font-size:15px;padding:6px 28px;margin-top:8px">返回主菜单</button>
+      <button class="sts-btn sts-body" data-act="gotoMenu" data-screen="title" style="font-size:15px;padding:6px 28px">返回主菜单</button>
       ${n.error ? `<div class="sts-body" style="color:#ff9a8a;font-size:14px">${esc(n.error)}</div>` : ''}
     </div>
   </div>`
@@ -568,9 +642,9 @@ function rMpLobby(): string {
   return `<div class="screen bg-cover" style="background-image:url('${A('bg/combat.jpg')}')">
   <div class="shade" style="background:rgba(6,3,2,.64)"></div>
   <div class="center-col" style="padding-top:0;gap:16px">
-    <div class="sts-title" style="font-size:30px;color:#ffd980;letter-spacing:6px">合 作 大 厅</div>
+    <div class="sts-title" style="font-size:30px;color:#ffd980;letter-spacing:6px">合 作 房 间</div>
     <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
-      <div class="sts-body" style="color:#a89070;font-size:13px">房间码（告诉你的好友）</div>
+      <div class="sts-body" style="color:#a89070;font-size:13px">房间码（告诉你的好友，或在大厅列表中找到它）</div>
       <div class="sts-title" style="font-size:44px;color:#8ee8ff;letter-spacing:12px;text-shadow:0 0 24px rgba(100,200,255,.5),3px 3px 0 #000">${n.roomCode}</div>
     </div>
     <div class="row" style="gap:52px;align-items:center">
@@ -579,7 +653,7 @@ function rMpLobby(): string {
       ${slot(otherName, isHost ? n.lobby.guestChar : n.lobby.hostChar, false, n.connected)}
     </div>
     <div class="sts-body" style="color:${n.connected ? '#8ee888' : '#c8a878'};font-size:14px">
-      ${!n.connected ? (isHost ? '等待好友加入…（把房间码发给对方）' : '正在连接房间…')
+      ${!n.connected ? (isHost ? '等待好友加入…（房间已显示在大厅列表中）' : '正在连接房间…')
         : both ? (isHost ? '双方已就绪，可以出发！' : '等待房主出发…')
         : (isHost ? '等待双方选择角色…' : '选择你的角色，等待房主出发…')}</div>
     <div class="row" style="gap:22px">
@@ -589,6 +663,43 @@ function rMpLobby(): string {
     ${n.error ? `<div class="sts-body" style="color:#ff9a8a;font-size:14px">${esc(n.error)}</div>` : ''}
   </div>
 </div>`
+}
+
+/** 大厅屏签名（含服务器面板开关，保证状态与签名一致） */
+function lobbySig(): string {
+  const n = g().net
+  return `lobby:${n.role ?? ''}:${n.status}:${n.roomCode}:${n.connected}:${n.lobby?.hostChar}:${n.lobby?.guestChar}:${n.peerName}:${n.error ?? ''}:srv${lobbyShowSrv ? 1 : 0}`
+}
+
+/** 大厅差异更新：房间列表 + 服务器状态（不重建整屏，避免打断输入框） */
+function updateLobbyDynamics() {
+  const st = g()
+  if (st.net.role) return   // 房间内界面无需房间列表
+  const listEl = document.getElementById('lobby-rooms')
+  if (!listEl) return
+  setHtml(listEl, lobbyRoomsHtml())
+  const stat = document.getElementById('lobby-srv-status')
+  if (stat) {
+    const color = lobbySrvOk === null ? '#c8a878' : lobbySrvOk ? '#8ee888' : '#ff9a8a'
+    const text = lobbySrvOk === null ? '连接服务器中…' : lobbySrvOk ? '● 服务器已连接' : '○ 服务器离线'
+    if (stat.style.color !== color) stat.style.color = color
+    setText(stat, text)
+  }
+}
+
+/** 大厅订阅管理：进入 mpLobby 屏时开始，离开时停止 */
+function lobbyWatchTick(screen: string) {
+  const want = screen === 'mpLobby' && !g().net.role
+  if (want && !lobbyWatching) {
+    lobbyWatching = true
+    lobbyWatchScreen = screen
+    lobbySrvOk = null
+    net.watchLobby().then(() => { lobbySrvOk = true; updateLobbyDynamics() }).catch(() => { lobbySrvOk = false; updateLobbyDynamics() })
+  } else if (!want && lobbyWatching) {
+    lobbyWatching = false
+    lobbyWatchScreen = ''
+    net.unwatchLobby()
+  }
 }
 
 // ---- 幕间过场 ----
@@ -1552,11 +1663,16 @@ function sigScreen(sig: string, build: () => string) {
 
 function updateScreen(scr: string, run: RunState | null) {
   if (!run) {
-    const st0 = g()
-    if (scr === 'mpLobby') sigScreen(`lobby:${st0.net.role}:${st0.net.status}:${st0.net.roomCode}:${st0.net.connected}:${st0.net.lobby?.hostChar}:${st0.net.lobby?.guestChar}:${st0.net.peerName}:${st0.net.error ?? ''}`, () => rMpLobby())
+    if (scr === 'mpLobby') {
+      sigScreen(lobbySig(), () => rMpLobby())
+      updateLobbyDynamics()
+    }
     return
   }
-  if (scr === 'mpLobby') sigScreen(`lobby:${g().net.role}:${g().net.status}:${g().net.roomCode}:${g().net.connected}:${g().net.lobby?.hostChar}:${g().net.lobby?.guestChar}:${g().net.peerName}:${g().net.error ?? ''}`, () => rMpLobby())
+  if (scr === 'mpLobby') {
+    sigScreen(lobbySig(), () => rMpLobby())
+    updateLobbyDynamics()
+  }
   if (scr === 'combat') updateCombatScreen(run)
   else if (scr === 'map') updateMapScreen(run)
   else if (scr === 'reward') updateRewardScreen(run)
@@ -1575,6 +1691,7 @@ function render() {
   const run = st.run
   const scr = run ? run.screen : (st.menuScreen || 'title')
   updateMusic(st)
+  lobbyWatchTick(scr)
   if (scr !== curScreenKey) {
     curScreenKey = scr
     ;(app as any).__sig = ''
@@ -1705,6 +1822,25 @@ const ACTIONS: Record<string, (el: HTMLElement) => void> = {
     const code = (document.getElementById('mp-code') as HTMLInputElement)?.value?.trim() || ''
     if (code.length < 4) return
     g().netJoinRoom(name, code)
+  },
+  mpJoinRoom: (el) => {
+    const name = (document.getElementById('mp-name') as HTMLInputElement)?.value?.trim() || loadSettings().playerName
+    const code = el.dataset.code || ''
+    if (code.length < 4) return
+    g().netJoinRoom(name, code)
+  },
+  mpRefresh: () => {
+    net.listRooms().catch(() => { lobbySrvOk = false; updateLobbyDynamics() })
+  },
+  mpSrvToggle: () => {
+    lobbyShowSrv = !lobbyShowSrv
+    sigScreen(lobbySig(), () => rMpLobby())
+    updateLobbyDynamics()
+  },
+  mpSrvSave: () => {
+    const input = document.querySelector('[data-input="mpSrv"]') as HTMLInputElement | null
+    setServerUrl(input?.value || '')
+    location.reload()
   },
   mpLeave: () => g().netLeave(),
   lobbyPick: (el) => g().lobbyPickChar(el.dataset.char as any),
@@ -1932,9 +2068,15 @@ document.addEventListener('input', (e) => {
 setupStage()
 setupControls()
 setupKeyboard()
+// 房间大厅列表订阅（服务器推送 → 差异更新，不重建整屏）
+net.onRooms(list => {
+  lobbyRooms = list || []
+  if (lobbySrvOk !== true) lobbySrvOk = true
+  updateLobbyDynamics()
+})
 useGame.subscribe(render)
 render()
-console.log('[STS standalone] 游戏就绪 v1.5（单人 + 联机合作 · 机制对照原版修正）')
+console.log('[STS standalone] 游戏就绪 v1.7（单人 + 联机合作 · WebSocket 服务器中转 + 房间大厅）')
 
 
 

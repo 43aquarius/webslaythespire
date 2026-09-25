@@ -159,3 +159,23 @@ Stage Summary:
 - 用户6项需求全部完成：链接修复、横竖屏按钮替代提示、主菜单原版还原(官方Logo+尖塔主视觉+石板按钮)、角色选择bug根因修复、死亡怪红框修复、机制全面对照原版修正(9大类)
 - 两版本(Next.js/单文件19.11MB)完全同步，全部测试绿
 - 产物：download/slay-the-spire-standalone.html v1.5
+
+---
+Task ID: 9
+Agent: main
+Task: 第七批需求：UI重合修复(药水金钱左上角+78/80血量) + 菜单设置修复 + 联机服务端架构+大厅 + 文字清理 + 弹窗滚动条（承接上会话未完成部分+新需求"血量金钱药水左上角78/80样式"）
+
+Work Log:
+- 【承接上会话(commit d57a113)已完成】Next.js版：TopHud左右互换(金币药水遗物→左上)、InGameMenu设置面板补全(静音/昵称/全屏)、net.ts重写为WebSocket中转架构(scripts/ws-server.js,端口3001,Caddy ?XTransformPort=3001 反代)、MultiplayerScreen房间大厅(实时列表+服务器状态+地址设置)、文字清理("WEB复刻版·单人+联机合作"与"基于Slay the Spire玩法复刻"删除)、globals.css .sts-card overflow修复
+- 【本会话新做·78/80血量样式(两版本)】参照原版：玩家血量无血条，改为红色"75/75"文字——Next.js新增HpText组件(格挡盾牌图标+红字+低血量≤30%闪烁动画sts-hp-low)；布局重排：左上=[圆形角色头像(立绘裁剪)+血量文字+金币(队友金币)]/药水行/遗物行，右上=牌组按钮+层数+联机队友血量小字；敌人保留血条(原版行为)；单文件版hpNumShell/updateHpNum同步+style.css新样式(.hud-portrait/.hp-num/.hp-low关键帧)
+- 【本会话新做·单文件版联机大厅同步】rMpLobby重写：房间大厅列表(实时推送)+服务器状态灯(●已连接/○离线)+服务器地址设置(localStorage+保存重载)+创建/房间码/列表一键加入；net.onRooms订阅+updateLobbyDynamics差异更新(房间列表局部刷新不打断输入框)+lobbyWatchTick进出屏自动订阅/退订；删除"P2P直连无需服务器"文案
+- 【本会话新做·单文件版滚动条修复】style.css: .sts-card加overflow:hidden(裁掉512画布映射溢出→根修预见/牌堆弹窗右+下滚动条)、.overlay/.sel-cards加overflow-x:hidden
+- 【本会话新做·既有bug修复】run.ts makeCombatReward: 3/4幕Boss药水掉落漏判(!(isBoss&&act>=3))——原版3/4幕Boss无任何消耗品奖励，修复后regression5 3连跑412/412全过(此前flaky失败)
+- 【版本】v1.6→v1.7(两版本主菜单左下角)
+- 【测试】ws-server协议测试13/13；regression 16/16；regression5 412/412×3次；tsc src/0错误；Next.js生产构建通过；浏览器E2E——Next.js版:文字清理✓/设置屏(音量滑条+静音+昵称+全屏)✓/齿轮菜单设置面板✓/单人地图+战斗78/80血量无血条+头像+金币+药水✓/敌血条保留✓/控制按钮无重叠✓/联机大厅列表+建房R8XD+双浏览器加入+涅奥轮选+双人地图(双78/80+队友名)+双人战斗轮转✓；单文件版:菜单✓/设置屏✓/78/80血量✓/牌堆弹窗无滚动条(overlay scrollW=clientW)✓/大厅连服务器(file://→ws://localhost:3001)✓/建房HSGY+Next.js版跨版本加入+双端进涅奥✓；VLM视觉核验3张截图(战斗/单文件地图/联机地图)布局全部正常
+- 产物：单文件版19.03MB重建(run.ts修复后二次构建)
+
+Stage Summary:
+- 第七批6项+新需求全部完成：①药水金钱左上角+按钮不再重合 ②菜单设置可用(齿轮面板补全) ③联机改WebSocket服务端中转(ws-server.js,不再纯P2P) ④联机大厅(房间列表实时刷新+一键加入+服务器地址设置,两版本) ⑤两处文字清理 ⑥预见/牌堆弹窗滚动条根修 ⑦玩家血量改原版78/80红字样式(头像+血量+金币+药水全左上,敌人保留血条)
+- 双版本(Next.js/单文件19.03MB)完全同步；跨版本联机实测互通(单文件房主↔Next.js客机)
+- 附带修复：3/4幕Boss药水掉落(原版无消耗品奖励)既有flaky bug

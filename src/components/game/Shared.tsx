@@ -56,7 +56,37 @@ export function Tip({ children, tip, className = '' }: { children: ReactNode; ti
   )
 }
 
-// ============ 顶部 HUD（参照原版：左上 金币+药水+遗物 / 右上 牌组+血条+层数） ============
+// ============ 玩家血量文字（原版：无血条，红色 78/80 样式） ============
+export function HpText({ hp, maxHp, block, size = 21, showName }: { hp: number; maxHp: number; block?: number; size?: number; showName?: string }) {
+  const low = hp > 0 && hp <= maxHp * 0.3
+  return (
+    <div className="flex items-center gap-1.5">
+      {block !== undefined && block > 0 && (
+        <span className="relative inline-flex" style={{ width: size * 1.15, height: size * 1.15 }}>
+          <img src={`${A}/status/block.png`} alt="block" className="w-full h-full object-contain" draggable={false} />
+          <span className="absolute inset-0 flex items-center justify-center sts-num font-bold"
+            style={{ fontSize: size * 0.52, color: '#cfe8ff', textShadow: '1px 1px 0 #000', paddingTop: 1 }}>{block}</span>
+        </span>
+      )}
+      <span className="sts-num font-bold"
+        style={{
+          fontSize: size, lineHeight: 1,
+          color: low ? '#ff3b2e' : '#ff5a48',
+          textShadow: '1px 1px 0 #000, 0 0 5px rgba(0,0,0,0.9)',
+          animation: low ? 'sts-hp-low 1.1s ease-in-out infinite' : undefined,
+        }}>
+        {hp}/{maxHp}
+      </span>
+      {showName && (
+        <span className="sts-body font-bold" style={{ fontSize: 12, color: '#c8a878', textShadow: '1px 1px 0 #000', marginLeft: 2 }}>
+          {showName}
+        </span>
+      )}
+    </div>
+  )
+}
+
+// ============ 顶部 HUD（参照原版：左上 头像+血量文字+金币+药水+遗物 / 右上 牌组+层数） ============
 export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: number }) {
   const run = useGame(s => s.run)
   const openPile = useGame(s => s.openPile)
@@ -86,20 +116,43 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
         padding: '10px 18px 26px',
       }}>
       <div className="flex items-start justify-between">
-        {/* 左上：金币 + 药水 + 遗物（参照原版原位） */}
+        {/* 左上：头像+血量文字 / 金币 / 药水 / 遗物（参照原版原位） */}
         <div className="flex flex-col items-start gap-1.5" style={{ maxWidth: 660 }}>
-          <div className="flex items-center gap-3">
-            <div className="sts-body font-bold sts-num flex items-center gap-1.5"
-              style={{ color: '#ffd980', textShadow: '1px 1px 0 #000', fontSize: 20 }}>
-              <span style={{ fontSize: 17 }}>💰</span>{me.gold}
-            </div>
-            {mp && (
-              <div className="sts-body sts-num flex items-center gap-1" style={{ color: '#a8b8c8', textShadow: '1px 1px 0 #000', fontSize: 13 }}>
-                队友 {run.players[1 - myIdx]?.gold ?? '-'}
+          {/* 行1：角色头像 + 血量 78/80（原版无血条） */}
+          <div className="flex items-center gap-2.5">
+            <Tip tip={<b>{me.name}{mp ? '（你）' : ''}</b>}>
+              <span
+                className="relative inline-block rounded-full overflow-hidden"
+                style={{
+                  width: 54, height: 54,
+                  border: '2.5px solid #6b4a2e',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.7), inset 0 0 10px rgba(0,0,0,0.5)',
+                  background: 'radial-gradient(circle at 50% 30%, #3a2818, #14100a)',
+                }}
+              >
+                <img
+                  src={`${A}/hero/${me.character}.png`} alt={me.name}
+                  className="w-full h-full object-cover" draggable={false}
+                  style={{ objectPosition: '50% 10%' }}
+                />
+              </span>
+            </Tip>
+            <div className="flex flex-col gap-0.5">
+              <HpText hp={me.hp} maxHp={me.maxHp} block={myBlock} />
+              {/* 行2：金币（原版在头像下方） */}
+              <div className="sts-body font-bold sts-num flex items-center gap-1.5"
+                style={{ color: '#ffd980', textShadow: '1px 1px 0 #000', fontSize: 17, lineHeight: 1 }}>
+                <span style={{ fontSize: 15 }}>💰</span>{me.gold}
+                {mp && (
+                  <span className="sts-num" style={{ color: '#a8b8c8', fontSize: 12 }}>
+                    （队友 {run.players[1 - myIdx]?.gold ?? '-'}）
+                  </span>
+                )}
               </div>
-            )}
+            </div>
           </div>
-          <div className="flex gap-1.5">
+          {/* 行3：药水 */}
+          <div className="flex gap-1.5" style={{ marginLeft: 2 }}>
             {me.potions.map((pid, i) => (
               <PotionSlot
                 key={i} potionId={pid} size={38}
@@ -109,45 +162,38 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
               />
             ))}
           </div>
-          {/* 遗物行 */}
+          {/* 行4：遗物行 */}
           <div className="flex flex-wrap gap-1 items-center justify-start" style={{ maxWidth: 620 }}>
             {me.relics.map(id => <RelicIcon key={id} id={id} size={32} />)}
           </div>
         </div>
 
-        {/* 右上：牌组按钮 + 血条 + 层数（避开右上角控制按钮簇） */}
-        <div className="flex items-start gap-3" style={{ marginRight: 186 }}>
-          <div className="flex flex-col items-center gap-1">
-            <Tip tip={<b>查看牌组（{me.deck.length} 张）</b>}>
-              <button
-                className="sts-btn flex flex-col items-center justify-center"
-                style={{ width: 62, height: 62, padding: 2, borderRadius: 10 }}
-                onClick={() => openPile('deck')}
-              >
-                <img src={`${A}/frames/cardRedOrb.png`} alt="" width={26} height={20} draggable={false}
-                  style={{ objectFit: 'contain' }} />
-                <span className="sts-num font-bold" style={{ fontSize: 15, lineHeight: 1.1 }}>{me.deck.length}</span>
-              </button>
-            </Tip>
-            {floor !== undefined && (
-              <div className="sts-body font-bold" style={{ color: '#c8b090', fontSize: 12, textShadow: '1px 1px 0 #000' }}>
-                第 {run.act} 幕 · 第 {floor} 层{mp ? ' · 联机' : ''}
+        {/* 右上：牌组按钮 + 层数 + 队友血量（避开右上角控制按钮簇） */}
+        <div className="flex flex-col items-center gap-1.5" style={{ marginRight: 196 }}>
+          <Tip tip={<b>查看牌组（{me.deck.length} 张）</b>}>
+            <button
+              className="sts-btn flex flex-col items-center justify-center"
+              style={{ width: 62, height: 62, padding: 2, borderRadius: 10 }}
+              onClick={() => openPile('deck')}
+            >
+              <img src={`${A}/frames/cardRedOrb.png`} alt="" width={26} height={20} draggable={false}
+                style={{ objectFit: 'contain' }} />
+              <span className="sts-num font-bold" style={{ fontSize: 15, lineHeight: 1.1 }}>{me.deck.length}</span>
+            </button>
+          </Tip>
+          {floor !== undefined && (
+            <div className="sts-body font-bold" style={{ color: '#c8b090', fontSize: 12, textShadow: '1px 1px 0 #000' }}>
+              第 {run.act} 幕 · 第 {floor} 层{mp ? ' · 联机' : ''}
+            </div>
+          )}
+          {/* 联机：队友血量（78/80 样式小字） */}
+          {mp && run.players.map((rp, i) => (
+            i === myIdx ? null : (
+              <div key={i} className="flex flex-col items-start gap-0.5" style={{ marginTop: 2 }}>
+                <HpText hp={rp.hp} maxHp={rp.maxHp} size={17} showName={rp.name} />
               </div>
-            )}
-          </div>
-          <div className="flex flex-col gap-1.5 items-start">
-            <HpBar hp={me.hp} maxHp={me.maxHp} block={myBlock} width={mp ? 240 : 290} label={mp ? me.name : undefined} />
-            {mp && run.players.map((rp, i) => (
-              i === myIdx ? null : (
-                <div key={i} className="flex items-center gap-1.5">
-                  <span className="sts-body font-bold" style={{ fontSize: 11, color: '#c8a878', textShadow: '1px 1px 0 #000', minWidth: 34 }}>
-                    {rp.name}
-                  </span>
-                  <HpBar hp={rp.hp} maxHp={rp.maxHp} width={182} />
-                </div>
-              )
-            ))}
-          </div>
+            )
+          ))}
         </div>
       </div>
     </div>

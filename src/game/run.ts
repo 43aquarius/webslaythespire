@@ -362,8 +362,9 @@ export function makeCombatReward(run: RunState, isElite: boolean, isBoss: boolea
     if (pool.length) reward.relic = pool[0]
   }
 
-  // 药水掉落（原版：40%基础，掉落-10%/未掉+10%，每幕重置；按稀有度 65/25/10 加权）
-  if (run.combat?.potionDrop && !anyRelic('sozu')) {
+  // 药水掉落（原版：40%基础，掉落-10%/未掉+10%，每幕重置；按稀有度 65/25/10 加权；
+  //           第3、4幕Boss无任何消耗品奖励）
+  if (!(isBoss && act >= 3) && run.combat?.potionDrop && !anyRelic('sozu')) {
     reward.potion = weightedPotionPick()
   }
 
