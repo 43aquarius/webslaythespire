@@ -135,7 +135,7 @@ function SlashFx({ items, removeFx, big }: { items: FxItem[]; removeFx: (id: num
 }
 
 // ============ 敌人视图 ============
-function EnemyView({ enemy }: { enemy: EnemyInstance }) {
+function EnemyView({ enemy, idx }: { enemy: EnemyInstance; idx: number }) {
   const run = useGame(s => s.run)
   const combat = useGame(s => s.run?.combat)
   const clickEnemy = useGame(s => s.clickEnemy)
@@ -180,6 +180,22 @@ function EnemyView({ enemy }: { enemy: EnemyInstance }) {
     lastLungeRef.current = Math.max(lastLungeRef.current, lungeId)
   }, [lungeId])
 
+  // 格挡获得蓝色光环（原版动画还原）
+  const lastBlockRef = useRef(enemy.block)
+  useEffect(() => {
+    if (enemy.block > lastBlockRef.current && spriteRef.current) {
+      spriteRef.current.animate(
+        [
+          { filter: 'drop-shadow(0 0 0 rgba(120,190,255,0))' },
+          { filter: 'drop-shadow(0 0 18px rgba(120,190,255,0.95))' },
+          { filter: 'drop-shadow(0 0 0 rgba(120,190,255,0))' },
+        ],
+        { duration: 550, easing: 'ease-out' }
+      )
+    }
+    lastBlockRef.current = enemy.block
+  }, [enemy.block])
+
   if (!combat || !run) return null
   // 选牌/选药水时的红框提示只对存活敌人生效（死亡怪不再出现红框，避免视觉干扰）
   const alive = !enemy.dying && enemy.hp > 0
@@ -204,16 +220,18 @@ function EnemyView({ enemy }: { enemy: EnemyInstance }) {
       </div>
       {/* 斩击特效 */}
       <SlashFx items={mySlashes} removeFx={removeFx} big={def.boss} />
-      {/* 精灵图 */}
+      {/* 精灵图（待机浮动 + 受击闪白） */}
       <div ref={spriteRef}>
         <img
           src={`${A}/enemies/${def.sprite}.png`}
           alt={def.name}
           draggable={false}
+          className="sts-idle-bob"
           style={{
             width: spriteW, height: spriteW,
             objectFit: 'contain',
             filter: 'drop-shadow(0 10px 12px rgba(0,0,0,0.55))',
+            animationDelay: `${(idx % 5) * 0.45}s`,
           }}
         />
       </div>
@@ -225,6 +243,56 @@ function EnemyView({ enemy }: { enemy: EnemyInstance }) {
         <HpBar hp={enemy.hp} maxHp={enemy.maxHp} block={enemy.block} width={def.boss ? 280 : def.small ? 120 : 170} />
         <StatusRow statuses={enemy.statuses} size={28} />
       </div>
+    </div>
+  )
+}
+
+// ============ 药水投掷特效（飞向目标后碎裂） ============
+function PotionThrowFx({ show }: { show: number }) {
+  if (!show) return null
+  return (
+    <div key={show}>
+      <div
+        className="absolute sts-potion-throw"
+        style={{ left: 420, top: 120, zIndex: 75, '--ptx': '480px', '--pty': '220px' } as React.CSSProperties}
+      >
+        <span style={{ fontSize: 34, filter: 'drop-shadow(0 0 8px rgba(140,255,160,0.85))' }}>🧪</span>
+      </div>
+      <div
+        className="absolute"
+        style={{ left: 905, top: 345, zIndex: 75, opacity: 0, animation: 'sts-potion-shatter .45s .5s ease-out forwards' }}
+      >
+        <span style={{ fontSize: 46, filter: 'drop-shadow(0 0 16px rgba(140,255,160,0.9))' }}>💫</span>
+      </div>
+    </div>
+  )
+}
+
+// ============ 回合横幅（你的回合 / 敌方回合） ============
+function TurnBanner({ phase, turn }: { phase: string; turn: number }) {
+  const [banner, setBanner] = useState<{ key: number; text: string; color: string } | null>(null)
+  const prev = useRef<{ phase: string }>({ phase: '' })
+  useEffect(() => {
+    const p = prev.current
+    if (p.phase && p.phase !== phase) {
+      if (phase === 'player') setBanner({ key: Date.now(), text: '你的回合', color: '#ffd980' })
+      else if (phase === 'enemy') setBanner({ key: Date.now(), text: '敌方回合', color: '#ff8a6a' })
+    }
+    prev.current = { phase }
+  }, [phase, turn])
+  if (!banner) return null
+  return (
+    <div
+      key={banner.key}
+      className="absolute sts-turn-banner sts-title"
+      style={{
+        left: '50%', top: '40%', marginLeft: -160, width: 320, textAlign: 'center',
+        fontSize: 54, color: banner.color,
+        textShadow: '3px 3px 0 #000, 0 0 40px rgba(0,0,0,0.9)',
+        zIndex: 85, pointerEvents: 'none', letterSpacing: 8,
+      }}
+    >
+      {banner.text}
     </div>
   )
 }
@@ -353,7 +421,9 @@ function PlayedCardFx({ items, removeFx }: { items: FxItem[]; removeFx: (id: num
   )
 }
 
-// ============ 主战斗界面 ============
+// 离手卡牌动画载体
+interface GhostCard { key: number; card: CardInstance; x: number; ty: number; rot: number; kind: 'discard' | 'exhaust' }
+
 // ============ 玩家英雄视图（联机双人并排） ============
 function HeroView({ idx, player, pc, fxItems, mp }: {
   idx: number; player: RunPlayer; pc: PlayerCombatState
@@ -401,6 +471,7 @@ function HeroView({ idx, player, pc, fxItems, mp }: {
   )
 }
 
+// ============ 主战斗界面 ============
 export function CombatScreen() {
   const run = useGame(s => s.run)
   const combat = useGame(s => s.run?.combat)
@@ -449,6 +520,54 @@ export function CombatScreen() {
     prevHandRef.current = handUids
   }, [handUids])
 
+  // ===== 玩家攻击突进（打出攻击牌时冲向敌人，原版动画还原） =====
+  const heroRef = useRef<HTMLDivElement>(null)
+  const lastPlayIdRef = useRef(0)
+  const lastPlayFx = cardPlayFx.length ? cardPlayFx[cardPlayFx.length - 1] : null
+  useEffect(() => {
+    if (!lastPlayFx || lastPlayFx.id <= lastPlayIdRef.current) return
+    lastPlayIdRef.current = lastPlayFx.id
+    const [cardId] = (lastPlayFx.text || '').split('|')
+    if (CARDS[cardId]?.type === 'attack' && heroRef.current) {
+      heroRef.current.animate(
+        [
+          { transform: 'translateX(0)' },
+          { transform: 'translateX(150px) scale(1.05)' },
+          { transform: 'translateX(0)' },
+        ],
+        { duration: 380, easing: 'cubic-bezier(.3,0,.4,1)' }
+      )
+    }
+  }, [lastPlayFx?.id])
+
+  // ===== 玩家格挡获得蓝色光环 =====
+  const pBlock = combat ? (AP(combat).block ?? 0) : 0
+  const lastPBlockRef = useRef(0)
+  useEffect(() => {
+    if (pBlock > lastPBlockRef.current && heroRef.current) {
+      heroRef.current.animate(
+        [
+          { filter: 'drop-shadow(0 0 0 rgba(120,190,255,0))' },
+          { filter: 'drop-shadow(0 0 20px rgba(120,190,255,0.95))' },
+          { filter: 'drop-shadow(0 0 0 rgba(120,190,255,0))' },
+        ],
+        { duration: 550, easing: 'ease-out' }
+      )
+    }
+    lastPBlockRef.current = pBlock
+  }, [pBlock])
+
+  // ===== 药水投掷动画：战斗中使用药水时触发（监听药水栏变化） =====
+  const potionSig = useGame(s => s.run && s.run.combat ? s.run.players.map(p => p.potions.join(',')).join('|') : '')
+  const [potionThrow, setPotionThrow] = useState(0)
+  const prevPotionSig = useRef(potionSig)
+  useEffect(() => {
+    if (combat && prevPotionSig.current && potionSig !== prevPotionSig.current) {
+      setPotionThrow(Date.now())
+    }
+    prevPotionSig.current = potionSig
+  }, [potionSig, combat])
+
   // 触屏设备提示文案
   const [isTouch, setIsTouch] = useState(false)
   useEffect(() => { setIsTouch(window.matchMedia('(hover: none)').matches) }, [])
@@ -465,6 +584,28 @@ export function CombatScreen() {
       return { x: offset * spread, rot, ty }
     })
   })()
+
+  // ===== 离手卡牌动画：弃牌飞向右下弃牌堆 / 消耗燃烧升腾 =====
+  const [ghosts, setGhosts] = useState<GhostCard[]>([])
+  const ghostPrevRef = useRef<{ uids: Map<string, { card: CardInstance; x: number; ty: number; rot: number }>; exhaust: number }>({ uids: new Map(), exhaust: 0 })
+  useEffect(() => {
+    const prev = ghostPrevRef.current
+    const cur = new Map(hand.map((c, i) => [c.uid, { card: c, x: handLayout[i]?.x ?? 0, ty: handLayout[i]?.ty ?? 0, rot: handLayout[i]?.rot ?? 0 }]))
+    const removed = [...prev.uids.entries()].filter(([uid]) => !cur.has(uid))
+    // 刚打出的牌已有中央出牌特效，跳过
+    const justPlayed = fxList.some(f => f.kind === 'cardPlay' && Date.now() - f.ts < 500)
+    if (removed.length && !justPlayed) {
+      const exhaustGrew = (combat ? AP(combat).exhaustPile.length : 0) > prev.exhaust
+      const news: GhostCard[] = removed.map(([uid, info], i) => ({
+        key: Date.now() + i, card: info.card, x: info.x, ty: info.ty, rot: info.rot,
+        kind: exhaustGrew ? 'exhaust' : 'discard',
+      }))
+      setGhosts(gs => [...gs, ...news])
+      const ids = new Set(news.map(g => g.key))
+      setTimeout(() => setGhosts(gs => gs.filter(g => !ids.has(g.key))), 600)
+    }
+    ghostPrevRef.current = { uids: cur, exhaust: combat ? AP(combat).exhaustPile.length : 0 }
+  }, [hand])
 
   if (!run || !combat) return null
   const p = AP(combat)
@@ -533,20 +674,22 @@ export function CombatScreen() {
           {isDefect && <OrbRow />}
           {isWatcher && <StanceBadge />}
           <StatusRow statuses={p.statuses} size={30} />
-          <img
-            src={`${A}/hero/${run.character}.png`}
-            alt=""
-            draggable={false}
-            style={{ width: 240, height: 171, objectFit: 'contain', filter: 'drop-shadow(0 8px 10px rgba(0,0,0,0.5))' }}
-          />
+          <div ref={heroRef}>
+            <img
+              src={`${A}/hero/${run.character}.png`}
+              alt=""
+              draggable={false}
+              style={{ width: 240, height: 171, objectFit: 'contain', filter: 'drop-shadow(0 8px 10px rgba(0,0,0,0.5))' }}
+            />
+          </div>
         </div>
       )}
 
       {/* ===== 敌人区 ===== */}
       <div className="absolute flex items-start justify-center gap-10"
         style={{ left: '31%', right: 12, top: 118, bottom: 300, zIndex: 30 }}>
-        {combat.enemies.map(e => (
-          <EnemyView key={e.uid} enemy={e} />
+        {combat.enemies.map((e, i) => (
+          <EnemyView key={e.uid} enemy={e} idx={i} />
         ))}
       </div>
 
@@ -580,9 +723,9 @@ export function CombatScreen() {
         </div>
       </div>
 
-      {/* ===== 结束回合按钮 ===== */}
+      {/* ===== 结束回合按钮（轮到你时脉动提示） ===== */}
       <button
-        className="sts-btn absolute sts-title"
+        className={`sts-btn absolute sts-title ${combat.phase === 'player' && !busy && myTurn ? 'sts-btn-ready' : ''}`}
         style={{
           right: 108, bottom: 116, fontSize: 24, padding: '13px 34px', zIndex: 46,
           opacity: combat.phase !== 'player' || busy || !myTurn ? 0.5 : 1,
@@ -602,6 +745,23 @@ export function CombatScreen() {
 
       {/* ===== 手牌 ===== */}
       <div className="absolute inset-x-0 flex justify-center items-end" style={{ bottom: -40, height: 320, zIndex: 45, pointerEvents: 'none' }}>
+        {/* 离手卡牌动画（弃牌/消耗） */}
+        {ghosts.map(g => (
+          <div
+            key={g.key}
+            style={{
+              position: 'absolute',
+              transform: `translateX(${g.x}px) translateY(${g.ty}px) rotate(${g.rot}deg)`,
+              transformOrigin: 'bottom center',
+              zIndex: 80,
+              pointerEvents: 'none',
+            }}
+          >
+            <div className={g.kind === 'discard' ? 'sts-discard-fly' : 'sts-exhaust-fly'}>
+              <CardView card={g.card} width={168} />
+            </div>
+          </div>
+        ))}
         {hand.map((card, i) => {
           const layout = handLayout[i]
           const isPlayable = combat.phase === 'player' && !busy && !combat.combatOver && myTurn
@@ -639,6 +799,12 @@ export function CombatScreen() {
 
       {/* ===== 出牌动画 ===== */}
       <PlayedCardFx items={cardPlayFx} removeFx={removeFx} />
+
+      {/* ===== 药水投掷动画 ===== */}
+      <PotionThrowFx show={potionThrow} />
+
+      {/* ===== 回合横幅 ===== */}
+      <TurnBanner phase={combat.phase} turn={combat.turn} />
 
       {/* ===== 预见界面 ===== */}
       <ScryOverlay />

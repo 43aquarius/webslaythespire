@@ -99,6 +99,39 @@ export function Tip({ children, tip, className = '' }: { children: ReactNode; ti
   )
 }
 
+// ============ HUD 浮动数字动画（金币/血量变化） ============
+export function HudFloat({ items }: { items: { id: number; v: number; color: string }[] }) {
+  if (!items.length) return null
+  return (
+    <>
+      {items.map(f => (
+        <span
+          key={f.id}
+          className="absolute sts-num font-black sts-float sts-body whitespace-nowrap"
+          style={{ left: '50%', top: -8, transform: 'translateX(-50%)', fontSize: 19, color: f.color, textShadow: '1px 1px 0 #000, 0 0 6px #000', zIndex: 50 }}
+        >
+          {f.v > 0 ? `+${f.v}` : f.v}
+        </span>
+      ))}
+    </>
+  )
+}
+
+export function useValueFloat(value: number) {
+  const prev = useRef(value)
+  const [items, setItems] = useState<{ id: number; v: number }[]>([])
+  useEffect(() => {
+    const d = value - prev.current
+    prev.current = value
+    if (d === 0) return
+    const id = Date.now() + Math.random()
+    setItems(f => [...f, { id, v: d }])
+    const t = setTimeout(() => setItems(f => f.filter(x => x.id !== id)), 1150)
+    return () => clearTimeout(t)
+  }, [value])
+  return items
+}
+
 // ============ 玩家血量文字（原版：无血条，红色 78/80 样式） ============
 export function HpText({ hp, maxHp, block, size = 21, showName }: { hp: number; maxHp: number; block?: number; size?: number; showName?: string }) {
   const low = hp > 0 && hp <= maxHp * 0.3
@@ -137,6 +170,24 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
   const usePotionMap = useGame(s => s.usePotionMap)
   const selectedPotionIdx = useGame(s => s.selectedPotionIdx)
   const net = useGame(s => s.net)
+
+  // 金币/血量变化浮动动画 + 新获遗物闪光（原版动画还原；hooks 须在早退前）
+  const me0 = run ? (run.players[run.players.length > 1 ? net.myIdx : 0] || run.players[0]) : null
+  const goldFloats = useValueFloat(me0?.gold ?? 0)
+  const hpFloats = useValueFloat(me0?.hp ?? 0)
+  const relicCount = me0?.relics.length ?? 0
+  const [newRelic, setNewRelic] = useState(false)
+  const prevRelics = useRef(relicCount)
+  useEffect(() => {
+    if (relicCount > prevRelics.current) {
+      setNewRelic(true)
+      const t = setTimeout(() => setNewRelic(false), 900)
+      prevRelics.current = relicCount
+      return () => clearTimeout(t)
+    }
+    prevRelics.current = relicCount
+  }, [relicCount])
+
   if (!run) return null
 
   const mp = run.players.length > 1
@@ -181,10 +232,14 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
               </span>
             </Tip>
             <div className="flex flex-col gap-0.5">
-              <HpText hp={me.hp} maxHp={me.maxHp} block={myBlock} />
+              <div className="relative">
+                <HudFloat items={hpFloats.map(f => ({ ...f, color: f.v > 0 ? '#7fe08a' : '#ff5a4a' }))} />
+                <HpText hp={me.hp} maxHp={me.maxHp} block={myBlock} />
+              </div>
               {/* 行2：金币（原版在头像下方） */}
-              <div className="sts-body font-bold sts-num flex items-center gap-1.5"
+              <div className="relative sts-body font-bold sts-num flex items-center gap-1.5"
                 style={{ color: '#ffd980', textShadow: '1px 1px 0 #000', fontSize: 17, lineHeight: 1 }}>
+                <HudFloat items={goldFloats.map(f => ({ ...f, color: '#ffd980' }))} />
                 <span style={{ fontSize: 15 }}>💰</span>{me.gold}
                 {mp && (
                   <span className="sts-num" style={{ color: '#a8b8c8', fontSize: 12 }}>
@@ -205,9 +260,9 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
               />
             ))}
           </div>
-          {/* 行4：遗物行 */}
+          {/* 行4：遗物行（新获遗物闪光） */}
           <div className="flex flex-wrap gap-1 items-center justify-start" style={{ maxWidth: 620 }}>
-            {me.relics.map(id => <RelicIcon key={id} id={id} size={32} />)}
+            {me.relics.map((id, i) => <RelicIcon key={id} id={id} size={32} flash={newRelic && i === me.relics.length - 1} />)}
           </div>
         </div>
 
@@ -309,12 +364,12 @@ export function HpBar({ hp, maxHp, block, width = 200, label }: { hp: number; ma
 }
 
 // ============ 遗物提示 ============
-export function RelicIcon({ id, size = 42 }: { id: string; size?: number }) {
+export function RelicIcon({ id, size = 42, flash }: { id: string; size?: number; flash?: boolean }) {
   const def = RELICS[id]
   if (!def) return null
   return (
     <Tip tip={<><b>{def.name}</b><br /><span style={{ color: '#d8c8a8' }}>{def.desc}</span></>}>
-      <span className="sts-relic" style={{ width: size, height: size }}>
+      <span className={`sts-relic ${flash ? 'sts-relic-flash' : ''}`} style={{ width: size, height: size }}>
         <img src={`${A}/relics/${id}.png`} alt={def.name} className="w-[82%] h-[82%] object-contain" draggable={false} />
       </span>
     </Tip>

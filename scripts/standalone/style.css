@@ -86,16 +86,19 @@ img { -webkit-user-drag: none; }
 .deck-btn b { font-size: 15px; line-height: 1.1; font-family: inherit; }
 .floor-stat { font-weight: bold; color: #c8b090; font-size: 13px; text-shadow: 1px 1px 0 #000; font-family: inherit; }
 
-/* ============ 卡牌（overflow:hidden 裁掉 512 画布映射的透明溢出区，避免弹窗出现滚动条） ============ */
+/* ============ 卡牌（唯一 512 画布盒：所有图层 inset:0 完全同矩形，杜绝错位；
+   overflow:hidden 裁掉画布盒透明溢出区，避免弹窗出现滚动条） ============ */
 .sts-card { position: relative; display: inline-block; overflow: hidden; }
-.sts-card .c512 { position: absolute; width: 171.24%; height: 122.19%; left: -35.47%; top: -11.21%; pointer-events: none; }
-.card-name { position: absolute; left: 10%; right: 10%; top: 3.5%; height: 13.5%; display: flex; align-items: center; justify-content: center;
+.sts-card .cbox { position: absolute; width: 171.24%; height: 122.19%; left: -35.47%; top: -11.21%; pointer-events: none; }
+.sts-card .clayer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; -webkit-user-drag: none; }
+/* 文字层：512 画布百分比（与图层同坐标系） */
+.card-name { position: absolute; left: 26.543%; width: 46.719%; top: 12.044%; height: 11.044%; display: flex; align-items: center; justify-content: center;
   text-shadow: 1px 1px 0 #000, 0 0 6px #000; line-height: 1.05; overflow: hidden; }
-.card-cost { position: absolute; left: -1%; top: -1.5%; width: 19%; height: 13.5%; display: flex; align-items: center; justify-content: center;
+.card-cost { position: absolute; left: 20.119%; top: 7.952%; width: 11.096%; height: 11.044%; display: flex; align-items: center; justify-content: center;
   color: #fff; text-shadow: 1px 1px 0 #000, 0 0 8px #a02010; }
-.card-desc { position: absolute; left: 8%; right: 8%; top: 49.5%; bottom: 13%; text-align: center; line-height: 1.28; color: #f2e6d0;
+.card-desc { position: absolute; left: 25.375%; width: 49.055%; top: 49.688%; height: 30.689%; text-align: center; line-height: 1.28; color: #f2e6d0;
   text-shadow: 1px 1px 1px #000; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-.card-up { position: absolute; right: 2%; top: 1%; color: #7fe08a; text-shadow: 1px 1px 0 #000; font-size: 15px; }
+.card-up { position: absolute; right: 22.066%; top: 9.998%; color: #7fe08a; text-shadow: 1px 1px 0 #000; font-size: 15px; }
 .sts-card.dimmed { opacity: .5; }
 .sts-card.playable { cursor: pointer; }
 .sts-card.playable:hover { filter: drop-shadow(0 0 8px rgba(255,220,120,.7)); }
@@ -275,7 +278,7 @@ img { -webkit-user-drag: none; }
 @keyframes card-in { 0% { transform: translateY(60px) scale(.7); opacity: 0; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
 
 /* ============ 卡牌底部类型行（类型小图标 + 类型名） ============ */
-.card-type-row { position: absolute; left: 18%; right: 18%; bottom: 2.5%; height: 8.5%;
+.card-type-row { position: absolute; left: 31.215%; width: 37.375%; bottom: 11.030%; height: 6.956%;
   display: flex; align-items: center; justify-content: center; gap: 4px; }
 .card-type-row img { height: 62%; width: auto; object-fit: contain; }
 .card-type-row span { color: #ffe9c4; text-shadow: 1px 1px 0 #000; letter-spacing: 1px; }
@@ -366,4 +369,40 @@ img { -webkit-user-drag: none; }
   0% { opacity: 0; transform: scale(.86) translateY(26px); letter-spacing: 26px; }
   60% { opacity: 1; }
   100% { opacity: 1; transform: scale(1) translateY(0); letter-spacing: 14px; }
+}
+
+/* ============ 动画还原包（第九批） ============ */
+
+/* 敌人待机浮动 */
+.idle-bob { animation: idle-bob 2.6s ease-in-out infinite; }
+@keyframes idle-bob {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-7px) scale(1.012); }
+}
+
+/* 抽牌：新手牌从抽牌堆（左下）飞入 */
+.hand-card.hand-in { animation: hand-draw-in .34s cubic-bezier(.25,.8,.35,1); }
+@keyframes hand-draw-in {
+  0% { transform: translate(-560px, -220px) rotate(-38deg) scale(.25); opacity: 0; }
+  60% { opacity: 1; }
+  100% { transform: translate(0, 0) rotate(0) scale(1); opacity: 1; }
+}
+
+/* 结束回合按钮脉动 */
+.end-turn.ready { animation: btn-ready 1.6s ease-in-out infinite; }
+@keyframes btn-ready {
+  0%, 100% { box-shadow: inset 0 1px 0 rgba(255,200,140,.25), 0 3px 0 #1c0a06, 0 5px 10px rgba(0,0,0,.6), 0 0 0 rgba(255,180,80,0); }
+  50% { box-shadow: inset 0 1px 0 rgba(255,200,140,.25), 0 3px 0 #1c0a06, 0 5px 10px rgba(0,0,0,.6), 0 0 22px rgba(255,180,80,.75); }
+}
+
+/* 回合横幅 */
+#turn-banner-holder { position: absolute; inset: 0; pointer-events: none; z-index: 85; }
+.turn-banner { position: absolute; left: 50%; top: 40%; width: 320px; margin-left: -160px; text-align: center;
+  font-size: 54px; letter-spacing: 8px; text-shadow: 3px 3px 0 #000, 0 0 40px rgba(0,0,0,.9);
+  animation: turn-banner 1.1s ease-in-out forwards; }
+@keyframes turn-banner {
+  0% { opacity: 0; transform: translateX(-60px) scale(.9); }
+  18% { opacity: 1; transform: translateX(0) scale(1); }
+  82% { opacity: 1; transform: translateX(0) scale(1); }
+  100% { opacity: 0; transform: translateX(60px) scale(.92); }
 }

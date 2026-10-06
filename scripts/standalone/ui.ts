@@ -268,6 +268,16 @@ function typeIconKey(color: string, type: string, rarity: string): string {
 const TYPE_NAME: Record<string, string> = { attack: '攻击', skill: '技能', power: '能力' }
 
 // 卡面内容（不含外层 .sts-card 包装，供手牌做差异更新）
+// 错位修复：所有 512 画布图层渲染在唯一 .cbox 内（inset:0 完全同矩形），
+// 文字层同样以 512 画布百分比定位 —— 任何缩放/旋转下边框与内容永不错位
+const CBX = 106 / 512, CBY = 47 / 512, CBW = 299 / 512, CBH = 419 / 512
+const cpx = (p: number) => ((CBX + p * CBW) * 100).toFixed(3) + '%'
+const cpy = (p: number) => ((CBY + p * CBH) * 100).toFixed(3) + '%'
+const cpr = (p: number) => (((512 - 405) / 512 + p * CBW) * 100).toFixed(3) + '%'
+const cpb = (p: number) => (((512 - 466) / 512 + p * CBH) * 100).toFixed(3) + '%'
+const cpw = (p: number) => (p * CBW * 100).toFixed(3) + '%'
+const cph = (p: number) => (p * CBH * 100).toFixed(3) + '%'
+
 function cardInner(card: CardInstance, width = 148): string {
   const def = CARDS[card.id]
   if (!def) return ''
@@ -278,22 +288,24 @@ function cardInner(card: CardInstance, width = 148): string {
   const up = card.upgraded > 0
   const bg = (COLOR_FRAME_BG[color] || COLOR_FRAME_BG.red)[def.type]
   const orb = COLOR_ORB[color] || 'cardRedOrb'
-  return `<img class="c512" src="${A(bg)}" alt="">
-  <img src="${A('cardart/' + card.id + '.png')}" alt="" style="position:absolute;object-fit:cover;left:4%;top:11.5%;width:87.6%;height:49%;border-radius:3px">
-  <img class="c512" src="${A('frames/frame' + def.type[0].toUpperCase() + def.type.slice(1) + rar + '.png')}" alt="">
-  <img class="c512" src="${A('frames/banner' + rar + '.png')}" alt="">
+  return `<div class="cbox"><img class="clayer" src="${A(bg)}" alt="">
+  <img src="${A('cardart/' + card.id + '.png')}" alt="" style="position:absolute;object-fit:cover;left:${cpx(0.04)};top:${cpy(0.115)};width:${cpw(0.876)};height:${cph(0.49)};border-radius:3px">
+  <img class="clayer" src="${A('frames/frame' + def.type[0].toUpperCase() + def.type.slice(1) + rar + '.png')}" alt="">
+  <img class="clayer" src="${A('frames/banner' + rar + '.png')}" alt="">
   <div class="sts-title card-name" style="font-size:${width * 0.088}px;color:${rar === 'Rare' ? '#ffd98a' : '#ffe9c4'}">${esc(def.name)}</div>
-  ${cost !== -99 ? `<img class="c512" src="${A('frames/' + orb + '.png')}" alt="">
+  ${cost !== -99 ? `<img class="clayer" src="${A('frames/' + orb + '.png')}" alt="">
   <div class="sts-title card-cost" style="font-size:${width * 0.115}px">${cost === -1 ? 'X' : cost}</div>` : ''}
   <div class="sts-body card-desc" style="font-size:${width * 0.076}px">${up ? '<span style="color:#7fe08a">+ </span>' : ''}${esc(desc)}</div>
   <div class="card-type-row"><img src="${A(typeIconKey(color, def.type, def.rarity))}" alt=""><span class="sts-title" style="font-size:${width * 0.062}px">${TYPE_NAME[def.type]}</span></div>
-  ${up ? '<div class="sts-title card-up">✦</div>' : ''}`
+  ${up ? '<div class="sts-title card-up">✦</div>' : ''}</div>`
 }
 
 function cardHtml(card: CardInstance, width = 148, extra = ''): string {
   const def = CARDS[card.id]
   if (!def) return ''
-  return `<div class="sts-card ${extra}" style="width:${width}px;height:${width * 1.4003}px">${cardInner(card, width)}</div>`
+  const W = Math.round(width)
+  const H = Math.round(width * 1.4003)
+  return `<div class="sts-card ${extra}" style="width:${W}px;height:${H}px">${cardInner(card, width)}</div>`
 }
 
 // ============ 状态图标行 ============
@@ -839,6 +851,7 @@ function buildCombatScreen(run: RunState): string {
   <div class="energy" id="energy-box"><img src="${A('frames/' + (ENERGY_ORB[hero] || 'redEnergy') + '.png')}" alt=""><span id="energy-num"></span></div>
   <button class="sts-btn end-turn sts-title" data-act="endTurn" id="end-turn-btn"></button>
   <div class="hand-row" id="hand-row"></div>
+  <div id="turn-banner-holder"></div>
   <div id="banner-holder"></div>
   <div id="card-play-fx"></div>
 </div>`
@@ -874,6 +887,7 @@ function updateEnemies(run: RunState) {
   const c = run.combat
   const hasSel = !!g().selectedCardUid || g().selectedPotionIdx !== null
   const seen = new Set<string>()
+  let eIdx = 0
   for (const e of c.enemies) {
     seen.add(e.uid)
     const def = ENEMIES[e.id]
@@ -884,7 +898,7 @@ function updateEnemies(run: RunState) {
       el.dataset.euid = e.uid
       el.innerHTML = `
         <div class="intent-slot"></div>
-        <div class="sprite"><img src="${A('enemies/' + def.sprite + '.png')}" alt="" style="width:${sw}px;height:${sw}px"></div>
+        <div class="sprite"><img class="idle-bob" src="${A('enemies/' + def.sprite + '.png')}" alt="" style="width:${sw}px;height:${sw}px;animation-delay:${(eIdx % 5) * 0.45}s"></div>
         <div class="enemy-info">
           <div class="ename">${esc(def.name)}</div>
           ${hpBarShell('', def.boss ? 280 : 170)}
@@ -904,6 +918,7 @@ function updateEnemies(run: RunState) {
     setHtml(el.querySelector('.intent-slot'), intentHtml(e, c))
     updateHpBar(el.querySelector('.hpbar'), e.hp, e.maxHp, e.block)
     setHtml(el.querySelector('.estatus'), statusRow(e.statuses, 28))
+    eIdx++
   }
   row.querySelectorAll('[data-euid]').forEach(el => {
     if (!seen.has((el as HTMLElement).dataset.euid!)) el.remove()
@@ -925,7 +940,7 @@ function updateHand(run: RunState) {
     let el = row.querySelector(`[data-cuid="${card.uid}"]`) as HTMLElement | null
     if (!el) {
       el = document.createElement('div')
-      el.className = 'hand-card'
+      el.className = 'hand-card hand-in'
       el.dataset.cuid = card.uid
       el.innerHTML = `<div class="hand-inner"><div class="sts-card" data-act="clickCard" data-uid="${card.uid}" style="width:168px;height:235px"></div></div>`
       row.appendChild(el)
@@ -994,6 +1009,23 @@ function playerExtraHtml(run: RunState, pidx?: number): string {
   return html
 }
 
+// 回合切换横幅（你的回合 / 敌方回合，动画还原）
+let lastPhase = ''
+let bannerTimer: ReturnType<typeof setTimeout> | null = null
+function turnBanner(phase: string) {
+  if (phase === lastPhase) return
+  const first = lastPhase === ''
+  lastPhase = phase
+  if (first || (phase !== 'player' && phase !== 'enemy')) return
+  const holder = document.getElementById('turn-banner-holder')
+  if (!holder) return
+  const text = phase === 'player' ? '你的回合' : '敌方回合'
+  const color = phase === 'player' ? '#ffd980' : '#ff8a6a'
+  holder.innerHTML = `<div class="turn-banner sts-title" style="color:${color}">${text}</div>`
+  if (bannerTimer) clearTimeout(bannerTimer)
+  bannerTimer = setTimeout(() => { holder.innerHTML = '' }, 1150)
+}
+
 function updateCombatScreen(run: RunState) {
   const c = run.combat
   if (!c) return
@@ -1059,8 +1091,12 @@ function updateCombatScreen(run: RunState) {
     const dis = c.phase !== 'player' || st.busy || !myTurnE
     et.disabled = dis || c.combatOver
     et.style.opacity = dis ? '0.5' : '1'
+    const etCls = 'sts-btn end-turn sts-title' + (!dis && !c.combatOver ? ' ready' : '')
+    if (et.className !== etCls) et.className = etCls
     setText(et, c.phase === 'player' ? (mpE && !myTurnE ? '队友回合…' : '结束回合') : '敌方回合…')
   }
+  // 回合切换横幅（你的回合 / 敌方回合）
+  turnBanner(c.phase)
   setHtml(document.getElementById('hint-holder'), (st.selectedCardUid || st.selectedPotionIdx !== null)
     ? `<div class="target-hint sts-body">${st.selectedPotionIdx !== null
       ? '选择药水目标（点击敌人，点击空白处取消）'

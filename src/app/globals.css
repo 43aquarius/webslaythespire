@@ -136,14 +136,20 @@
 /* 卡牌通用（overflow:hidden 裁掉 512 画布映射的透明溢出区，避免弹窗出现滚动条） */
 .sts-card { position: relative; user-select: none; overflow: hidden; }
 
-/* 卡牌 512 画布统一映射（卡体位于 (106,47)-(405,466)） */
-.sts-canvas512 {
+/* 卡牌唯一 512 画布盒（位置由 JS 按卡宽计算，盒内所有图层 inset:0 完全同矩形，
+   根治合成缩放时边框与内容偶发错位） */
+.sts-canvas-box {
   position: absolute;
-  width: 171.24%;
-  height: 122.19%;
-  left: -35.47%;
-  top: -11.21%;
   pointer-events: none;
+}
+.sts-canvas-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 /* 敌人受击闪白 */
@@ -439,3 +445,99 @@
 .char-stand { transition: all .16s ease; }
 .char-stand:not(.active) { filter: brightness(.62) saturate(.8); }
 .char-stand.active img { filter: drop-shadow(0 0 26px rgba(255,205,90,.4)) drop-shadow(0 10px 14px rgba(0,0,0,.7)); }
+
+/* ============ 动画还原包（第九批） ============ */
+
+/* 敌人待机浮动（呼吸感） */
+@keyframes sts-idle-bob {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-7px) scale(1.012); }
+}
+.sts-idle-bob { animation: sts-idle-bob 2.6s ease-in-out infinite; }
+
+/* 抽牌：从抽牌堆（左下）飞入 */
+@keyframes sts-draw-in {
+  0% { transform: translate(-560px, -220px) rotate(-38deg) scale(0.25); opacity: 0; }
+  60% { opacity: 1; }
+  100% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
+}
+.sts-draw-in { animation: sts-draw-in 0.34s cubic-bezier(.25,.8,.35,1); }
+
+/* 弃牌：飞向弃牌堆（右下） */
+@keyframes sts-discard-fly {
+  0% { transform: translate(0,0) rotate(0) scale(1); opacity: 1; }
+  100% { transform: translate(560px, -180px) rotate(30deg) scale(0.3); opacity: 0; }
+}
+.sts-discard-fly { animation: sts-discard-fly 0.42s cubic-bezier(.5,0,.8,.4) forwards; pointer-events: none; }
+
+/* 消耗：燃烧升腾 */
+@keyframes sts-exhaust-fly {
+  0% { transform: translate(0,0) scale(1); opacity: 1; filter: brightness(1); }
+  30% { filter: brightness(2.2) sepia(0.6); }
+  100% { transform: translateY(-130px) scale(0.6); opacity: 0; filter: brightness(3) sepia(1); }
+}
+.sts-exhaust-fly { animation: sts-exhaust-fly 0.5s ease-in forwards; pointer-events: none; }
+
+/* 回合横幅 */
+@keyframes sts-turn-banner {
+  0% { opacity: 0; transform: translateX(-60px) scale(0.9); }
+  18% { opacity: 1; transform: translateX(0) scale(1); }
+  82% { opacity: 1; transform: translateX(0) scale(1); }
+  100% { opacity: 0; transform: translateX(60px) scale(0.92); }
+}
+.sts-turn-banner { animation: sts-turn-banner 1.1s ease-in-out forwards; }
+
+/* 结束回合按钮：轮到你时脉动提示 */
+@keyframes sts-btn-ready {
+  0%, 100% { box-shadow: inset 0 1px 0 rgba(255,200,140,0.25), 0 3px 0 #1c0a06, 0 5px 10px rgba(0,0,0,0.6), 0 0 0 rgba(255,180,80,0); }
+  50% { box-shadow: inset 0 1px 0 rgba(255,200,140,0.25), 0 3px 0 #1c0a06, 0 5px 10px rgba(0,0,0,0.6), 0 0 22px rgba(255,180,80,0.75); }
+}
+.sts-btn-ready { animation: sts-btn-ready 1.6s ease-in-out infinite; }
+
+/* 药水投掷（弧线飞行后碎裂） */
+@keyframes sts-potion-throw {
+  0% { transform: translate(0, 0) scale(0.7); opacity: 1; }
+  70% { transform: translate(var(--ptx, 500px), var(--pty, 240px)) scale(1.15); opacity: 1; }
+  85% { transform: translate(var(--ptx, 500px), var(--pty, 240px)) scale(1.3); opacity: 1; }
+  100% { transform: translate(var(--ptx, 500px), var(--pty, 240px)) scale(1.6); opacity: 0; }
+}
+.sts-potion-throw { animation: sts-potion-throw 0.5s cubic-bezier(.4,0,.7,1) forwards; }
+
+/* 药水碎裂闪光 */
+@keyframes sts-potion-shatter {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.2); }
+  25% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.8); }
+}
+.sts-potion-shatter { animation: sts-potion-shatter 0.4s ease-out forwards; }
+
+/* 玩家/敌人格挡光环 */
+@keyframes sts-block-glow {
+  0% { filter: drop-shadow(0 0 0 rgba(120, 190, 255, 0)); }
+  40% { filter: drop-shadow(0 0 18px rgba(120, 190, 255, 0.95)); }
+  100% { filter: drop-shadow(0 0 0 rgba(120, 190, 255, 0)); }
+}
+.sts-block-glow { animation: sts-block-glow 0.55s ease-out; }
+
+/* 遗物获得闪光 */
+@keyframes sts-relic-flash {
+  0% { filter: brightness(3) drop-shadow(0 0 18px rgba(255, 220, 120, 1)); transform: scale(1.45); }
+  100% { filter: brightness(1) drop-shadow(0 0 0 rgba(255, 220, 120, 0)); transform: scale(1); }
+}
+.sts-relic-flash { animation: sts-relic-flash 0.85s ease-out; }
+
+/* 格挡徽章弹跳 */
+@keyframes sts-block-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  60% { transform: scale(1.25); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.sts-block-pop { animation: sts-block-pop 0.32s cubic-bezier(.2,.9,.3,1.3); }
+
+/* 地图节点抵达弹跳 */
+@keyframes sts-node-arrive {
+  0% { transform: scale(0.3); opacity: 0; }
+  60% { transform: scale(1.3); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.sts-node-arrive { animation: sts-node-arrive 0.45s cubic-bezier(.2,.9,.3,1.3); }
