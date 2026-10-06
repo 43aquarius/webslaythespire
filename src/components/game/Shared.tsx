@@ -208,6 +208,7 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
       style={{
         background: 'linear-gradient(180deg, rgba(8,5,3,0.88) 0%, rgba(8,5,3,0.62) 60%, transparent 100%)',
         padding: '10px 18px 26px',
+        pointerEvents: 'none',   // 空白区域点击穿透到下方敌人（修复Boss头部/意图点不到）
       }}>
       <div className="flex items-start justify-between">
         {/* 左上：头像+血量文字 / 金币 / 药水 / 遗物（参照原版原位） */}
@@ -216,7 +217,7 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
           <div className="flex items-center gap-2.5">
             <Tip tip={<b>{me.name}{mp ? '（你）' : ''}</b>}>
               <span
-                className="relative inline-block rounded-full overflow-hidden"
+                className="pointer-events-auto relative inline-block rounded-full overflow-hidden"
                 style={{
                   width: 54, height: 54,
                   border: '2.5px solid #6b4a2e',
@@ -250,7 +251,7 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
             </div>
           </div>
           {/* 行3：药水 */}
-          <div className="flex gap-1.5" style={{ marginLeft: 2 }}>
+          <div className="pointer-events-auto flex gap-1.5" style={{ marginLeft: 2 }}>
             {me.potions.map((pid, i) => (
               <PotionSlot
                 key={i} potionId={pid} size={38}
@@ -261,7 +262,7 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
             ))}
           </div>
           {/* 行4：遗物行（新获遗物闪光） */}
-          <div className="flex flex-wrap gap-1 items-center justify-start" style={{ maxWidth: 620 }}>
+          <div className="pointer-events-auto flex flex-wrap gap-1 items-center justify-start" style={{ maxWidth: 620 }}>
             {me.relics.map((id, i) => <RelicIcon key={id} id={id} size={32} flash={newRelic && i === me.relics.length - 1} />)}
           </div>
         </div>
@@ -270,7 +271,7 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
         <div className="flex flex-col items-center gap-1.5" style={{ marginRight: 196 }}>
           <Tip tip={<b>查看牌组（{me.deck.length} 张）</b>}>
             <button
-              className="sts-btn flex flex-col items-center justify-center"
+              className="pointer-events-auto sts-btn flex flex-col items-center justify-center"
               style={{ width: 62, height: 62, padding: 2, borderRadius: 10 }}
               onClick={() => openPile('deck')}
             >

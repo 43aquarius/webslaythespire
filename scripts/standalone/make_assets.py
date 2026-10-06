@@ -8,7 +8,7 @@ OUT = '/home/z/my-project/scripts/standalone/assets.json'
 
 # 优化策略: [目录, 最大边, 格式, JPEG质量]
 PLANS = {
-    'cardart': (None, 'JPEG', 82),   # 卡面无透明需求 → JPEG
+    'cardart': (None, 'PASSTHROUGH', None),  # 已离线烘焙为 512 画布 WebP（带透明，与边框同盒渲染）→ 直接内联
     'enemies': (420, 'PNG', None),   # 敌人需要透明
     'frames': (None, 'PNG', None),   # 卡框保持
     'hero': (None, 'PNG', None),
@@ -30,34 +30,39 @@ for d, (maxside, fmt, quality) in PLANS.items():
     if not os.path.isdir(dp):
         continue
     for f in sorted(os.listdir(dp)):
-        if not f.lower().endswith(('.png', '.jpg', '.jpeg')):
+        if not f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
             continue
         path = os.path.join(dp, f)
         key = f'{d}/{f}'
         orig_size = os.path.getsize(path)
         img = Image.open(path)
 
-        if fmt == 'JPEG' or path.lower().endswith(('.jpg', '.jpeg')):
-            im = img.convert('RGBA')
-            bg = Image.new('RGB', im.size, (10, 6, 4))
-            bg.paste(im, mask=im.split()[3])
-            buf = io.BytesIO()
-            bg.save(buf, 'JPEG', quality=quality or 80, optimize=True)
-            mime = 'image/jpeg'
-        else:
-            im = img.convert('RGBA')
-            if maxside and max(im.size) > maxside:
-                ratio = maxside / max(im.size)
-                im = im.resize((round(im.width * ratio), round(im.height * ratio)), Image.LANCZOS)
-            buf = io.BytesIO()
-            im.save(buf, 'PNG', optimize=True)
-            mime = 'image/png'
-
-        data = buf.getvalue()
-        if len(data) >= orig_size and not maxside and fmt != 'JPEG':
+        if f.lower().endswith('.webp') or fmt == 'PASSTHROUGH':
+            # WebP（带透明）：直接内联不再重编码
             with open(path, 'rb') as fp:
                 data = fp.read()
-            mime = 'image/png' if f.lower().endswith('.png') else 'image/jpeg'
+            mime = 'image/webp'
+        else:
+            if fmt == 'JPEG' or path.lower().endswith(('.jpg', '.jpeg')):
+                im = img.convert('RGBA')
+                bg = Image.new('RGB', im.size, (10, 6, 4))
+                bg.paste(im, mask=im.split()[3])
+                buf = io.BytesIO()
+                bg.save(buf, 'JPEG', quality=quality or 80, optimize=True)
+                mime = 'image/jpeg'
+            else:
+                im = img.convert('RGBA')
+                if maxside and max(im.size) > maxside:
+                    ratio = maxside / max(im.size)
+                    im = im.resize((round(im.width * ratio), round(im.height * ratio)), Image.LANCZOS)
+                buf = io.BytesIO()
+                im.save(buf, 'PNG', optimize=True)
+                mime = 'image/png'
+            data = buf.getvalue()
+            if len(data) >= orig_size and not maxside and fmt != 'JPEG':
+                with open(path, 'rb') as fp:
+                    data = fp.read()
+                mime = 'image/png' if f.lower().endswith('.png') else 'image/jpeg'
         b64 = base64.b64encode(data).decode()
         manifest[key] = f'data:{mime};base64,{b64}'
         total += len(data)

@@ -64,7 +64,9 @@ img { -webkit-user-drag: none; }
 
 /* ============ 顶部 HUD（原版布局：左上 头像+血量78/80+金币+药水+遗物 / 右上 牌组+层数） ============ */
 .top-hud { position: absolute; top: 0; left: 0; right: 0; z-index: 40; padding: 10px 18px 26px;
-  background: linear-gradient(180deg, rgba(8,5,3,.88) 0%, rgba(8,5,3,.62) 60%, transparent 100%); }
+  background: linear-gradient(180deg, rgba(8,5,3,.88) 0%, rgba(8,5,3,.62) 60%, transparent 100%);
+  pointer-events: none; }  /* 空白区点击穿透到下方敌人（修复Boss头部/意图点不到） */
+.top-hud .hud-portrait, .top-hud .pots-row, .top-hud .hud-relics, .top-hud .deck-btn { pointer-events: auto; }  /* 仅交互子元素恢复事件 */
 .top-hud .hud-row { display: flex; align-items: flex-start; justify-content: space-between; }
 .hud-left-col { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .hud-id-row { display: flex; align-items: center; gap: 10px; }
@@ -118,7 +120,7 @@ img { -webkit-user-drag: none; }
 
 .player-zone { position: absolute; left: 44px; bottom: 96px; display: flex; flex-direction: column; align-items: center; gap: 5px; z-index: 40; }
 .player-fx-slot { position: relative; width: 240px; height: 56px; }
-.target-hint { position: absolute; left: 50%; transform: translateX(-50%); bottom: 350px; color: #ff9a80; font-size: 16px; font-weight: bold; text-shadow: 1px 1px 0 #000; z-index: 55; font-family: inherit; }
+.target-hint { position: absolute; left: 50%; transform: translateX(-50%); bottom: 350px; color: #ff9a80; font-size: 16px; font-weight: bold; text-shadow: 1px 1px 0 #000; z-index: 55; font-family: inherit; pointer-events: none; }  /* 不挡下方敌人点击 */
 
 /* 血条 */
 .hpbar { position: relative; }

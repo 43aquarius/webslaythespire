@@ -693,10 +693,10 @@ export function CombatScreen() {
         ))}
       </div>
 
-      {/* ===== 选中提示 ===== */}
+      {/* ===== 选中提示（pointer-events:none —— 不挡下方敌人的点击） ===== */}
       {(selectedCardUid || selectedPotionIdx !== null) && (
         <div className="absolute left-1/2 -translate-x-1/2 sts-body font-bold"
-          style={{ bottom: 350, color: '#ff9a80', fontSize: 16, textShadow: '1px 1px 0 #000', zIndex: 55 }}>
+          style={{ bottom: 350, color: '#ff9a80', fontSize: 16, textShadow: '1px 1px 0 #000', zIndex: 55, pointerEvents: 'none' }}>
           {selectedPotionIdx !== null
             ? '选择药水目标（点击敌人，点击空白处取消）'
             : isTouch

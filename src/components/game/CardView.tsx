@@ -119,16 +119,13 @@ function CardViewInner({ card, width = 150, onClick, selected, dimmed, className
       <div className="sts-canvas-box" style={{ width: CW, height: CH, left: CX, top: CY }}>
         {/* 卡面背景（按角色色） */}
         <img src={bg} alt="" className="sts-canvas-layer" draggable={false} />
-        {/* 艺术图（512 画布百分比定位，与边框同坐标系） */}
+        {/* 艺术图：已烘焙为 512 画布图（窗口 x:131 y:99 250×190，原版肖像位），
+            与背景/边框/横幅/宝珠用完全相同的 inset:0 同盒渲染 —— 错位数学上不可能 */}
         <img
-          src={`${A}/cardart/${card.id}.png`}
+          src={`${A}/cardart/${card.id}.webp`}
           alt={def.name}
+          className="sts-canvas-layer"
           draggable={false}
-          style={{
-            position: 'absolute', objectFit: 'cover',
-            left: px(0.04), top: py(0.115), width: pw(0.876), height: ph(0.49),
-            borderRadius: 3,
-          }}
         />
         {/* 边框 / 名称横幅（与背景完全同盒） */}
         <img src={frame} alt="" className="sts-canvas-layer" draggable={false} />

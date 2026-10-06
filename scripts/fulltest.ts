@@ -35,6 +35,7 @@ async function main() {
   const MAX_STEPS = 500
   const log: string[] = []
   let lastAction = ''
+let restTries = 0
 
   while (step++ < MAX_STEPS) {
     const s = evJson(`(() => {
@@ -188,13 +189,17 @@ async function main() {
     }
 
     if (s.scr === 'rest') {
-      ev(`window.__sts.getState().restAction(${s.hp && s.hp < 40 ? "'rest'" : "'smith'"})`)
+      // 咖啡滴滤壶等遗物会禁止休息(restAction 静默失败)——同一篝火停留过久时改选锻造
+      restTries++
+      const wantHeal = s.hp && s.hp < 40 && restTries <= 2
+      ev(`window.__sts.getState().restAction(${wantHeal ? "'rest'" : "'smith'"})`)
       await sleep(400)
       ev(`(() => { const g = window.__sts.getState(); if (g.select) { const c = g.select.cardUids[0]; if (c) g.resolveSelect(c); else g.cancelSelect() } })()`)
-      log.push(s.hp && s.hp < 40 ? 'rest:heal' : 'rest:smith')
+      log.push(wantHeal ? 'rest:heal' : 'rest:smith')
       await sleep(400)
       continue
     }
+    restTries = 0
 
     if (s.scr === 'treasure') {
       ev('window.__sts.getState().takeTreasure()')

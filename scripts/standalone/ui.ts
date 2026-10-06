@@ -268,15 +268,10 @@ function typeIconKey(color: string, type: string, rarity: string): string {
 const TYPE_NAME: Record<string, string> = { attack: '攻击', skill: '技能', power: '能力' }
 
 // 卡面内容（不含外层 .sts-card 包装，供手牌做差异更新）
-// 错位修复：所有 512 画布图层渲染在唯一 .cbox 内（inset:0 完全同矩形），
-// 文字层同样以 512 画布百分比定位 —— 任何缩放/旋转下边框与内容永不错位
-const CBX = 106 / 512, CBY = 47 / 512, CBW = 299 / 512, CBH = 419 / 512
-const cpx = (p: number) => ((CBX + p * CBW) * 100).toFixed(3) + '%'
-const cpy = (p: number) => ((CBY + p * CBH) * 100).toFixed(3) + '%'
-const cpr = (p: number) => (((512 - 405) / 512 + p * CBW) * 100).toFixed(3) + '%'
-const cpb = (p: number) => (((512 - 466) / 512 + p * CBH) * 100).toFixed(3) + '%'
-const cpw = (p: number) => (p * CBW * 100).toFixed(3) + '%'
-const cph = (p: number) => (p * CBH * 100).toFixed(3) + '%'
+// 错位修复：所有 512 画布图层（背景/艺术图/边框/横幅/宝珠）渲染在唯一 .cbox 内
+// （inset:0 完全同矩形）；艺术图已离线烘焙为 512 画布图（原版肖像窗口
+// x:131 y:99 250×190），不再需要 CSS 定位 —— 任何缩放/旋转下边框与内容永不错位
+// 文字层以 512 画布百分比定位（style.css 的 .card-name 等静态百分比）
 
 function cardInner(card: CardInstance, width = 148): string {
   const def = CARDS[card.id]
@@ -289,7 +284,7 @@ function cardInner(card: CardInstance, width = 148): string {
   const bg = (COLOR_FRAME_BG[color] || COLOR_FRAME_BG.red)[def.type]
   const orb = COLOR_ORB[color] || 'cardRedOrb'
   return `<div class="cbox"><img class="clayer" src="${A(bg)}" alt="">
-  <img src="${A('cardart/' + card.id + '.png')}" alt="" style="position:absolute;object-fit:cover;left:${cpx(0.04)};top:${cpy(0.115)};width:${cpw(0.876)};height:${cph(0.49)};border-radius:3px">
+  <img class="clayer" src="${A('cardart/' + card.id + '.webp')}" alt="">
   <img class="clayer" src="${A('frames/frame' + def.type[0].toUpperCase() + def.type.slice(1) + rar + '.png')}" alt="">
   <img class="clayer" src="${A('frames/banner' + rar + '.png')}" alt="">
   <div class="sts-title card-name" style="font-size:${width * 0.088}px;color:${rar === 'Rare' ? '#ffd98a' : '#ffe9c4'}">${esc(def.name)}</div>
@@ -481,7 +476,7 @@ function rMainMenu(): string {
       ${items.map(it => `<button class="menu-btn sts-title ${it.dis ? 'dis' : ''}" data-act="${it.act}" ${it.arg ? `data-screen="${it.arg}"` : ''} ${it.dis ? 'disabled' : ''}
         style="opacity:${it.dis ? 1 : ''}"><span style="opacity:${it.dis ? .45 : 1};display:block">${it.label}</span></button>`).join('')}
     </div>
-    <div class="sts-body" style="color:#8a7458;font-size:12px;position:absolute;left:16px;bottom:12px">Web 复刻版 v1.8</div>
+    <div class="sts-body" style="color:#8a7458;font-size:12px;position:absolute;left:16px;bottom:12px">Web 复刻版 v1.9</div>
   </div>
   <a class="github-btn" href="https://github.com/43aquarius/webslaythespire" target="_blank" rel="noreferrer" title="GitHub 仓库">${GITHUB_SVG}<span>43aquarius/webslaythespire</span></a>
 </div>`
@@ -2175,7 +2170,7 @@ net.onRooms(list => {
 })
 useGame.subscribe(render)
 render()
-console.log('[STS standalone] 游戏就绪 v1.8（单人 + 联机合作 · 服务器中转/P2P双通道 + 房间大厅）')
+console.log('[STS standalone] 游戏就绪 v1.9（单人 + 联机合作 · 服务器中转/P2P双通道 + 房间大厅）')
 
 
 

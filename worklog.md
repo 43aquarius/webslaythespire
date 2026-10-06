@@ -218,3 +218,25 @@ Stage Summary:
 - 第九批2项需求在远程最新v1.8代码基础上完成并全部测试绿
 - 卡片错位从架构层根治(唯一画布盒),动画还原11项
 - 待提交GitHub
+
+---
+Task ID: 12
+Agent: main
+Task: 第十批需求：卡面图案与边框错位根治（艺术图烘焙为512画布层） + Boss有时点不到修复
+
+Work Log:
+- 【诊断①卡面错位】上次"唯一512画布盒"修复后艺术图仍靠 CSS 百分比定位(left:23.04%/top:18.59%/51.16%×40.1%)+objectFit:cover 映射进画布盒，与边框坐标系存在恒定偏差：旧艺术图区域 x:118..380 y:95..300 vs 原版肖像窗口 x:131..381 y:99..289（反编译常量：卡体300×420内(25,52)起250×190拉伸绘制）——左边超宽12px、整体左移6px、底部超出分隔线(y266..291)漏进描述区约9px可见
+- 【三项坐标确证】①边框PNG实测：名牌实区y63..96、侧饰x126..135/376..385、中轴透明窗y90..265(艺术图应嵌此窗) ②原版反编译常量换算512画布=窗口(131,99,250,190) ③VLM分析原版官方截图：插画区≈(0.08W,0.14H,0.84W,0.48H)、下缘止于分隔装饰线、左右延伸到边框装饰下方——三者互相吻合
+- 【根治方案：艺术图烘焙为512画布层】scripts/bake_cardart.py：238张卡面艺术图离线烘焙为512×512透明画布WebP(质量85,带alpha)，艺术图按原版窗口(131,99)拉伸至250×190(比例偏差>10%的3张PIL诅咒牌用居中裁剪cover)；已烘焙图幂等检测。此后艺术图在两版本中作为普通画布图层(sts-canvas-layer/clayer, inset:0)与背景/边框/横幅/宝珠完全同矩形渲染——错位在数学上不可能发生
+- 【体积优化】艺术图从裁剪PNG(8.8MB)→512画布WebP(2.7MB,比原来还小)；make_assets.py cardart 从JPEG压平(会破坏透明)改为WebP直通内联(image/webp)，修webp分支buf未定义崩溃+小文件回退mime误判
+- 【诊断②Boss点不到】根因：TopHud容器(absolute top-0 inset-x-0 z-40,全宽,高度~178px+随遗物换行增长到~214px)盒子盖住敌人区(top:118 z-30)——Boss意图图标(y118..168)整段+精灵图顶部被HUD透明盒遮挡，点击命中HUD→冒泡到战斗根→cancelSelection()取消选牌而非出牌；选中提示横幅(bottom:350 z-55)同理盖住敌人状态行区域
+- 【修复②】Next.js: TopHud根容器pointerEvents:'none'(空白区点击穿透)，头像/药水行/遗物行/牌组按钮恢复pointer-events-auto；选中提示横幅pointerEvents:'none'。单文件版: .top-hud{pointer-events:none}+.hud-portrait/.pots-row/.hud-relics/.deck-btn恢复auto+.target-hint穿透。document级事件委托机制兼容(e.target直接命中敌人元素)
+- 【重要附带发现】dev服务器(08:08启动)缓存了git reset之前的旧CSS(.sts-canvas512旧架构)，导致浏览器里复现"错位"假象——重启dev+清.next/cache后加载正确规则。提示：今后大改版后须重启dev服务器再验证
+- 【fulltest既有缺陷修复】篝火启发式不认识咖啡滴滤壶(禁止休息)→hp<40时无限选治疗卡死500步；加restTries计数(≤2次治疗后改锻造)
+- 【版本】v1.8→v1.9(两版本主菜单左下角+standalone启动日志)
+- 【测试】test_batch10.ts(Next.js 19/19)：Boss战斗注入(startNodes推送boss节点+busy守卫重试)、艺术图与边框getBoundingClientRect精确相同(手牌扇形旋转缩放下小数点后10位一致)、牌组弹窗放大视图同盒、Boss意图/头部/身体/名字四区elementFromPoint全命中、真实点击头部出牌成功(守卫者240→234)、提示横幅pe:none不拦截、TopHud穿透且按钮可点；test_batch10_standalone.ts(单文件13/13)：同盒对齐(WebP MIME识别data URL)+四区命中+穿透+真实点击出牌(六角幽灵250→244)；regression 16/16；regression5 412/412；mptest 22/22；tsc src/零错误；Next.js生产构建通过(含/api/mp)；fulltest全流程F0→F16 Boss战完整跑通(战败属启发式正常)；VLM核验3张截图(Next.js战斗/牌组弹窗/单文件Boss战)：插画居中嵌窗无偏移越界、布局渲染全部正常
+- 产物：单文件版v1.9重建18.85MB(仅+0.19MB)
+
+Stage Summary:
+- 两项需求根治完成：①卡面图案与边框错位——艺术图烘焙为与边框完全同盒的512画布WebP层(238张,体积反降6MB)，矩形级断言精确一致 ②Boss点不到——TopHud/提示横幅pointer-events穿透，四区命中+真实出牌验证通过
+- 两版本(Next.js/单文件v1.9)完全同步，全部测试绿
