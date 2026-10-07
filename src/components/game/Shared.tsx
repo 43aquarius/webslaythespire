@@ -204,7 +204,7 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
   }
 
   return (
-    <div className="absolute top-0 inset-x-0 z-40 sts-screen-fade select-none"
+    <div className="top-hud absolute top-0 inset-x-0 z-40 sts-screen-fade select-none"
       style={{
         background: 'linear-gradient(180deg, rgba(8,5,3,0.88) 0%, rgba(8,5,3,0.62) 60%, transparent 100%)',
         padding: '10px 18px 26px',

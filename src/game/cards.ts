@@ -109,6 +109,37 @@ export function cardDesc(inst: CardInstance, ctx?: { strikesInDeck?: number; hpL
   return text
 }
 
+// 染色分段描述（手牌攻击牌伤害随力量/虚弱实时变色 —— 原版动态数值行为）：
+// adj(idx, baseValue) 返回 { v: 显示值, color?: 颜色 }；返回 null 表示该值不变色
+export interface DescSeg { t: string; c?: string }
+export function cardDescParts(
+  inst: CardInstance,
+  ctx?: { strikesInDeck?: number; hpLost?: number; rampageBonus?: number; glassKnifePenalty?: number; clawBonus?: number; shivBonus?: number },
+  adj?: (idx: number, value: number) => { v: number; color?: string } | null
+): DescSeg[] {
+  const def = CARDS[inst.id]
+  if (!def) return []
+  const text = inst.upgraded > 0 ? def.upDesc : def.desc
+  let vals = cardValues(inst, ctx)
+  if (inst.id === 'perfectedStrike' && ctx?.strikesInDeck !== undefined) {
+    vals = [vals[0] + vals[1] * ctx.strikesInDeck, vals[1]]
+  }
+  const segs: DescSeg[] = []
+  const re = /\{(\d+)\}/g
+  let last = 0, m: RegExpExecArray | null
+  while ((m = re.exec(text))) {
+    if (m.index > last) segs.push({ t: text.slice(last, m.index) })
+    const idx = Number(m[1])
+    const base = vals[idx] ?? 0
+    const a = adj ? adj(idx, base) : null
+    if (a) segs.push({ t: String(a.v), c: a.color })
+    else segs.push({ t: String(base) })
+    last = re.lastIndex
+  }
+  if (last < text.length) segs.push({ t: text.slice(last) })
+  return segs
+}
+
 // 卡池（用于奖励/商店）—— 按角色过滤
 export function poolByRarity(rarity: Rarity, character: CharacterId = 'ironclad'): string[] {
   const colorMap: Record<CharacterId, CardColor> = {

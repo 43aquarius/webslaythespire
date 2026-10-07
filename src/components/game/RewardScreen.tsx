@@ -60,8 +60,13 @@ export function RewardScreen() {
               {myCards.map((cid, i) => {
                 const taken = !mp && r.taken.includes('card_' + cid)
                 const locked = tookMyCard && !taken
+                const rar = CARDS[cid]?.rarity
                 return (
                   <div key={cid} className="sts-card-in relative" style={{ animationDelay: `${i * 0.12}s` }}>
+                    {/* 原版 NCardRareGlow / NCardUncommonGlow：稀有金晕 / 罕见蓝晕，1s 淡入至 0.9 */}
+                    {!tookMyCard && (rar === 'rare' || rar === 'uncommon') && (
+                      <div className={`sts-reward-glow ${rar === 'rare' ? 'sts-reward-glow-rare' : 'sts-reward-glow-uncommon'}`} />
+                    )}
                     <CardView
                       card={{ uid: 'reward_' + cid, id: cid, upgraded: 0 }}
                       width={mp ? 150 : 168}

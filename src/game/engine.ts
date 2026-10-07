@@ -151,7 +151,8 @@ export function damageEnemy(combat: CombatState, run: RunState, e: EnemyInstance
   e.flash = true
   fx(combat, 'dmg', e.uid, dmg)
   if (isAttack) fx(combat, 'slash', e.uid)
-  if (hpLoss > 0) fx(combat, 'shake', e.uid)
+  // 震屏（带伤害值：UI 按 hpLoss 分档强度；玩家命中敌人也小震 —— 对齐原版 NScratchVfx VeryWeak）
+  if (hpLoss > 0) fx(combat, 'shake', e.uid, hpLoss)
   // 拉格维林被攻击会醒来
   if (e.statuses.asleep && e.hp > 0) {
     delete e.statuses.asleep
@@ -189,7 +190,8 @@ export function damagePlayer(combat: CombatState, run: RunState, amount: number,
   AP(combat).hpLostThisCombat += hpLoss
   if (dmg > 0) fx(combat, 'dmg', ptgt(combat), dmg)
   if (hpLoss > 0) {
-    fx(combat, 'shake', ptgt(combat))
+    // 震屏带 hpLoss：UI 据此分档（≥20强/≥10中/≥5弱/极弱）并触发受伤红晕
+    fx(combat, 'shake', ptgt(combat), hpLoss)
     // 世纪魔方：战斗中第一次因攻击失去生命 → 抽1张
     if (isAttack && run.relics.includes('centennialPuzzle') && !AP(combat).customFlags?.puzzleUsed) {
       const cf = AP(combat).customFlags = AP(combat).customFlags || {}

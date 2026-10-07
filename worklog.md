@@ -259,3 +259,26 @@ Work Log:
 Stage Summary:
 - sts2-web 研究产出：官方手牌布局查表、悬停交互算法、HP条滞后/毒预览规范、卡牌飞行动画模式、卡牌渲染单坐标系架构(佐证既有方案)、 pile 目标位置规则
 - 两版本同步落地 3 项改进 + 1 个隐藏动画 bug 修复；卡面错位问题终审结论=已修复(v1.9)，本次以受控测试+wiki真值标定双重确认
+
+---
+Task ID: 13
+Agent: main
+Task: sts2-web 研究第二批落地：受伤红晕/震屏punch重做/卡牌配色规范/回合横幅原版动画/能量球状态/奖励发光/宝球拱弧（两版本同步）
+
+Work Log:
+- 【研究新模块】hurt-vignette(PlayerHurtVignetteHelper 1s红晕曲线)、screenshake(punch=cos60rad/s+cubicOut包络,强度表[2/5/20/40/80],只震舞台data-shake规则,hitstop顿帧)、tooltip(360列布局/堆叠/卡牌预览0.75)、richtext(原版BBCode色板gold#efc851/green#7fff00/red#ff5555/cream#fff6e2)、orbs(∩弧25°→150°,半径lerp(225,300))、banners(战斗开始/玩家回合上浮50px+天蓝回合数/敌方回合2×缩入+金→红渐变精确参数)、reward-glow(稀有金晕+罕见蓝晕,1s淡入0.9)、combat-hud(能量0红#ff5555暗球/回能burst)、card.tsx(升级绿名#7FFF00/费用增加青#40FFFF减少绿/付不起红/各稀有度标题描边)、vfx-attacks(命中震屏强度规范VeryWeak2-Strong20)
+- 【落地①受伤红晕】玩家掉血→屏幕边缘暗红渐晕1s(前0.255s全亮后淡出),CSS radial-gradient两版本;修复ellipse 140% 120%尺寸错误(红色区全落屏外)→ellipse at 40%/70%/100%停靠,像素实测边缘红差96-99/中心-15
+- 【落地②震屏重做】punch模型(余弦60rad/s×cubicOut包络×随机方向)替代固定5帧;伤害分档(玩家受击hpLoss≥20→33px/≥10→17px/≥5→8px/其他4px;命中敌人→2px);新增.sts-shake-layer只震背景+角色+敌人(HUD/手牌/顶栏不动,原版data-shake规则);引擎shake fx携带hpLoss值;两版本
+- 【落地③卡牌配色】升级卡名绿#7FFF00描边#1B6131;费用付不起红#FF5555/描边#501717、免费(freeThisTurn)减费(血债血偿/剜心)绿#7FFF00;攻击牌手牌伤害随力量升绿降红(heavyBlade strMult=values[1],虚弱×0.75)——cards.ts新增cardDescParts分段描述,CardView新props unaffordable/combatCtx;两版本
+- 【落地④回合横幅】玩家回合:主文字上浮50px(1s ExpoOut)+「回合N」天蓝#87CEEB下落50px(1.5s)+停留0.4s+0.3s淡出;敌方回合:2×缩入(0.75s)+1.3s淡入+金#EFC851→红#FF5555渐变1s淡出;WAAPI实现;修复fill:forwards残留动画在DOM复用后覆盖行内色(effects前cancel三元素动画);两版本
+- 【落地⑤能量球】能量0红字#FF5555描边#501717+宝球brightness(0.45)变暗;回能爆发闪光(scale1.3+brightness2.1,480ms,原版OnEnergyChanged burst);两版本
+- 【落地⑥奖励发光】稀有卡金晕/罕见卡蓝晕(radial-gradient,1s CubicIn淡入至0.9,原版NCardRareGlow/NCardUncommonGlow);两版本
+- 【落地⑦宝球拱弧】机器人宝球从水平排改∩形拱弧(25°→150°,半径lerp(78,104)随容量,原版TweenLayout几何);两版本
+- 【附带修复】TopHud/OrbRow/TurnBanner/CardView文字层补稳定class(top-hud/orb-row/tb-*/card-name/card-cost/card-desc)供测试与样式复用
+- 【测试】test_batch12(Next.js 29/29):震屏层结构5项(bg/hero/enemy在层内+HUD层外+穿透)/红晕触发可见复位/震动translate/费用红/能量0红暗/回能爆发标记/升级绿名/数值变绿/双横幅WAAPI/回合数天蓝/宝球3球∩弧/稀有金晕罕见蓝晕;test_batch12_standalone(19/19)同套;regression 16/16;regression5 412/412;mptest 22/22(首跑1项时序偶发重跑全过);fulltest全流程16层Boss正常;VLM验收:手牌绿名+伤害绿数字/敌方横幅/玩家横幅+天蓝回合数/红晕渐晕(边缘红/中心净)全部确认
+- 【重要调试经验】agent-browser eval进程开销300-500ms导致480ms动画断言flaky(改dataset.burst标记法);WAAPI fill:forwards动画在React DOM复用后持续覆盖行内样式(必须getAnimations().cancel());dev服务器CSS缓存需重启+清.next/dev/cache(再现第十批经验)
+- 【版本】v1.9→v1.10(两版本);生产构建通过;单文件版18.85MB重建
+
+Stage Summary:
+- sts2-web第二批研究成果全部落地:7大项(红晕/震屏/配色/横幅/能量/发光/拱弧)×2版本同步,29+19项E2E全绿,VLM视觉确认
+- 本批后游戏打击感与原版还原度显著提升:受击有红晕+分级震屏(只震战场),手牌有原版配色语义(红费/绿名/动态数值),回合切换/能量/奖励/宝球均为原版视觉规范

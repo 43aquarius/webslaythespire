@@ -86,7 +86,7 @@ export function MainMenuScreen() {
 
       {/* 版本信息（左下角，原版样式） */}
       <div className="absolute sts-body" style={{ left: 16, bottom: 12, color: '#8a7458', fontSize: 12 }}>
-        Web 复刻版 v1.9
+        Web 复刻版 v1.10
       </div>
 
       {/* GitHub 入口（右下角） */}

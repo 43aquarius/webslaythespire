@@ -414,3 +414,29 @@ img { -webkit-user-drag: none; }
   82% { opacity: 1; transform: translateX(0) scale(1); }
   100% { opacity: 0; transform: translateX(60px) scale(.92); }
 }
+
+/* ===== 回合横幅（原版参数动画，由 WAAPI 驱动，此处仅保留几何） ===== */
+.turn-banner { position: absolute; left: 50%; top: 34%; width: 460px; margin-left: -230px; text-align: center; }
+
+/* ===== 震屏层（punch 模型：背景+角色+敌人随震动位移，HUD/手牌不动） ===== */
+.sts-shake-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; will-change: translate; }
+.sts-shake-layer .player-zone, .sts-shake-layer .enemies-row { pointer-events: auto; }
+.bg-fill { position: absolute; inset: 0; }
+
+/* ===== 受伤红晕（原版 PlayerHurtVignetteHelper）===== */
+.sts-hurt-vignette {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0; z-index: 78;
+  background: radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(190,0,0,.6) 70%, rgba(90,6,6,.95) 100%);
+}
+.sts-hurt-vignette.sts-vignette-play { animation: sts-vignette-play 1s ease-out forwards; }
+@keyframes sts-vignette-play { 0%, 25.5% { opacity: .85; } 100% { opacity: 0; } }
+
+/* ===== 奖励卡发光（原版 NCardRareGlow / NCardUncommonGlow）===== */
+.sts-reward-glow {
+  position: absolute; left: 50%; top: 50%; translate: -50% -50%;
+  width: 165%; height: 150%; border-radius: 50%; pointer-events: none; opacity: 0;
+  animation: sts-glow-in 1s cubic-bezier(.55,.06,.68,.19) forwards;
+}
+.sts-reward-glow-rare { background: radial-gradient(ellipse at 50% 50%, rgba(255,216,105,.55) 0%, rgba(255,178,40,.3) 42%, transparent 72%); filter: blur(3px); }
+.sts-reward-glow-uncommon { background: radial-gradient(ellipse at 50% 50%, rgba(105,196,255,.45) 0%, rgba(58,132,255,.24) 42%, transparent 72%); filter: blur(3px); }
+@keyframes sts-glow-in { from { opacity: 0; } to { opacity: .9; } }

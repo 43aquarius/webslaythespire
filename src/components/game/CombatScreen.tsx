@@ -5,7 +5,7 @@
 // 动画：出牌飞入（cardPlay fx）、斩击特效（slash fx）、敌人突进（lunge fx）、
 //       抽牌飞入（新卡 keyframe）、受击闪白/震动（Web Animations API）
 // 新系统：故障机器人宝球、观者姿态
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
 import { useGame, FxItem } from '@/store/gameStore'
 import { EnemyInstance, CardInstance, RunPlayer, PlayerCombatState } from '@/game/types'
 import { CARDS, cardCost } from '@/game/cards'
@@ -16,6 +16,59 @@ import { StatusRow, HpBar, Tip, TopHud, STATUS_INFO, statusImg } from './Shared'
 import { ScryOverlay } from './Overlays'
 
 const A = '/assets'
+
+// ============ 屏幕震动引擎（移植 sts2-web NScreenShake punch 模型） ============
+// punch：位移 = cos(t·60rad/s)·幅度·cubicOut(剩余/总时长)，沿随机方向；
+// 强度分档对齐原版 STRENGTH 表（1920 设计像素 → 1600 舞台 ×0.833）：
+// 极弱 1.7 / 弱 4.2 / 中 16.7 / 强 33.3 / 极强 66.7
+// 震动只作用于 .sts-shake-layer（背景+角色+敌人），HUD/手牌/顶栏不动 —— 原版 data-shake 规则
+const cubicOut = (p: number) => (p - 1) ** 3 + 1
+let shakePunch: { a: number; t: number; r: number; dx: number; dy: number } | null = null
+let shakeRunning = false
+function shakeFrame(dt: number) {
+  const p = shakePunch
+  if (!p) return
+  p.r -= dt
+  const els = document.querySelectorAll<HTMLElement>('.sts-shake-layer')
+  if (p.r <= 0) {
+    shakePunch = null
+    els.forEach(el => { el.style.translate = '' })
+    return
+  }
+  const c = Math.cos(p.r * 60) * p.a * cubicOut(p.r / p.t)
+  els.forEach(el => { el.style.translate = `${(c * p.dx).toFixed(2)}px ${(c * p.dy).toFixed(2)}px` })
+}
+function startShakeLoop() {
+  if (shakeRunning) return
+  shakeRunning = true
+  let last = performance.now()
+  const step = (now: number) => {
+    const dt = Math.min((now - last) / 1000, 0.05)
+    last = now
+    shakeFrame(dt)
+    if (shakePunch) requestAnimationFrame(step)
+    else {
+      shakeRunning = false
+      document.querySelectorAll<HTMLElement>('.sts-shake-layer').forEach(el => { el.style.translate = '' })
+    }
+  }
+  requestAnimationFrame(step)
+}
+/** 原版 NGame.ScreenShake(strength, duration)：新 punch 取代进行中的一个；角度 <0 随机 */
+export function screenPunch(px: number, duration = 0.3, deg = -1) {
+  if (!px) return
+  const rad = ((deg < 0 ? Math.random() * 360 : deg) * Math.PI) / 180
+  shakePunch = { a: px, t: duration, r: duration, dx: Math.cos(rad), dy: Math.sin(rad) }
+  startShakeLoop()
+}
+/** 受伤红晕（原版 PlayerHurtVignetteHelper.Play：重播即重置计时） */
+function playHurtVignette() {
+  const el = document.querySelector<HTMLElement>('.sts-hurt-vignette')
+  if (!el) return
+  el.classList.remove('sts-vignette-play')
+  void el.offsetWidth
+  el.classList.add('sts-vignette-play')
+}
 
 // ============ 意图图标 ============
 function IntentView({ enemy, targetable }: { enemy: EnemyInstance; targetable: boolean }) {
@@ -268,31 +321,82 @@ function PotionThrowFx({ show }: { show: number }) {
   )
 }
 
-// ============ 回合横幅（你的回合 / 敌方回合） ============
+// ============ 回合横幅（原版参数还原：player_turn_banner / enemy_turn_banner） ============
+// 玩家回合：主文字自下方上浮 50px（1s ExpoOut）+「回合 N」天蓝 #87ceeb 自上方下落 50px（1.5s），
+//           停留 0.4s 后整体 0.3s 淡出
+// 敌方回合：2× 缩入至 1×（0.75s ExpoOut）+ 1.3s 淡入，随后金色 #efc851 → 红 #ff5555 渐变 1s 并淡出
 function TurnBanner({ phase, turn }: { phase: string; turn: number }) {
-  const [banner, setBanner] = useState<{ key: number; text: string; color: string } | null>(null)
-  const prev = useRef<{ phase: string }>({ phase: '' })
+  const rootRef = useRef<HTMLDivElement>(null)
+  const labelRef = useRef<HTMLDivElement>(null)
+  const turnRef = useRef<HTMLDivElement>(null)
+  const [kind, setKind] = useState<'' | 'player' | 'enemy'>('')
+  const prev = useRef({ phase: '' })
   useEffect(() => {
-    const p = prev.current
-    if (p.phase && p.phase !== phase) {
-      if (phase === 'player') setBanner({ key: Date.now(), text: '你的回合', color: '#ffd980' })
-      else if (phase === 'enemy') setBanner({ key: Date.now(), text: '敌方回合', color: '#ff8a6a' })
-    }
+    const pv = prev.current
+    const toPlayer = phase === 'player' && pv.phase && pv.phase !== 'player'
+    const toEnemy = phase === 'enemy' && pv.phase && pv.phase !== 'enemy'
     prev.current = { phase }
+    if (!toPlayer && !toEnemy) return
+    setKind(toPlayer ? 'player' : 'enemy')
   }, [phase, turn])
-  if (!banner) return null
+  // kind 变化后 DOM 已挂载，此时再启动动画
+  useEffect(() => {
+    if (!kind) return
+    const root = rootRef.current, label = labelRef.current, tn = turnRef.current
+    if (!root || !label) return
+    const EXPO = 'cubic-bezier(0.16, 1, 0.3, 1)'
+    // 取消残留动画（敌方横幅 fill:forwards 的金→红动画会在 DOM 复用后继续覆盖行内色）
+    root.getAnimations().forEach(a => a.cancel())
+    label.getAnimations().forEach(a => a.cancel())
+    if (tn) tn.getAnimations().forEach(a => a.cancel())
+    if (kind === 'player' && tn) {
+      tn.animate(
+        [{ transform: 'translateY(-50px)', opacity: 0 }, { transform: 'translateY(0)', opacity: 1 }],
+        { duration: 1500, easing: EXPO, fill: 'forwards' }
+      )
+      label.animate(
+        [{ transform: 'translateY(50px)', opacity: 0 }, { transform: 'translateY(0)', opacity: 1 }],
+        { duration: 1000, easing: EXPO, fill: 'forwards' }
+      )
+      const fade = root.animate(
+        [{ opacity: 0 }, { opacity: 1, offset: 0.45 }, { opacity: 1, offset: 0.87 }, { opacity: 0 }],
+        { duration: 2200, easing: 'ease-out', fill: 'forwards' }
+      )
+      fade.finished.then(() => setKind('')).catch(() => {})
+    } else if (kind === 'enemy') {
+      label.animate(
+        [{ transform: 'scale(2)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }],
+        { duration: 1300, easing: EXPO, fill: 'forwards' }
+      )
+      // 金 → 红渐变（后半段）
+      label.animate(
+        [{ color: '#efc851', offset: 0 }, { color: '#efc851', offset: 0.565 }, { color: '#ff5555', offset: 1 }],
+        { duration: 2300, easing: 'ease-out', fill: 'forwards' }
+      )
+      const fade = root.animate(
+        [{ opacity: 0 }, { opacity: 1, offset: 0.45 }, { opacity: 1, offset: 0.57 }, { opacity: 0 }],
+        { duration: 2300, easing: 'ease-out', fill: 'forwards' }
+      )
+      fade.finished.then(() => setKind('')).catch(() => {})
+    }
+  }, [kind])
+  if (!kind) return null
   return (
-    <div
-      key={banner.key}
-      className="absolute sts-turn-banner sts-title"
-      style={{
-        left: '50%', top: '40%', marginLeft: -160, width: 320, textAlign: 'center',
-        fontSize: 54, color: banner.color,
-        textShadow: '3px 3px 0 #000, 0 0 40px rgba(0,0,0,0.9)',
-        zIndex: 85, pointerEvents: 'none', letterSpacing: 8,
-      }}
-    >
-      {banner.text}
+    <div ref={rootRef} className="sts-turn-banner-root absolute inset-x-0 flex flex-col items-center gap-1" style={{ top: '34%', zIndex: 85, pointerEvents: 'none', opacity: 0 }}>
+      {kind === 'player' ? (
+        <>
+          <div ref={turnRef} className="tb-turn sts-title" style={{ fontSize: 26, color: '#87ceeb', textShadow: '2px 2px 0 #000', letterSpacing: 4, opacity: 0 }}>
+            回合 {Math.max(1, turn)}
+          </div>
+          <div ref={labelRef} className="tb-label sts-title" style={{ fontSize: 58, color: '#efc851', textShadow: '3px 3px 0 #000, 0 0 40px rgba(0,0,0,0.85)', letterSpacing: 8, opacity: 0 }}>
+            你的回合
+          </div>
+        </>
+      ) : (
+        <div ref={labelRef} className="tb-label sts-title" style={{ fontSize: 58, color: '#efc851', textShadow: '3px 3px 0 #000, 0 0 40px rgba(0,0,0,0.85)', letterSpacing: 8, opacity: 0, transformOrigin: 'center' }}>
+          敌方回合
+        </div>
+      )}
     </div>
   )
 }
@@ -312,31 +416,48 @@ function OrbRow({ p }: { p?: PlayerCombatState }) {
   if (!P.orbs) return null
   const orbs = P.orbs
   const slots = P.orbSlots ?? 3
-  if (orbs.length === 0 && slots === 0) return null
+  const count = Math.max(slots, orbs.length)
+  if (count === 0) return null
+  // 原版 ∩ 形拱弧排列（sts2-web TweenLayout 逆向）：前球在右（25°），末球在左（150°），
+  // 半径随容量增长 lerp(78,104,(cap-3)/7)（1600 舞台缩放）
+  const r = 78 + (104 - 78) * Math.min(Math.max((count - 3) / 7, 0), 1)
+  const spread = 125
+  const step = count > 1 ? spread / (count - 1) : 0
+  const cx = 150, cy = 96
+  const arcPos = (i: number) => {
+    const a = ((25 + i * step) * Math.PI) / 180
+    return { x: cx + Math.cos(a) * r, y: cy - Math.sin(a) * r }
+  }
   return (
-    <div className="flex items-center gap-1.5" style={{ marginBottom: 4 }}>
-      {Array.from({ length: Math.max(slots, orbs.length) }).map((_, i) => {
+    <div className="orb-row relative" style={{ width: 240, height: 104, marginBottom: -8 }}>
+      {Array.from({ length: count }).map((_, i) => {
         const orb = orbs[i]
+        const { x, y } = arcPos(i)
+        const wrapStyle: CSSProperties = {
+          position: 'absolute', left: x - 17, top: y - 17, width: 34, height: 34,
+        }
         if (!orb) {
-          return <span key={i} style={{ width: 34, height: 34, borderRadius: '50%', border: '2px dashed rgba(120,140,200,0.35)', display: 'inline-block' }} />
+          return <span key={i} style={{ ...wrapStyle, borderRadius: '50%', border: '2px dashed rgba(120,140,200,0.35)' }} />
         }
         const st = ORB_STYLE[orb.type]
         return (
-          <Tip key={i} tip={<><b style={{ color: st.color }}>{ORB_NAME[orb.type]}</b><br />{ORB_DESC[orb.type]}</>}>
-            <span
-              className="sts-orb"
-              style={{
-                width: 34, height: 34, borderRadius: '50%',
-                background: `radial-gradient(circle at 35% 30%, ${st.color} 0%, rgba(20,20,40,0.95) 80%)`,
-                border: `2px solid ${st.color}`,
-                boxShadow: `0 0 12px ${st.glow}`,
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                color: '#fff', fontSize: 16, textShadow: '0 0 6px #000',
-              }}
-            >
-              {st.symbol}
-            </span>
-          </Tip>
+          <div key={i} style={wrapStyle}>
+            <Tip tip={<><b style={{ color: st.color }}>{ORB_NAME[orb.type]}</b><br />{ORB_DESC[orb.type]}</>}>
+              <span
+                className="sts-orb"
+                style={{
+                  width: 34, height: 34, borderRadius: '50%',
+                  background: `radial-gradient(circle at 35% 30%, ${st.color} 0%, rgba(20,20,40,0.95) 80%)`,
+                  border: `2px solid ${st.color}`,
+                  boxShadow: `0 0 12px ${st.glow}`,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#fff', fontSize: 16, textShadow: '0 0 6px #000',
+                }}
+              >
+                {st.symbol}
+              </span>
+            </Tip>
+          </div>
         )
       })}
     </div>
@@ -487,26 +608,23 @@ export function CombatScreen() {
   const fxList = useGame(s => s.fxList)
   const net = useGame(s => s.net)
 
-  // 屏幕震动（联机：任一玩家受击均震动）
-  const rootRef = useRef<HTMLDivElement>(null)
+  // 屏幕震动（punch 模型）+ 受伤红晕（联机：任一玩家掉血均触发）
+  // 玩家受击按 hpLoss 分档（≥20强 33px / ≥10中 17px / ≥5弱 4px / 其他极弱 2px）；
+  // 玩家命中敌人 = 极弱 2px（原版 NScratchVfx VeryWeak Short）
   const lastShakeRef = useRef(0)
-  const shakeEvents = fxList.filter(f => f.kind === 'shake' && (f.target === 'player' || f.target === 'p0' || f.target === 'p1'))
-  const shakeId = shakeEvents.length > 0 ? shakeEvents[shakeEvents.length - 1].id : 0
+  const shakeEvents = fxList.filter(f => f.kind === 'shake')
+  const lastShake = shakeEvents.length > 0 ? shakeEvents[shakeEvents.length - 1] : null
   useEffect(() => {
-    if (shakeId > lastShakeRef.current && rootRef.current) {
-      rootRef.current.animate(
-        [
-          { transform: 'translate(0, 0)' },
-          { transform: 'translate(-7px, 4px)' },
-          { transform: 'translate(6px, -5px)' },
-          { transform: 'translate(-4px, -2px)' },
-          { transform: 'translate(0, 0)' },
-        ],
-        { duration: 350, easing: 'ease-out' }
-      )
-    }
-    lastShakeRef.current = Math.max(lastShakeRef.current, shakeId)
-  }, [shakeId])
+    if (!lastShake || lastShake.id <= lastShakeRef.current) return
+    lastShakeRef.current = lastShake.id
+    const isPlayer = lastShake.target === 'player' || lastShake.target === 'p0' || lastShake.target === 'p1'
+    const v = lastShake.value ?? 5
+    const px = isPlayer
+      ? (v >= 20 ? 33 : v >= 10 ? 17 : v >= 5 ? 8 : 4)
+      : 2
+    screenPunch(px, 0.3)
+    if (isPlayer) playHurtVignette()
+  }, [lastShake?.id])
 
   const playerFx = fxList.filter(f => (f.target === 'player' || f.target === 'p0' || f.target === 'p1') && f.kind !== 'cardPlay')
   const cardPlayFx = fxList.filter(f => f.kind === 'cardPlay')
@@ -556,6 +674,25 @@ export function CombatScreen() {
     }
     lastPBlockRef.current = pBlock
   }, [pBlock])
+
+  // ===== 能量球：回能爆发闪光（原版 NEnergyCounter.OnEnergyChanged burst） =====
+  const energyOrbRef = useRef<HTMLDivElement>(null)
+  const pEnergy = combat ? AP(combat).energy : 0
+  const prevEnergyRef = useRef(pEnergy)
+  useEffect(() => {
+    if (pEnergy > prevEnergyRef.current && energyOrbRef.current) {
+      energyOrbRef.current.dataset.burst = String(Date.now())
+      energyOrbRef.current.animate(
+        [
+          { transform: 'scale(1)', filter: 'brightness(1)' },
+          { transform: 'scale(1.3)', filter: 'brightness(2.1)', offset: 0.3 },
+          { transform: 'scale(1)', filter: 'brightness(1)' },
+        ],
+        { duration: 480, easing: 'ease-out' }
+      )
+    }
+    prevEnergyRef.current = pEnergy
+  }, [pEnergy])
 
   // ===== 药水投掷动画：战斗中使用药水时触发（监听药水栏变化） =====
   const potionSig = useGame(s => s.run && s.run.combat ? s.run.players.map(p => p.potions.join(',')).join('|') : '')
@@ -647,33 +784,24 @@ export function CombatScreen() {
 
   return (
     <div
-      ref={rootRef}
       className="w-full h-full relative overflow-hidden select-none sts-screen-fade"
-      style={{
-        backgroundImage: `url(${A}/bg/${combatBg(run.act)}.jpg)`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center 30%',
-      }}
       onClick={(e) => {
         const t = e.target as HTMLElement
         if (!t.closest('button, .sts-card, .sts-slot, .sts-relic, .sts-targetable')) cancelSelection()
       }}
     >
-      {/* ===== 顶部 HUD ===== */}
-      <TopHud combat />
-
-      {/* ===== 联机等待横幅 ===== */}
-      {waitingPeer && (
-        <div className="absolute left-1/2 -translate-x-1/2 sts-title flex items-center gap-2"
-          style={{ top: 66, zIndex: 70, fontSize: 20, color: '#ffe9a0', textShadow: '2px 2px 0 #000', letterSpacing: 3 }}>
-          <span className="sts-wait-dot">●</span>
-          等待 {run.players[combat.activeIdx]?.name || '队友'} 行动…
-        </div>
-      )}
+      {/* ===== 震屏层：背景 + 角色 + 敌人（原版 data-shake 规则：HUD/手牌/顶栏不震） ===== */}
+      <div className="sts-shake-layer absolute inset-0 overflow-hidden" style={{ pointerEvents: 'none' }}>
+        {/* 背景（随震动一起移动） */}
+        <div className="absolute inset-0" style={{
+          backgroundImage: `url(${A}/bg/${combatBg(run.act)}.jpg)`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center 30%',
+        }} />
 
       {/* ===== 玩家（左下；联机双人并排） ===== */}
       {mp ? (
-        <div className="absolute flex items-end gap-2" style={{ left: 30, bottom: 92, zIndex: 40 }}>
+        <div className="absolute flex items-end gap-2" style={{ left: 30, bottom: 92, zIndex: 40, pointerEvents: 'auto' }}>
           {run.players.map((rp, i) => {
             const pc = combat.players[i]
             const items = fxList.filter(f =>
@@ -695,7 +823,7 @@ export function CombatScreen() {
           })}
         </div>
       ) : (
-        <div className="absolute flex flex-col items-center gap-1.5" style={{ left: 44, bottom: 96, zIndex: 40 }}>
+        <div className="absolute flex flex-col items-center gap-1.5" style={{ left: 44, bottom: 96, zIndex: 40, pointerEvents: 'auto' }}>
           <div className="relative" style={{ width: 240, height: 60 }}>
             <FloatFx items={playerFx} removeFx={removeFx} />
           </div>
@@ -716,11 +844,27 @@ export function CombatScreen() {
 
       {/* ===== 敌人区 ===== */}
       <div className="absolute flex items-start justify-center gap-10"
-        style={{ left: '31%', right: 12, top: 118, bottom: 300, zIndex: 30 }}>
+        style={{ left: '31%', right: 12, top: 118, bottom: 300, zIndex: 30, pointerEvents: 'auto' }}>
         {combat.enemies.map((e, i) => (
           <EnemyView key={e.uid} enemy={e} idx={i} />
         ))}
       </div>
+      </div>{/* ===== 震屏层结束 ===== */}
+
+      {/* ===== 顶部 HUD（不震） ===== */}
+      <TopHud combat />
+
+      {/* ===== 联机等待横幅（不震） ===== */}
+      {waitingPeer && (
+        <div className="absolute left-1/2 -translate-x-1/2 sts-title flex items-center gap-2"
+          style={{ top: 66, zIndex: 70, fontSize: 20, color: '#ffe9a0', textShadow: '2px 2px 0 #000', letterSpacing: 3 }}>
+          <span className="sts-wait-dot">●</span>
+          等待 {run.players[combat.activeIdx]?.name || '队友'} 行动…
+        </div>
+      )}
+
+      {/* ===== 受伤红晕（原版 PlayerHurtVignetteHelper，z 高于战斗层但不挡操作） ===== */}
+      <div className="sts-hurt-vignette" />
 
       {/* ===== 选中提示（pointer-events:none —— 不挡下方敌人的点击） ===== */}
       {(selectedCardUid || selectedPotionIdx !== null) && (
@@ -743,11 +887,18 @@ export function CombatScreen() {
         <PileButton label="消耗堆" count={AP(combat).exhaustPile.length} style={{ right: 26, bottom: 88 }} onClick={() => openPile('exhaust')} small />
       )}
 
-      {/* ===== 能量球 ===== */}
-      <div className="absolute sts-energy" style={{ left: 118, bottom: 116, width: 104, height: 104, zIndex: 44 }}>
-        <img src={`${A}/frames/${energyOrb}.png`} alt="能量" className="w-full h-full object-contain" draggable={false} />
+      {/* ===== 能量球（能量 0 时红字暗球 —— 原版 NEnergyCounter dark 态；回能爆发闪光） ===== */}
+      <div ref={energyOrbRef} className="absolute sts-energy" style={{ left: 118, bottom: 116, width: 104, height: 104, zIndex: 44 }}>
+        <img src={`${A}/frames/${energyOrb}.png`} alt="能量" className="w-full h-full object-contain" draggable={false}
+          style={p.energy === 0 ? { filter: 'brightness(0.45) saturate(0.6)' } : undefined} />
         <div className="absolute inset-0 flex items-center justify-center sts-num font-black"
-          style={{ fontSize: 40, color: '#fff', textShadow: '2px 2px 0 #403010, 0 0 12px #ff5000' }}>
+          style={{
+            fontSize: 40,
+            color: p.energy === 0 ? '#ff5555' : '#fff',
+            textShadow: p.energy === 0
+              ? '2px 2px 0 #501717, 0 0 10px rgba(80,23,23,0.9)'
+              : '2px 2px 0 #403010, 0 0 12px #ff5000',
+          }}>
           {p.energy}
         </div>
       </div>
@@ -817,6 +968,8 @@ export function CombatScreen() {
                   card={card}
                   width={168}
                   ctx={{ hpLost: p.hpLostThisCombat, rampageBonus: AP(combat).rampage?.[card.uid] || 0, glassKnifePenalty: AP(combat).glassKnife?.[card.uid] || 0, clawBonus: AP(combat).clawBonus || 0, shivBonus: p.statuses.accuracy || 0 }}
+                  combatCtx={{ strength: p.statuses.strength || 0, weak: !!p.statuses.weak }}
+                  unaffordable={!enough && isPlayable}
                   dimmed={!isPlayable || !enough}
                   selected={isSelected}
                   hoverPlay={isPlayable && enough}

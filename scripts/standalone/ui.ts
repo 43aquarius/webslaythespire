@@ -2,7 +2,7 @@
 // 架构：1600×900 舞台等比缩放 + 屏幕切换时构建骨架 + 状态更新时仅差异更新区域
 // 修复：innerHTML 全量重建导致的画面闪动；补上选牌/牌堆遮罩渲染
 import { useGame } from '@/store/gameStore'
-import { CARDS, cardCost, cardDesc, cardColor } from '@/game/cards'
+import { CARDS, cardCost, cardDesc, cardDescParts, cardValues, cardColor } from '@/game/cards'
 import { ENEMIES } from '@/game/enemies'
 import { RELICS } from '@/game/relics'
 import { POTIONS } from '@/game/potions'
@@ -273,24 +273,45 @@ const TYPE_NAME: Record<string, string> = { attack: '攻击', skill: '技能', p
 // x:131 y:99 250×190），不再需要 CSS 定位 —— 任何缩放/旋转下边框与内容永不错位
 // 文字层以 512 画布百分比定位（style.css 的 .card-name 等静态百分比）
 
-function cardInner(card: CardInstance, width = 148): string {
+function cardInner(card: CardInstance, width = 148, opts?: { unaffordable?: boolean; combatCtx?: { strength?: number; weak?: boolean } }): string {
   const def = CARDS[card.id]
   if (!def) return ''
   const rar = raritySuffix(def.rarity)
   const color = cardColor(card.id)
   const cost = cardCost(card, 0)
-  const desc = cardDesc(card)
   const up = card.upgraded > 0
+  // 费用配色（原版 GetCostTextColorInHand）：付不起红/免费减费绿
+  const baseCost = (up && def.upCost !== undefined) ? def.upCost : def.cost
+  const costFree = card.freeThisTurn || (cost >= 0 && baseCost >= 0 && cost < baseCost)
+  const costColor = opts?.unaffordable ? '#ff5555' : costFree ? '#7fff00' : '#fff'
+  const costShadow = opts?.unaffordable ? '1px 1px 0 #501717,0 0 8px #2a0808' : costFree ? '1px 1px 0 #1f5923,0 0 8px #0d2a10' : '1px 1px 0 #000,0 0 8px #a02010'
+  // 攻击牌伤害随力量/虚弱实时变色（升绿降红）
+  let descHtml = ''
+  if (def.type === 'attack' && opts?.combatCtx) {
+    const cc = opts.combatCtx
+    const strMult = card.id === 'heavyBlade' ? (cardValues(card)[1] ?? 2) : 1
+    const segs = cardDescParts(card, undefined, (idx, base) => {
+      if (idx !== 0) return null
+      let eff = base + Math.floor((cc.strength || 0) * strMult)
+      if (cc.weak) eff = Math.floor(eff * 0.75)
+      eff = Math.max(0, eff)
+      if (eff === base) return null
+      return { v: eff, color: eff > base ? '#7fff00' : '#ff5555' }
+    })
+    descHtml = segs.map(s => s.c ? `<span style="color:${s.c};font-weight:700">${esc(s.t)}</span>` : esc(s.t)).join('')
+  } else {
+    descHtml = esc(cardDesc(card))
+  }
   const bg = (COLOR_FRAME_BG[color] || COLOR_FRAME_BG.red)[def.type]
   const orb = COLOR_ORB[color] || 'cardRedOrb'
   return `<div class="cbox"><img class="clayer" src="${A(bg)}" alt="">
   <img class="clayer" src="${A('cardart/' + card.id + '.webp')}" alt="">
   <img class="clayer" src="${A('frames/frame' + def.type[0].toUpperCase() + def.type.slice(1) + rar + '.png')}" alt="">
   <img class="clayer" src="${A('frames/banner' + rar + '.png')}" alt="">
-  <div class="sts-title card-name" style="font-size:${width * 0.088}px;color:${rar === 'Rare' ? '#ffd98a' : '#ffe9c4'}">${esc(def.name)}</div>
+  <div class="sts-title card-name" style="font-size:${width * 0.088}px;color:${up ? '#7fff00' : rar === 'Rare' ? '#ffd98a' : '#ffe9c4'};${up ? 'text-shadow:1px 1px 0 #1b6131,0 0 6px rgba(10,50,20,.9)' : ''}">${esc(def.name)}</div>
   ${cost !== -99 ? `<img class="clayer" src="${A('frames/' + orb + '.png')}" alt="">
-  <div class="sts-title card-cost" style="font-size:${width * 0.115}px">${cost === -1 ? 'X' : cost}</div>` : ''}
-  <div class="sts-body card-desc" style="font-size:${width * 0.076}px">${up ? '<span style="color:#7fe08a">+ </span>' : ''}${esc(desc)}</div>
+  <div class="sts-title card-cost" style="font-size:${width * 0.115}px;color:${costColor};text-shadow:${costShadow}">${cost === -1 ? 'X' : cost}</div>` : ''}
+  <div class="sts-body card-desc" style="font-size:${width * 0.076}px">${up ? '<span style="color:#7fe08a">+ </span>' : ''}${descHtml}</div>
   <div class="card-type-row"><img src="${A(typeIconKey(color, def.type, def.rarity))}" alt=""><span class="sts-title" style="font-size:${width * 0.062}px">${TYPE_NAME[def.type]}</span></div>
   ${up ? '<div class="sts-title card-up">✦</div>' : ''}</div>`
 }
@@ -492,7 +513,7 @@ function rMainMenu(): string {
       ${items.map(it => `<button class="menu-btn sts-title ${it.dis ? 'dis' : ''}" data-act="${it.act}" ${it.arg ? `data-screen="${it.arg}"` : ''} ${it.dis ? 'disabled' : ''}
         style="opacity:${it.dis ? 1 : ''}"><span style="opacity:${it.dis ? .45 : 1};display:block">${it.label}</span></button>`).join('')}
     </div>
-    <div class="sts-body" style="color:#8a7458;font-size:12px;position:absolute;left:16px;bottom:12px">Web 复刻版 v1.9</div>
+    <div class="sts-body" style="color:#8a7458;font-size:12px;position:absolute;left:16px;bottom:12px">Web 复刻版 v1.10</div>
   </div>
   <a class="github-btn" href="https://github.com/43aquarius/webslaythespire" target="_blank" rel="noreferrer" title="GitHub 仓库">${GITHUB_SVG}<span>43aquarius/webslaythespire</span></a>
 </div>`
@@ -850,12 +871,16 @@ function buildCombatScreen(run: RunState): string {
     <div id="player-status"></div>
     <img src="${A('hero/' + hero + '.png')}" alt="" style="width:240px;filter:drop-shadow(0 8px 10px rgba(0,0,0,.5))">
   </div>`
-  return `<div class="screen bg-cover" id="combat-screen" data-bg="1" style="background-image:url('${A(combatBgKey(run.act))}')">
+  return `<div class="screen" id="combat-screen" data-bg="1">
+  <div class="sts-shake-layer" id="combat-stage">
+    <div class="bg-fill bg-cover" id="combat-bg" style="background-image:url('${A(combatBgKey(run.act))}')"></div>
+    ${playerZone}
+    <div class="enemies-row" id="enemies-row"></div>
+  </div>
   ${topHudShell()}
   <div id="mp-wait-banner"></div>
-  ${playerZone}
-  <div class="enemies-row" id="enemies-row"></div>
   <div id="hint-holder"></div>
+  <div class="sts-hurt-vignette"></div>
   <button class="pile-btn" id="pile-draw" data-act="openPile" data-pile="draw" style="left:26px;bottom:158px"><b>0</b><span>抽牌堆</span></button>
   <button class="pile-btn" id="pile-discard" data-act="openPile" data-pile="discard" style="right:26px;bottom:158px"><b>0</b><span>弃牌堆</span></button>
   <span id="exhaust-holder"></span>
@@ -1009,14 +1034,16 @@ function updateHand(run: RunState) {
     const innerCls = 'hand-inner' + (isSel ? ' sel' : '')
     if (inner.className !== innerCls) inner.className = innerCls
     const cardEl = inner.firstElementChild as HTMLElement
-    // 卡面内容仅在升级/费用变化时重建（避免图片重载闪动）
-    const sig = `${card.id}|${card.upgraded}|${cardCost(card, AP(c).hpLostThisCombat)}`
-    if ((cardEl as any).__sig !== sig) {
-      (cardEl as any).__sig = sig
-      cardEl.innerHTML = cardInner(card, 168)
-    }
+    // 卡面内容仅在升级/费用/付得起/力量/虚弱变化时重建（避免图片重载闪动）
     const cost = cardCost(card, AP(c).hpLostThisCombat)
     const enough = cost === -1 ? true : AP(c).energy >= Math.max(0, cost)
+    const ccStrength = AP(c).statuses.strength || 0
+    const ccWeak = !!AP(c).statuses.weak
+    const sig = `${card.id}|${card.upgraded}|${cost}|${enough}|${ccStrength}|${ccWeak}|${card.freeThisTurn ? 1 : 0}`
+    if ((cardEl as any).__sig !== sig) {
+      (cardEl as any).__sig = sig
+      cardEl.innerHTML = cardInner(card, 168, { unaffordable: !enough && playableNow, combatCtx: { strength: ccStrength, weak: ccWeak } })
+    }
     const cls = 'sts-card ' + (playableNow && enough ? 'playable' : 'dimmed')
     if (cardEl.className !== cls) cardEl.className = cls
   })
@@ -1046,36 +1073,64 @@ function playerExtraHtml(run: RunState, pidx?: number): string {
   if (character === 'defect') {
     const orbs = p.orbs || []
     const slots = p.orbSlots ?? 3
+    const count = Math.max(slots, orbs.length)
     const cells: string[] = []
-    for (let i = 0; i < slots; i++) {
+    // 原版 ∩ 形拱弧（sts2-web TweenLayout）：前球在右 25°，末球在左 150°，半径随容量
+    const rArc = 78 + (104 - 78) * Math.min(Math.max((count - 3) / 7, 0), 1)
+    const stepArc = count > 1 ? 125 / (count - 1) : 0
+    for (let i = 0; i < count; i++) {
+      const a = ((25 + i * stepArc) * Math.PI) / 180
+      const x = 150 + Math.cos(a) * rArc
+      const y = 96 - Math.sin(a) * rArc
       const o = orbs[i]
+      const pos = `position:absolute;left:${(x - 17).toFixed(1)}px;top:${(y - 17).toFixed(1)}px`
       if (o) {
         const nm = ORB_NAME[o.type] || o.type
-        cells.push(`<span class="orb-cell has" data-tip="<b>${nm}球</b>">${o.type[0].toUpperCase()}</span>`)
+        cells.push(`<span class="orb-cell has" data-tip="<b>${nm}球</b>" style="${pos}">${o.type[0].toUpperCase()}</span>`)
       } else {
-        cells.push('<span class="orb-cell"></span>')
+        cells.push(`<span class="orb-cell" style="${pos}"></span>`)
       }
     }
-    html += `<div class="orb-row">${cells.join('')}</div>`
+    html += `<div class="orb-row" style="position:relative;width:240px;height:104px;margin-bottom:-8px">${cells.join('')}</div>`
   }
   return html
 }
 
-// 回合切换横幅（你的回合 / 敌方回合，动画还原）
+// 回合切换横幅（原版参数还原：player_turn_banner / enemy_turn_banner）
+// 玩家回合：主文字上浮50px进入 + 「回合 N」天蓝#87ceeb 下落50px，停留0.4s后0.3s淡出
+// 敌方回合：2×缩入 + 1.3s淡入，随后金#efc851→红#ff5555渐变1s并淡出
 let lastPhase = ''
-let bannerTimer: ReturnType<typeof setTimeout> | null = null
-function turnBanner(phase: string) {
+function turnBanner(phase: string, turn = 1) {
   if (phase === lastPhase) return
   const first = lastPhase === ''
   lastPhase = phase
   if (first || (phase !== 'player' && phase !== 'enemy')) return
   const holder = document.getElementById('turn-banner-holder')
   if (!holder) return
-  const text = phase === 'player' ? '你的回合' : '敌方回合'
-  const color = phase === 'player' ? '#ffd980' : '#ff8a6a'
-  holder.innerHTML = `<div class="turn-banner sts-title" style="color:${color}">${text}</div>`
-  if (bannerTimer) clearTimeout(bannerTimer)
-  bannerTimer = setTimeout(() => { holder.innerHTML = '' }, 1150)
+  const EXPO = 'cubic-bezier(0.16, 1, 0.3, 1)'
+  if (phase === 'player') {
+    holder.innerHTML = `<div class="turn-banner sts-title" style="display:flex;flex-direction:column;align-items:center;gap:4px">
+      <div id="tb-turn" style="font-size:26px;color:#87ceeb;text-shadow:2px 2px 0 #000;letter-spacing:4px;opacity:0">回合 ${Math.max(1, turn)}</div>
+      <div id="tb-label" style="font-size:58px;color:#efc851;text-shadow:3px 3px 0 #000,0 0 40px rgba(0,0,0,.85);letter-spacing:8px;opacity:0">你的回合</div>
+    </div>`
+    const root = holder.firstElementChild as HTMLElement
+    const label = document.getElementById('tb-label')
+    const tn = document.getElementById('tb-turn')
+    tn?.animate?.([{ transform: 'translateY(-50px)', opacity: 0 }, { transform: 'translateY(0)', opacity: 1 }], { duration: 1500, easing: EXPO, fill: 'forwards' })
+    label?.animate?.([{ transform: 'translateY(50px)', opacity: 0 }, { transform: 'translateY(0)', opacity: 1 }], { duration: 1000, easing: EXPO, fill: 'forwards' })
+    const fade = root.animate?.([{ opacity: 0 }, { opacity: 1, offset: 0.45 }, { opacity: 1, offset: 0.87 }, { opacity: 0 }], { duration: 2200, easing: 'ease-out', fill: 'forwards' })
+    fade?.finished?.then(() => { holder.innerHTML = '' }).catch(() => { holder.innerHTML = '' })
+  } else {
+    holder.innerHTML = `<div class="turn-banner sts-title" style="display:flex;justify-content:center;opacity:0">
+      <div id="tb-label" style="font-size:58px;color:#efc851;text-shadow:3px 3px 0 #000,0 0 40px rgba(0,0,0,.85);letter-spacing:8px;opacity:0;transform-origin:center">敌方回合</div>
+    </div>`
+    const root = holder.firstElementChild as HTMLElement
+    const label = document.getElementById('tb-label')
+    label?.animate?.([{ transform: 'scale(2)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }], { duration: 1300, easing: EXPO, fill: 'forwards' })
+    label?.animate?.([{ color: '#efc851' }, { color: '#efc851', offset: 0.565 }, { color: '#ff5555' }], { duration: 2300, easing: 'ease-out', fill: 'forwards' })
+    const fade = root.animate?.([{ opacity: 0 }, { opacity: 1, offset: 0.45 }, { opacity: 1, offset: 0.57 }, { opacity: 0 }], { duration: 2300, easing: 'ease-out', fill: 'forwards' })
+    fade?.finished?.then(() => { holder.innerHTML = '' }).catch(() => { holder.innerHTML = '' })
+  }
 }
 
 function updateCombatScreen(run: RunState) {
@@ -1083,8 +1138,8 @@ function updateCombatScreen(run: RunState) {
   if (!c) return
   const st = g()
   updateHud(run, true)
-  // 背景随幕数切换（键控，避免重复设 url）
-  const cs = document.getElementById('combat-screen')
+  // 背景随幕数切换（键控，避免重复设 url；目标为震屏层内的 #combat-bg）
+  const cs = document.getElementById('combat-bg')
   if (cs) {
     const bg = A(combatBgKey(run.act))
     if ((cs as any).__bg !== bg) { (cs as any).__bg = bg; cs.style.backgroundImage = `url('${bg}')` }
@@ -1130,6 +1185,28 @@ function updateCombatScreen(run: RunState) {
     if (orbImg.dataset.orb !== oc) { orbImg.dataset.orb = oc; orbImg.src = url }
   }
   setText(document.getElementById('energy-num'), String(AP(c).energy))
+  // 能量球：能量 0 时红字暗球（原版 NEnergyCounter dark 态）；回能爆发闪光
+  const energyBox = document.getElementById('energy-box')
+  if (energyBox) {
+    const en = AP(c).energy
+    const numEl = document.getElementById('energy-num')
+    if (numEl) {
+      numEl.style.color = en === 0 ? '#ff5555' : '#fff'
+      numEl.style.textShadow = en === 0 ? '2px 2px 0 #501717, 0 0 10px rgba(80,23,23,.9)' : '2px 2px 0 #403010, 0 0 12px #ff5000'
+    }
+    const eImg = energyBox.querySelector('img') as HTMLImageElement | null
+    if (eImg) eImg.style.filter = en === 0 ? 'brightness(.45) saturate(.6)' : ''
+    const prev = (energyBox as any).__energy
+    if (typeof prev === 'number' && en > prev) {
+      energyBox.dataset.burst = String(Date.now())
+      energyBox.animate?.([
+        { transform: 'scale(1)', filter: 'brightness(1)' },
+        { transform: 'scale(1.3)', filter: 'brightness(2.1)', offset: 0.3 },
+        { transform: 'scale(1)', filter: 'brightness(1)' },
+      ], { duration: 480, easing: 'ease-out' })
+    }
+    ;(energyBox as any).__energy = en
+  }
   const pd = document.getElementById('pile-draw')
   if (pd) setText(pd.querySelector('b'), String(AP(c).drawPile.length))
   const pc = document.getElementById('pile-discard')
@@ -1147,8 +1224,8 @@ function updateCombatScreen(run: RunState) {
     if (et.className !== etCls) et.className = etCls
     setText(et, c.phase === 'player' ? (mpE && !myTurnE ? '队友回合…' : '结束回合') : '敌方回合…')
   }
-  // 回合切换横幅（你的回合 / 敌方回合）
-  turnBanner(c.phase)
+  // 回合切换横幅（原版参数动画）
+  turnBanner(c.phase, c.turn)
   setHtml(document.getElementById('hint-holder'), (st.selectedCardUid || st.selectedPotionIdx !== null)
     ? `<div class="target-hint sts-body">${st.selectedPotionIdx !== null
       ? '选择药水目标（点击敌人，点击空白处取消）'
@@ -1303,7 +1380,11 @@ function updateRewardScreen(run: RunState) {
         el = document.createElement('div')
         el.dataset.cid = cid
         el.style.animationDelay = `${i * 0.12}s`
-        el.innerHTML = cardHtml({ uid: 'r_' + cid, id: cid, upgraded: 0 }, mp ? 150 : 165) + `<span class="taken-mark sts-title" style="display:none">已选</span>`
+        // 原版 NCardRareGlow/NCardUncommonGlow：稀有金晕 / 罕见蓝晕（1s 淡入至 0.9）
+        const rar0 = CARDS[cid]?.rarity
+        const glow = (rar0 === 'rare' || rar0 === 'uncommon')
+          ? `<div class="sts-reward-glow ${rar0 === 'rare' ? 'sts-reward-glow-rare' : 'sts-reward-glow-uncommon'}"></div>` : ''
+        el.innerHTML = glow + cardHtml({ uid: 'r_' + cid, id: cid, upgraded: 0 }, mp ? 150 : 165) + `<span class="taken-mark sts-title" style="display:none">已选</span>`
         holder.appendChild(el)
       }
       const taken = tookMyCard
@@ -1645,15 +1726,59 @@ function computeFxPositions() {
   }
 }
 
-function screenShake() {
-  const el = document.getElementById('combat-screen')
-  el?.animate?.([
-    { transform: 'translate(0,0)' },
-    { transform: 'translate(-7px,4px)' },
-    { transform: 'translate(6px,-5px)' },
-    { transform: 'translate(-4px,-2px)' },
-    { transform: 'translate(0,0)' },
-  ], { duration: 350, easing: 'ease-out' })
+// ============ 屏幕震动（punch 模型，移植 sts2-web NScreenShake） ============
+// 位移 = cos(t·60rad/s)·幅度·cubicOut(剩余/总时长)，只作用于 .sts-shake-layer（背景+角色+敌人）
+const shakeCubicOut = (p: number) => (p - 1) ** 3 + 1
+let shakePunch: { a: number; t: number; r: number; dx: number; dy: number } | null = null
+let shakeRunning = false
+function shakeLayerEls(): HTMLElement[] {
+  return Array.from(document.querySelectorAll<HTMLElement>('.sts-shake-layer'))
+}
+function shakeStep(dt: number): boolean {
+  const p = shakePunch
+  if (!p) return false
+  p.r -= dt
+  const els = shakeLayerEls()
+  if (p.r <= 0) {
+    shakePunch = null
+    els.forEach(el => { el.style.translate = '' })
+    return false
+  }
+  const c = Math.cos(p.r * 60) * p.a * shakeCubicOut(p.r / p.t)
+  els.forEach(el => { el.style.translate = `${(c * p.dx).toFixed(2)}px ${(c * p.dy).toFixed(2)}px` })
+  return true
+}
+function screenPunch(px: number, duration = 0.3) {
+  if (!px) return
+  const rad = Math.random() * 360 * Math.PI / 180
+  shakePunch = { a: px, t: duration, r: duration, dx: Math.cos(rad), dy: Math.sin(rad) }
+  if (shakeRunning) return
+  shakeRunning = true
+  let last = performance.now()
+  const step = (now: number) => {
+    const dt = Math.min((now - last) / 1000, 0.05)
+    last = now
+    if (shakeStep(dt)) requestAnimationFrame(step)
+    else {
+      shakeRunning = false
+      shakeLayerEls().forEach(el => { el.style.translate = '' })
+    }
+  }
+  requestAnimationFrame(step)
+}
+// 受伤红晕（原版 PlayerHurtVignetteHelper.Play：重播即重置）
+function playHurtVignette() {
+  const el = document.querySelector<HTMLElement>('.sts-hurt-vignette')
+  if (!el) return
+  el.classList.remove('sts-vignette-play')
+  void el.offsetWidth
+  el.classList.add('sts-vignette-play')
+}
+// 玩家受击：按 hpLoss 分档震动 + 红晕；命中敌人：极弱震（原版 NScratchVfx）
+function screenShake(hpLoss: number, isPlayer: boolean) {
+  if (!isPlayer) { screenPunch(2, 0.3); return }
+  screenPunch(hpLoss >= 20 ? 33 : hpLoss >= 10 ? 17 : hpLoss >= 5 ? 8 : 4, 0.3)
+  playHurtVignette()
 }
 
 function enemyFlash(uid: string) {
@@ -1730,10 +1855,11 @@ function renderNewFx() {
   for (const f of st.fxList) {
     if (renderedFx.has(f.id)) continue
     renderedFx.add(f.id)
-    // 受击闪白 / 屏幕震动（Web Animations API，不重建 DOM）
+    // 受击闪白 / 屏幕震动（punch 模型 + 分档强度 + 受伤红晕）
     if (f.kind === 'shake') {
-      if (f.target === 'player' || f.target === 'p0' || f.target === 'p1') screenShake()
-      else enemyFlash(f.target)
+      const isPlayer = f.target === 'player' || f.target === 'p0' || f.target === 'p1'
+      screenShake(f.value || 5, isPlayer)
+      if (!isPlayer) enemyFlash(f.target)
     }
     if (f.kind === 'dmg') enemyFlash(f.target)
     if (f.kind === 'lunge') enemyLunge(f.target)
@@ -2227,7 +2353,7 @@ net.onRooms(list => {
 })
 useGame.subscribe(render)
 render()
-console.log('[STS standalone] 游戏就绪 v1.9（单人 + 联机合作 · 服务器中转/P2P双通道 + 房间大厅）')
+console.log('[STS standalone] 游戏就绪 v1.10（单人 + 联机合作 · 服务器中转/P2P双通道 + 房间大厅）')
 
 
 

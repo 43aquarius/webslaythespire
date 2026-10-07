@@ -7,7 +7,7 @@
 // 文字层同样换算为 512 画布百分比，与图层共用同一坐标系。
 import { memo } from 'react'
 import { CardInstance } from '@/game/types'
-import { CARDS, cardCost, cardDesc, cardColor } from '@/game/cards'
+import { CARDS, cardCost, cardDesc, cardDescParts, cardValues, cardColor } from '@/game/cards'
 
 const A = '/assets'
 
@@ -83,10 +83,12 @@ export interface CardViewProps {
   dimmed?: boolean
   className?: string
   hoverPlay?: boolean   // 手牌中可打出的悬浮高亮
+  unaffordable?: boolean // 手牌中能量不够（原版费用数字变红 #FF5555）
+  combatCtx?: { strength?: number; weak?: boolean }  // 手牌战斗上下文：攻击牌伤害随力量/虚弱实时变色
   ctx?: { strikesInDeck?: number; hpLost?: number; rampageBonus?: number; glassKnifePenalty?: number; clawBonus?: number; shivBonus?: number }
 }
 
-function CardViewInner({ card, width = 150, onClick, selected, dimmed, className = '', hoverPlay, ctx }: CardViewProps) {
+function CardViewInner({ card, width = 150, onClick, selected, dimmed, className = '', hoverPlay, unaffordable, combatCtx, ctx }: CardViewProps) {
   const def = CARDS[card.id]
   if (!def) return null
   // 整数化外框尺寸，减少分数像素
@@ -104,10 +106,32 @@ function CardViewInner({ card, width = 150, onClick, selected, dimmed, className
   const banner = `${A}/frames/banner${rar}.png`
   const typeIcon = typeIconUrl(color, def.type, def.rarity)
   const cost = cardCost(card, ctx?.hpLost ?? 0)
-  const desc = cardDesc(card, ctx)
   const upgraded = card.upgraded > 0
   const bg = (TYPE_BG[color] || TYPE_BG.red)[def.type]
   const orbImg = COLOR_ORB[color] || 'cardRedOrb'
+
+  // ===== 费用配色（原版 GetCostTextColorInHand）=====
+  // 付不起 → 红 #FF5555（描边 #501717）；本回合免费/减费 → 绿 #7FFF00（描边 #1F5923）
+  const baseCost = (upgraded && def.upCost !== undefined) ? def.upCost : def.cost
+  const costReduced = cost >= 0 && baseCost >= 0 && cost < baseCost
+  const costFree = card.freeThisTurn || costReduced
+  const costColor = unaffordable ? '#ff5555' : costFree ? '#7fff00' : '#fff'
+  const costShadow = unaffordable ? '1px 1px 0 #501717, 0 0 8px #2a0808' : costFree ? '1px 1px 0 #1f5923, 0 0 8px #0d2a10' : '1px 1px 0 #000, 0 0 8px #a02010'
+
+  // ===== 描述分段（攻击牌伤害随力量/虚弱实时变色：升绿降红，原版动态数值）=====
+  const isAttack = def.type === 'attack'
+  const strMult = card.id === 'heavyBlade' ? (cardValues(card, ctx)[1] ?? 2) : 1
+  const descSegs = (isAttack && combatCtx)
+    ? cardDescParts(card, ctx, (idx, base) => {
+        if (idx !== 0) return null
+        let eff = base + Math.floor((combatCtx.strength || 0) * strMult)
+        if (combatCtx.weak) eff = Math.floor(eff * 0.75)
+        eff = Math.max(0, eff)
+        if (eff === base) return null
+        return { v: eff, color: eff > base ? '#7fff00' : '#ff5555' }
+      })
+    : null
+  const desc = cardDesc(card, ctx)
 
   return (
     <div
@@ -135,27 +159,29 @@ function CardViewInner({ card, width = 150, onClick, selected, dimmed, className
           <img src={`${A}/frames/${orbImg}.png`} alt="" className="sts-canvas-layer" draggable={false} />
         )}
 
-        {/* 名称（画布百分比） */}
+        {/* 名称（升级后名字变绿 —— 原版行为；描边深绿 #1B6131） */}
         <div
-          className="sts-title absolute text-center flex items-center justify-center"
+          className="card-name sts-title absolute text-center flex items-center justify-center"
           style={{
             left: px(0.10), width: pw(0.80), top: py(0.035), height: ph(0.135),
             fontSize: width * 0.088,
-            color: rar === 'Rare' ? '#ffd98a' : '#ffe9c4',
-            textShadow: '1px 1px 0 #000, 0 0 6px #000',
+            color: upgraded ? '#7fff00' : rar === 'Rare' ? '#ffd98a' : '#ffe9c4',
+            textShadow: upgraded
+              ? '1px 1px 0 #1b6131, 0 0 6px rgba(10,50,20,0.9)'
+              : '1px 1px 0 #000, 0 0 6px #000',
             lineHeight: 1.05, overflow: 'hidden',
           }}
         >
           {def.name}
         </div>
-        {/* 费用数字 */}
+        {/* 费用数字（付不起红 / 免费减费绿 —— 原版 GetCostTextColorInHand） */}
         {cost !== -99 && (
           <div
-            className="sts-title absolute flex items-center justify-center"
+            className="card-cost sts-title absolute flex items-center justify-center"
             style={{
               left: px(-0.01), top: py(-0.015), width: pw(0.19), height: ph(0.135),
-              fontSize: width * 0.115, color: '#fff',
-              textShadow: '1px 1px 0 #000, 0 0 8px #a02010',
+              fontSize: width * 0.115, color: costColor,
+              textShadow: costShadow,
             }}
           >
             {cost === -1 ? 'X' : cost}
@@ -163,7 +189,7 @@ function CardViewInner({ card, width = 150, onClick, selected, dimmed, className
         )}
         {/* 描述 */}
         <div
-          className="sts-body absolute text-center"
+          className="card-desc sts-body absolute text-center"
           style={{
             left: px(0.08), width: pw(0.84), top: py(0.495), height: ph(0.375),
             fontSize: width * 0.076,
@@ -176,7 +202,12 @@ function CardViewInner({ card, width = 150, onClick, selected, dimmed, className
         >
           <div style={{ width: '100%' }}>
             {upgraded && <span style={{ color: '#7fe08a' }}>+ </span>}
-            {desc}
+            {descSegs
+              ? descSegs.map((s, i) =>
+                s.c
+                  ? <span key={i} style={{ color: s.c, fontWeight: 700 }}>{s.t}</span>
+                  : <span key={i}>{s.t}</span>)
+              : desc}
           </div>
         </div>
         {/* 底部类型行：类型小图标 + 类型名（对齐原版） */}
