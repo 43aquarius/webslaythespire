@@ -339,14 +339,22 @@ export function StatusRow({ statuses, size = 30 }: { statuses: StatusMap; size?:
 }
 
 // ============ 血条 ============
-export function HpBar({ hp, maxHp, block, width = 200, label }: { hp: number; maxHp: number; block?: number; width?: number; label?: string }) {
+export function HpBar({ hp, maxHp, block, width = 200, label, poison = 0, poisonNext = 0 }: { hp: number; maxHp: number; block?: number; width?: number; label?: string; poison?: number; poisonNext?: number }) {
   const pct = Math.max(0, Math.min(100, hp / maxHp * 100))
+  // 毒预览（原版：血条右端绿色段显示下回合毒伤；致死时数字变绿）
+  const poisonPct = Math.max(0, Math.min(pct, poisonNext / maxHp * 100))
+  const poisonLethal = poisonNext > 0 && poisonNext >= hp && hp > 0
   return (
     <div className="relative" style={{ width }}>
       <div className="sts-hpbar-outer relative" style={{ height: 22 }}>
-        <div className="sts-hpbar-fill" style={{ width: `${pct}%` }} />
+        {/* 伤害滞后段（原版：受击时红条瞬间缩短，其后米白残条延迟~0.4s后经0.8s收缩） */}
+        <div className="sts-hpbar-lag absolute" style={{ width: `${pct}%` }} />
+        <div className="sts-hpbar-fill absolute" style={{ width: `${pct}%` }} />
+        {poisonPct > 0 && !poisonLethal && (
+          <div className="sts-hpbar-poison absolute" style={{ left: `${pct}%`, width: `${poisonPct}%` }} />
+        )}
         <div className="absolute inset-0 flex items-center justify-center sts-num sts-body font-bold"
-          style={{ fontSize: 13, color: '#fff', textShadow: '1px 1px 0 #000' }}>
+          style={{ fontSize: 13, color: poisonLethal ? '#7dff8a' : '#fff', textShadow: '1px 1px 0 #000' }}>
           {hp} / {maxHp}
         </div>
         {block !== undefined && block > 0 && (

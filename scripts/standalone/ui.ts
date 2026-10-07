@@ -316,22 +316,38 @@ function statusRow(statuses: Record<string, number>, size = 26): string {
   }).join('')}</div>`
 }
 
-// ============ 血条（结构固定 + 平滑更新） ============
+// ============ 血条（结构固定 + 平滑更新；含原版伤害滞后段+毒预览） ============
 function hpBarShell(id: string, width: number): string {
   return `<div class="hpbar" ${id ? `id="${id}"` : ''} style="width:${width}px">
     <div class="hpbar-outer" style="height:22px">
+      <div class="hpbar-lag" style="width:100%"></div>
       <div class="hpbar-fill" style="width:100%"></div>
+      <div class="hpbar-poison" style="display:none"></div>
       <span class="hp-text"></span>
       <span class="block-badge" style="display:none"><img src="${A('status/block.png')}" alt=""><i></i></span>
     </div>
   </div>`
 }
-function updateHpBar(el: HTMLElement | null, hp: number, maxHp: number, block?: number) {
+function updateHpBar(el: HTMLElement | null, hp: number, maxHp: number, block?: number, poisonNext = 0) {
   if (!el) return
   const pct = Math.max(0, Math.min(100, hp / maxHp * 100))
   const fill = el.querySelector('.hpbar-fill') as HTMLElement
   if (fill) fill.style.width = pct + '%'
-  setText(el.querySelector('.hp-text'), `${hp} / ${maxHp}`)
+  const lag = el.querySelector('.hpbar-lag') as HTMLElement
+  if (lag) lag.style.width = pct + '%'   // CSS transition 产生原版延迟收缩的米白残条
+  const poisonLethal = poisonNext > 0 && poisonNext >= hp && hp > 0
+  const pz = el.querySelector('.hpbar-poison') as HTMLElement
+  if (pz) {
+    if (poisonNext > 0 && !poisonLethal) {
+      const ppct = Math.max(0, Math.min(pct, poisonNext / maxHp * 100))
+      pz.style.display = ''
+      pz.style.left = pct + '%'
+      pz.style.width = ppct + '%'
+    } else pz.style.display = 'none'
+  }
+  const txt = el.querySelector('.hp-text') as HTMLElement
+  if (txt) txt.style.color = poisonLethal ? '#7dff8a' : ''
+  setText(txt, `${hp} / ${maxHp}`)
   const bb = el.querySelector('.block-badge') as HTMLElement
   if (bb) {
     if (block !== undefined && block > 0) {
@@ -911,7 +927,7 @@ function updateEnemies(run: RunState) {
     el.style.minWidth = sw * 0.8 + 'px'
     // 意图 / 血条 / 状态（区域差异更新）
     setHtml(el.querySelector('.intent-slot'), intentHtml(e, c))
-    updateHpBar(el.querySelector('.hpbar'), e.hp, e.maxHp, e.block)
+    updateHpBar(el.querySelector('.hpbar'), e.hp, e.maxHp, e.block, (e.statuses as any)?.poison || 0)
     setHtml(el.querySelector('.estatus'), statusRow(e.statuses, 28))
     eIdx++
   }
@@ -920,16 +936,52 @@ function updateEnemies(run: RunState) {
   })
 }
 
+// 悬停中的手牌 uid（悬停推开邻居的原版交互；事件委托，仅需一次绑定）
+let handHoverUid = ''
+let handHoverBound = false
+function bindHandHover() {
+  if (handHoverBound) return
+  handHoverBound = true
+  document.addEventListener('mouseover', ev => {
+    const t = (ev.target as HTMLElement | null)?.closest?.('#hand-row [data-cuid]') as HTMLElement | null
+    if (t) { if (handHoverUid !== t.dataset.cuid) { handHoverUid = t.dataset.cuid || ''; updateHandAll() } }
+    else if (handHoverUid) { handHoverUid = ''; updateHandAll() }
+  })
+}
+function updateHandAll() {
+  const st = g()
+  if (st.run?.combat) updateHand(st.run)
+}
+
 function updateHand(run: RunState) {
   const row = document.getElementById('hand-row')
   if (!row || !run.combat) return
+  bindHandHover()
   const c = run.combat
   const st = g()
   const n = AP(c).hand.length
-  const mid = (n - 1) / 2
   const myTurnH = c.players.length === 1 || st.net.myIdx === c.activeIdx
   const playableNow = c.phase === 'player' && !st.busy && !c.combatOver && myTurnH
   const seen = new Set<string>()
+  // 原版 HandPosHelper 查表（来自 sts2-web 逆向，Mega Crit 官方数值）；按 1600/1920 舞台缩放
+  const POS: number[][] = [
+    [0, -50], [-100, -50, 100, -50], [-180, -50, 0, -59, 180, -50],
+    [-240, -25, -80, -50, 80, -50, 240, -25],
+    [-340, 10, -170, -30, 0, -50, 170, -30, 340, 10],
+    [-460, 13, -273, -25, -90, -50, 90, -50, 273, -25, 460, 13],
+    [-534, 18, -365, -14, -189, -39, 0, -50, 189, -39, 365, -14, 534, 18],
+    [-565, 28, -400, -14, -231, -39, -80, -50, 80, -50, 231, -39, 400, -14, 565, 28],
+    [-600, 37, -445, -2, -300, -29, -150, -45, 0, -50, 150, -45, 300, -29, 445, -2, 600, 37],
+    [-610, 38, -472, 5, -340, -21, -200, -41, -64, -50, 64, -50, 200, -41, 340, -21, 472, 5, 610, 38],
+  ]
+  const ANG: number[][] = [
+    [0], [-2, 2], [-3, 0, 3], [-8, -4, 4, 8], [-8, -4, 0, 4, 8], [-9, -6, -3, 3, 6, 9], [-9, -6, -3, 0, 3, 6, 9],
+    [-12, -9, -6, -3, 3, 6, 9, 12], [-12, -9, -6, -3, 0, 3, 6, 9, 12], [-15, -12, -9, -6, -3, 3, 6, 9, 12, 15],
+  ]
+  const rowIdx = Math.min(Math.max(n, 1), 10) - 1
+  const K = 1600 / 1920, HALF_H = 117.5, SINK = 40
+  let hoverI = -1
+  AP(c).hand.forEach((card, i) => { if (card.uid === handHoverUid) hoverI = i })
   AP(c).hand.forEach((card, i) => {
     seen.add(card.uid)
     let el = row.querySelector(`[data-cuid="${card.uid}"]`) as HTMLElement | null
@@ -940,11 +992,16 @@ function updateHand(run: RunState) {
       el.innerHTML = `<div class="hand-inner"><div class="sts-card" data-act="clickCard" data-uid="${card.uid}" style="width:168px;height:235px"></div></div>`
       row.appendChild(el)
     }
-    const offset = i - mid
-    const spread = Math.min(78, 700 / Math.max(n, 1))
-    const rot = n > 1 ? (offset / mid) * (n > 5 ? 14 : 8) : 0
-    const ty = Math.abs(offset) * Math.min(8, 44 / Math.max(n, 1)) * 0.9
-    const tf = `translateX(${offset * spread}px) translateY(${ty}px) rotate(${rot}deg)`
+    const px = POS[rowIdx]
+    let x = (px[i * 2] ?? 0) * K
+    const yTab = (px[i * 2 + 1] ?? -50) * K
+    const ty = yTab + HALF_H - SINK
+    let rot = ANG[rowIdx][i] ?? 0
+    if (hoverI >= 0 && hoverI !== i) {
+      const dist = Math.abs(hoverI - i)
+      if (dist <= 4) x -= Math.sign(hoverI - i) * (100 - 25 * (dist - 1)) * K
+    }
+    const tf = `translateX(${x}px) translateY(${ty}px) rotate(${rot}deg)`
     if ((el as any).__tf !== tf) { (el as any).__tf = tf; el.style.transform = tf }
     el.style.zIndex = String(10 + i)
     const isSel = st.selectedCardUid === card.uid

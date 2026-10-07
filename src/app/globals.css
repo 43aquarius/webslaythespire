@@ -200,10 +200,11 @@
 .sts-dying { animation: sts-die 0.9s ease-out forwards; }
 
 /* 手牌扇形排列由 JS 计算，悬浮效果 */
-.sts-hand-card { transition: transform 0.18s ease-out, box-shadow 0.18s; cursor: pointer; }
+.sts-hand-card { transition: transform 0.25s cubic-bezier(.2,.9,.3,1), box-shadow 0.18s; cursor: pointer; }
 .sts-hand-card:hover { z-index: 50 !important; }
-.sts-hand-card .hand-inner { transition: transform .16s ease-out; }
-.sts-hand-card:hover .hand-inner { transform: translateY(-100px) scale(1.28) !important; }
+.sts-hand-card .hand-inner { transition: transform .18s cubic-bezier(.2,.9,.3,1); }
+/* 原版：悬停抬起至卡牌完全可见（卡底边升至舞台底上方~90px）并放大1.25 */
+.sts-hand-card:hover .hand-inner { transform: translateY(-132px) scale(1.25) !important; }
 
 /* 触屏设备：关闭 hover 位移效果，避免粘滞态 */
 @media (hover: none) {
@@ -267,9 +268,23 @@
   overflow: hidden;
 }
 .sts-hpbar-fill {
+  position: absolute; left: 0; top: 0; height: 100%;
   background: linear-gradient(180deg, #ff5a4a 0%, #c81e14 50%, #8f120c 100%);
-  height: 100%;
-  transition: width 0.35s ease-out;
+  /* 原版：红条即时缩短（0.12s 极快），滞后段负责慢速残条 */
+  transition: width 0.12s linear;
+}
+/* 伤害滞后段（原版 middleground：受击后米白残条延迟0.35s、经0.8s收缩到新血量） */
+.sts-hpbar-lag {
+  left: 0; top: 0; height: 100%;
+  background: linear-gradient(180deg, #f7e9c9 0%, #e8d5a8 50%, #c9b78c 100%);
+  box-shadow: 0 0 4px rgba(240,225,190,0.5);
+  transition: width 0.8s cubic-bezier(.3, .7, .4, 1) 0.35s;
+}
+/* 毒伤预览段（原版：血条右端绿色段，从当前血量位置起向右） */
+.sts-hpbar-poison {
+  top: 0; height: 100%;
+  background: linear-gradient(180deg, #8fe86a 0%, #56c437 50%, #2f8f1e 100%);
+  opacity: 0.92;
 }
 
 /* 意图图标浮动 */
@@ -457,18 +472,21 @@
 
 /* 抽牌：从抽牌堆（左下）飞入 */
 @keyframes sts-draw-in {
-  0% { transform: translate(-560px, -220px) rotate(-38deg) scale(0.25); opacity: 0; }
-  60% { opacity: 1; }
-  100% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
+  /* 原版：从抽牌堆弧线飞入，带变暗(原版卡牌飞行时渐黑)+旋转；两段弧线 */
+  0% { transform: translate(-520px, -60px) rotate(-40deg) scale(0.55); opacity: 0; filter: brightness(0.45); }
+  45% { opacity: 1; }
+  70% { transform: translate(-60px, 10px) rotate(-12deg) scale(0.9); filter: brightness(0.8); }
+  100% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; filter: brightness(1); }
 }
-.sts-draw-in { animation: sts-draw-in 0.34s cubic-bezier(.25,.8,.35,1); }
+.sts-draw-in .sts-card { animation: sts-draw-in 0.38s cubic-bezier(.25,.8,.35,1); }
 
-/* 弃牌：飞向弃牌堆（右下） */
+/* 弃牌：飞向右下弃牌堆（原版：弧线+渐黑缩小） */
 @keyframes sts-discard-fly {
-  0% { transform: translate(0,0) rotate(0) scale(1); opacity: 1; }
-  100% { transform: translate(560px, -180px) rotate(30deg) scale(0.3); opacity: 0; }
+  0% { transform: translate(0,0) rotate(0) scale(1); opacity: 1; filter: brightness(1); }
+  40% { filter: brightness(0.55); }
+  100% { transform: translate(560px, -190px) rotate(28deg) scale(0.3); opacity: 0; filter: brightness(0.3); }
 }
-.sts-discard-fly { animation: sts-discard-fly 0.42s cubic-bezier(.5,0,.8,.4) forwards; pointer-events: none; }
+.sts-discard-fly { animation: sts-discard-fly 0.46s cubic-bezier(.5,0,.8,.4) forwards; pointer-events: none; }
 
 /* 消耗：燃烧升腾 */
 @keyframes sts-exhaust-fly {

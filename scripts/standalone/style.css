@@ -125,7 +125,11 @@ img { -webkit-user-drag: none; }
 /* 血条 */
 .hpbar { position: relative; }
 .hpbar-outer { position: relative; background: #1a0d08; border: 2px solid #000; border-radius: 6px; box-shadow: 0 0 0 1px #553b2a, inset 0 2px 4px rgba(0,0,0,.8); overflow: hidden; }
-.hpbar-fill { background: linear-gradient(180deg,#ff5a4a,#c81e14 50%,#8f120c); height: 100%; transition: width .35s ease-out; }
+.hpbar-fill { background: linear-gradient(180deg,#ff5a4a,#c81e14 50%,#8f120c); height: 100%; position: absolute; left: 0; top: 0; transition: width .12s linear; }
+/* 原版伤害滞后段：米白残条延迟0.35s、0.8s收缩 */
+.hpbar-lag { position: absolute; left: 0; top: 0; height: 100%; background: linear-gradient(180deg,#f7e9c9,#e8d5a8 50%,#c9b78c); box-shadow: 0 0 4px rgba(240,225,190,.5); transition: width .8s cubic-bezier(.3,.7,.4,1) .35s; }
+/* 原版毒预览段：血条右端绿色 */
+.hpbar-poison { position: absolute; top: 0; height: 100%; background: linear-gradient(180deg,#8fe86a,#56c437 50%,#2f8f1e); opacity: .92; }
 .hp-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 13px; font-weight: bold; text-shadow: 1px 1px 0 #000; font-family: inherit; }
 .block-badge { position: absolute; left: -30px; top: -2px; width: 30px; height: 30px; }
 .block-badge img { width: 100%; height: 100%; object-fit: contain; }
@@ -171,11 +175,12 @@ img { -webkit-user-drag: none; }
 
 /* 手牌 */
 .hand-row { position: absolute; left: 0; right: 0; bottom: -40px; height: 320px; display: flex; justify-content: center; align-items: flex-end; z-index: 45; pointer-events: none; }
-.hand-card { position: absolute; transform-origin: bottom center; cursor: pointer; transition: transform .18s ease-out; pointer-events: auto; }
-.hand-inner { transition: transform .16s ease-out; }
+.hand-card { position: absolute; transform-origin: bottom center; cursor: pointer; transition: transform .25s cubic-bezier(.2,.9,.3,1); pointer-events: auto; }
+.hand-inner { transition: transform .18s cubic-bezier(.2,.9,.3,1); }
 .hand-card:hover { z-index: 60 !important; }
-.hand-card:hover .hand-inner { transform: translateY(-100px) scale(1.28); }
-.hand-inner.sel { transform: translateY(-110px) scale(1.3) !important; }
+/* 原版：悬停抬起至完全可见 + 1.25倍 */
+.hand-card:hover .hand-inner { transform: translateY(-132px) scale(1.25); }
+.hand-inner.sel { transform: translateY(-132px) scale(1.25) !important; }
 
 /* 横幅 */
 .banner { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 90;
@@ -382,12 +387,13 @@ img { -webkit-user-drag: none; }
   50% { transform: translateY(-7px) scale(1.012); }
 }
 
-/* 抽牌：新手牌从抽牌堆（左下）飞入 */
-.hand-card.hand-in { animation: hand-draw-in .34s cubic-bezier(.25,.8,.35,1); }
+/* 抽牌：新手牌从抽牌堆（左下）飞入（作用于内层卡面，避免覆盖扇形布局 transform） */
+.hand-card.hand-in .sts-card { animation: hand-draw-in .38s cubic-bezier(.25,.8,.35,1); }
 @keyframes hand-draw-in {
-  0% { transform: translate(-560px, -220px) rotate(-38deg) scale(.25); opacity: 0; }
-  60% { opacity: 1; }
-  100% { transform: translate(0, 0) rotate(0) scale(1); opacity: 1; }
+  0% { transform: translate(-520px, -60px) rotate(-40deg) scale(.55); opacity: 0; filter: brightness(.45); }
+  45% { opacity: 1; }
+  70% { transform: translate(-60px, 10px) rotate(-12deg) scale(.9); filter: brightness(.8); }
+  100% { transform: translate(0, 0) rotate(0) scale(1); opacity: 1; filter: brightness(1); }
 }
 
 /* 结束回合按钮脉动 */

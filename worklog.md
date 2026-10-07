@@ -240,3 +240,22 @@ Work Log:
 Stage Summary:
 - 两项需求根治完成：①卡面图案与边框错位——艺术图烘焙为与边框完全同盒的512画布WebP层(238张,体积反降6MB)，矩形级断言精确一致 ②Boss点不到——TopHud/提示横幅pointer-events穿透，四区命中+真实出牌验证通过
 - 两版本(Next.js/单文件v1.9)完全同步，全部测试绿
+
+---
+Task ID: 12
+Agent: main
+Task: 研究 moonrailgun/sts2-web（杀戮尖塔2 Web重构）代码，提取可用于提升 STS1 还原度的技术并落地
+
+Work Log:
+- 克隆 sts2-web 深入研究：架构（Roslyn C#→TS 转译规则层 14.6万行 + Preact/Pixi 表现层）、docs/sts2-web-port-plan.md 移植方案、cardnodes.ts 手牌系统、card.tsx 卡牌渲染、creature-ui.tsx 战斗单位UI、vfx-*.ts 特效
+- 卡牌错位bug终审：wiki官方合成卡(Red-Bash.png 678x874)双卡模板匹配标定真值窗口 ≈(134,99)±3px vs 当前烘焙(131,99) —— 几何正确；受控测试(未旋转卡) VLM 判定"对齐良好"；v1.9 修复已生效，此前误报源于旋转截图采样伪影
+- 顺带修复隐藏bug：draw-in 动画覆盖手牌内联扇形 transform 导致结束跳变（两版本）—— 动画移至内层 .sts-card
+- 落地改进①血条：伤害滞后段(米白残条, 延迟0.35s+0.8s cubic收缩) + 毒伤预览(绿色段, 致死变绿字) —— Shared.tsx HpBar + globals.css + ui.ts/style.css 同步
+- 落地改进②手牌：原版 HandPosHelper 官方查表(1-10张位置/角度, sts2-web逆向数据)按1600/1920缩放 + 悬停推开邻居(±100px/4张衰减) + 悬停/选中抬起-132px@1.25 —— CombatScreen.tsx + ui.ts 事件委托同步
+- 落地改进③抽/弃牌飞行：弧线两段+变暗(brightness 0.45→1 / 1→0.3)+旋转，对齐原版 CardFlyVfx(渐黑+弧线)
+- 验证：真实出牌 hp53→47→41→35，fill=117.9px(即时) vs lag=128.4px(保持旧宽) 滞后机制生效；VLM 确认扇形/下沉裁切/卡面居中/毒绿段均符合原版
+- 构建：tsc(游戏代码)零错、next build 通过、单文件版重建 19.76MB(541素材内联)
+
+Stage Summary:
+- sts2-web 研究产出：官方手牌布局查表、悬停交互算法、HP条滞后/毒预览规范、卡牌飞行动画模式、卡牌渲染单坐标系架构(佐证既有方案)、 pile 目标位置规则
+- 两版本同步落地 3 项改进 + 1 个隐藏动画 bug 修复；卡面错位问题终审结论=已修复(v1.9)，本次以受控测试+wiki真值标定双重确认

@@ -240,7 +240,7 @@ function EnemyView({ enemy, idx }: { enemy: EnemyInstance; idx: number }) {
         <div className="sts-body font-bold" style={{ fontSize: 15, color: '#f5e5c8', textShadow: '1px 1px 0 #000' }}>
           {def.name}
         </div>
-        <HpBar hp={enemy.hp} maxHp={enemy.maxHp} block={enemy.block} width={def.boss ? 280 : def.small ? 120 : 170} />
+        <HpBar hp={enemy.hp} maxHp={enemy.maxHp} block={enemy.block} width={def.boss ? 280 : def.small ? 120 : 170} poisonNext={(enemy.statuses as any)?.poison || 0} />
         <StatusRow statuses={enemy.statuses} size={28} />
       </div>
     </div>
@@ -572,16 +572,45 @@ export function CombatScreen() {
   const [isTouch, setIsTouch] = useState(false)
   useEffect(() => { setIsTouch(window.matchMedia('(hover: none)').matches) }, [])
 
-  // 手牌扇形布局
+  // 手牌扇形布局 —— 原版 HandPosHelper 查表数据（来自 sts2-web 逆向：
+  // packages/app/src/cardnodes.ts POS/ANG 表，Mega Crit 官方数值）
+  // 按 1600/1920 舞台比例缩放；y 换算为相对静止位置（卡底边=舞台底+40）的偏移
+  const [hoverIdx, setHoverIdx] = useState(-1)
   const handLayout = (() => {
     const n = hand.length
+    const POS: number[][] = [
+      [0, -50],
+      [-100, -50, 100, -50],
+      [-180, -50, 0, -59, 180, -50],
+      [-240, -25, -80, -50, 80, -50, 240, -25],
+      [-340, 10, -170, -30, 0, -50, 170, -30, 340, 10],
+      [-460, 13, -273, -25, -90, -50, 90, -50, 273, -25, 460, 13],
+      [-534, 18, -365, -14, -189, -39, 0, -50, 189, -39, 365, -14, 534, 18],
+      [-565, 28, -400, -14, -231, -39, -80, -50, 80, -50, 231, -39, 400, -14, 565, 28],
+      [-600, 37, -445, -2, -300, -29, -150, -45, 0, -50, 150, -45, 300, -29, 445, -2, 600, 37],
+      [-610, 38, -472, 5, -340, -21, -200, -41, -64, -50, 64, -50, 200, -41, 340, -21, 472, 5, 610, 38],
+    ]
+    const ANG: number[][] = [
+      [0], [-2, 2], [-3, 0, 3], [-8, -4, 4, 8], [-8, -4, 0, 4, 8], [-9, -6, -3, 3, 6, 9], [-9, -6, -3, 0, 3, 6, 9],
+      [-12, -9, -6, -3, 3, 6, 9, 12], [-12, -9, -6, -3, 0, 3, 6, 9, 12], [-15, -12, -9, -6, -3, 3, 6, 9, 12, 15],
+    ]
+    const row = Math.min(Math.max(n, 1), 10) - 1
+    const K = 1600 / 1920   // 舞台比例
+    const HALF_H = 117.5    // 手牌半高(235/2)
+    const SINK = 40         // 静止位卡底边已在舞台底下方 40px
     return hand.map((_, i) => {
-      const mid = (n - 1) / 2
-      const offset = i - mid
-      const spread = Math.min(78, 700 / Math.max(n, 1))
-      const rot = n > 1 ? (offset / mid) * (n > 5 ? 14 : 8) : 0
-      const ty = Math.abs(offset) * Math.min(8, 44 / Math.max(n, 1)) * 0.9
-      return { x: offset * spread, rot, ty }
+      const px = POS[row]
+      let x = (px[i * 2] ?? 0) * K
+      const yTab = (px[i * 2 + 1] ?? -50) * K
+      // 卡中心高度(相对舞台底) → 卡底边高度 → 相对静止位的 ty
+      const ty = yTab + HALF_H - SINK
+      const rot = ANG[row][i] ?? 0
+      // 悬停推开（原版：邻居卡向两侧让位，最多100px，4张距离衰减到0）
+      if (hoverIdx >= 0 && hoverIdx !== i) {
+        const dist = Math.abs(hoverIdx - i)
+        if (dist <= 4) x -= Math.sign(hoverIdx - i) * (100 - 25 * (dist - 1)) * K
+      }
+      return { x, ty, rot }
     })
   })()
 
@@ -779,9 +808,11 @@ export function CombatScreen() {
                 zIndex: 10 + i,
                 pointerEvents: isPlayable ? 'auto' : 'none',
               }}
+              onMouseEnter={() => !isTouch && setHoverIdx(i)}
+              onMouseLeave={() => setHoverIdx(h => (h === i ? -1 : h))}
             >
               <div className="hand-inner"
-                style={{ transform: isSelected ? 'translateY(-110px) scale(1.3)' : undefined }}>
+                style={{ transform: isSelected ? 'translateY(-132px) scale(1.25)' : undefined }}>
                 <CardView
                   card={card}
                   width={168}
