@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) **画面中所有可见文字**：\n   - 标题：**Slay the Spire**\n   - 菜单选项：**开始冒险**、**继续冒险**、**联机合作**、**统计**、**设置**、**制作名单**\n\n2) **左下角/右下角额外文字**：\n   - **没有**。左下角和右下角均无版本号（如“Web 复刻版”）或 GitHub 仓库地址等额外文字。仅在右上角可见窗口控制按钮。\n\n3) **菜单风格评价**：\n   - **非常干净，高度符合原版风格**。UI 布局、字体样式、按钮质感以及背景美术都与原版《杀戮尖塔》保持一致。唯一的区别是增加了原版单机所没有的“联机合作”选项，且该选项当前显示为不可用状态（颜色较暗）。",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1791459227,
+  "id": "20261008193342c8b0c4c1bf2042d8",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261008193342c8b0c4c1bf2042d8",
+  "usage": {
+    "completion_tokens": 196,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 956,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1152
+  }
+}

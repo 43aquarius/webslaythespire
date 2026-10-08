@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) **画面中所有可见文字：**\n   - **Logo：** Slay the Spire\n   - **菜单按钮：** 开始冒险、继续冒险、联机合作、统计、设置、制作名单\n   - **左下角：** Web 复刻版 v1.13\n   - **右下角：** 43aquarius/webslaythespire\n   - **左下角（图标）：** N\n\n2) **多余文字检查：**\n   是的，存在明显的多余文字。原版主菜单非常简洁，仅包含 Logo 和菜单选项。而此图中：\n   - 左下角的 **“Web 复刻版 v1.13”** 明确标注了这是复刻版及版本号。\n   - 右下角的 **“43aquarius/webslaythespire”** 是 GitHub 仓库地址/开发者信息。\n   这些都是 Web 复刻版特有的技术说明和来源标识，原版中不存在。\n\n3) **整体风格评价：**\n   整体**高度符合**原版《杀戮尖塔》的主菜单视觉风格。\n   - 背景美术、角色立绘、Logo 字体及光效、UI 按钮的样式与排版均还原度极高。\n   - 唯一的视觉差异在于右上角增加了浏览器窗口的控制按钮（最小化/最大化/关闭），以及上述提到的底部额外文字信息。",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1791458847,
+  "id": "2026100819272014be9b92da1141ea",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "2026100819272014be9b92da1141ea",
+  "usage": {
+    "completion_tokens": 301,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 971,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1272
+  }
+}

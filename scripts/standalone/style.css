@@ -81,7 +81,7 @@ img { -webkit-user-drag: none; }
 .hp-num.low .hp-num-val { color: #ff3b2e; animation: hp-low 1.1s ease-in-out infinite; }
 .hp-num-name { font-size: 12px; font-weight: bold; color: #c8a878; text-shadow: 1px 1px 0 #000; font-family: inherit; }
 @keyframes hp-low { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
-.hud-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-right: 108px; }
+.hud-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-right: 196px; }  /* 196px：避开舞台右上控制簇(菜单/旋转/全屏/音乐)，与 Next.js 版一致(原108px致牌组按钮与控制簇重合) */
 .gold-stat { font-weight: bold; color: #ffd980; text-shadow: 1px 1px 0 #000; font-size: 17px; line-height: 1; font-family: inherit; }
 .deck-btn { width: 62px; height: 62px; padding: 2px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
 .deck-btn img { width: 26px; height: 20px; object-fit: contain; }

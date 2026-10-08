@@ -9,7 +9,6 @@ import { CharacterId } from '@/game/types'
 import { hasSave, loadStats, loadSettings, savePlayerName, saveMusicVolume, StatsData } from '@/game/persist'
 import { RELICS } from '@/game/relics'
 import { music } from '@/game/music'
-import { GitHubIcon } from './TitleScreen'
 
 const A = '/assets'
 
@@ -83,31 +82,6 @@ export function MainMenuScreen() {
           </button>
         ))}
       </div>
-
-      {/* 版本信息（左下角，原版样式） */}
-      <div className="absolute sts-body" style={{ left: 16, bottom: 12, color: '#8a7458', fontSize: 12 }}>
-        Web 复刻版 v1.13
-      </div>
-
-      {/* GitHub 入口（右下角） */}
-      <a
-        href="https://github.com/43aquarius/webslaythespire"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="absolute flex items-center gap-2 sts-body"
-        style={{
-          right: 22, bottom: 18, zIndex: 60,
-          color: '#c8b090', fontSize: 14, textDecoration: 'none',
-          background: 'rgba(20,12,8,0.72)',
-          border: '1.5px solid #5a4230',
-          borderRadius: 10, padding: '8px 14px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.6)',
-        }}
-        title="GitHub 仓库"
-      >
-        <GitHubIcon size={20} />
-        <span>43aquarius/webslaythespire</span>
-      </a>
     </div>
   )
 }

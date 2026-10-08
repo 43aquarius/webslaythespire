@@ -365,3 +365,21 @@ Stage Summary:
 - 第十六批 9 组改进（金钱逐级计数/卡组新高弹跳/药水入场+满带抖动+战斗闪耀+退场ghost/商店顶栏+价格配色+购买失败抖动/宝箱两步开箱+稀有度光晕/死亡界面全家桶/奖励顶栏）双版本验证通过
 - 测试脆弱性修复：消除Neow随机选项对③药水入场用例的干扰
 - 待：worklog登记、修正提交消息并推送
+
+---
+Task ID: 18
+Agent: main
+Task: 原bug清单全项回归验证（9-16批重构后）+ 修复发现的真实回归 + 主菜单文字删除收尾
+
+Work Log:
+- 梳理原始待办：bug③按钮重合/④菜单设置/⑤弹窗滚动条/⑥房间码/⑦手机遗物弹窗/⑧旋转180度 + HUD左上角78/80 + 主页文字删除——查证发现大多已在第7/8批(1721ab5/66020b3)修复，但历经9-16批多次布局重构，须回归验证
+- 编写 test_bugcheck.ts（双版本各29项）：④设置面板/range控件/滑条0-1刻度响应/持久化 ③控制簇vs HUD矩形求交(桌面+手机) ⑤牌组弹窗页面级+框内滚动条 ⑥创建房间→房间码生成/可见/大厅 ⑧旋转按钮可见/翻转/持久化/重载恢复/复位 ⑦遗物tooltip hover+触屏轻点+视口钳制 HUD 78/80红字(split('/')无反斜杠校验)+左上角定位
+- 排障记录：①agent-browser环境恒为触屏(hover:none)，set viewport 不清除设备模拟，close后立即open有竞态得空白页(需sleep>1s) ②React内联样式经CSSOM序列化#2b1a12→rgb(43,26,18)，tooltip检测改用[class*="z-[300]"] ③主菜单按钮文本含全角空格(U+3000)，匹配前须规范化空白 ④房间过渡黑幕1.1s延迟新屏挂载，设置面板断言须等2.3s ⑤JSON→TS模板→浏览器正则三层转义地狱：ev模板改用[0-9]类/split('/')/trim()构造，根除反斜杠问题 ⑥房间码为字母数字混合(如6LC4)非纯数字
+- 【发现真实回归·已修】standalone版牌组按钮与右上控制簇(菜单/旋转)重合：.hud-right margin-right仅108px vs Next.js版196px；桌面469px²/手机69px²实测相交。修复：108→196px与Next.js对齐，重建后桌面+手机双视口0相交
+- 【主菜单文字删除收尾】VLM验收发现主菜单仍有"Web 复刻版 v1.13"(左下)+"43aquarius/webslaythespire"(右下)——两版本删除该角标(Next.js MenuScreens版本div+GitHub链接块/单文件ui.ts对应两行)；制作名单页署名保留(合理位置)；standalone控制台日志版本v1.13→v1.14
+- 测试：test_bugcheck next 29/29 + standalone 29/29；batch16 30+31；regression 16/16；regression5 412/412；mptest 23/23；tsc src/零错；next build生产构建通过(含/api/mp)；单文件18.90MB重建；VLM复验：主菜单干净无额外文字、高度符合原版风格
+- 产出：scripts/test_bugcheck.ts(可重复的bug清单回归套件)、scripts/study/bugcheck/*.png+vlm json、修复 style.css(.hud-right 196px) + MenuScreens.tsx + standalone/ui.ts
+
+Stage Summary:
+- 原bug清单8项+HUD 78/80+主页文字：两版本29+29全绿确认无回退；唯一真实回归(standalone牌组按钮重合)已修复；主菜单角标文字删除完成(VLM确认干净)
+- 至此用户原始待办全部闭环：sts2-web研究(6批19+9大项)/部署失败/8项bug/HUD原版样式/联机双通道+大厅+房间码/主页文字
