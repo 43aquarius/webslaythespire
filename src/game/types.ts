@@ -306,7 +306,7 @@ export interface CombatState {
 }
 
 export interface FxEvent {
-  kind: 'dmg' | 'block' | 'heal' | 'status' | 'shake' | 'buff' | 'text' | 'slash' | 'lunge' | 'cardPlay' | 'orb' | 'intentBurst'
+  kind: 'dmg' | 'block' | 'heal' | 'status' | 'shake' | 'buff' | 'text' | 'slash' | 'lunge' | 'cardPlay' | 'orb' | 'intentBurst' | 'shuffle'
   target: 'player' | string
   value?: number
   text?: string
@@ -408,6 +408,7 @@ export interface RunState {
   currentEvent: string | null
   eventsSeen: string[]
   removalCount: number
+  pendingTreasureRelic?: string | null  // 宝箱两步：undefined=未开箱 null=空箱（原版 NTreasureRoom 开箱后遗物展示再拾取；存 run 内随联机快照同步）
   eliteKilled: number
   monsterKilled: number
   goldEarned: number

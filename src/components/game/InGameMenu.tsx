@@ -21,10 +21,12 @@ export function InGameMenu() {
 
   useEffect(() => { setNick(loadSettings().playerName) }, [])
 
-  // ESC 键开关菜单
+  // ESC 键开关菜单（牌堆/检视/选卡等遮罩打开时不抢占）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && run) {
+        const st = useGame.getState()
+        if (st.pileView || st.select || st.busy) return
         e.preventDefault()
         toggleMenu()
       }

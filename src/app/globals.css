@@ -607,6 +607,125 @@
 }
 .sts-intent-burst img { width: 44px; height: 44px; max-width: none; }
 
+/* 洗牌黑色剪影（原版 NCardFlyShuffleVfx：弃牌堆洗回抽牌堆时，黑色卡牌剪影自抽牌堆飞散旋转淡出） */
+.sts-shuffle-card {
+  width: 46px; height: 64px;
+  border-radius: 5px;
+  background: linear-gradient(165deg, #1a1512 0%, #060504 100%);
+  border: 1.5px solid rgba(70, 56, 40, 0.9);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.65);
+  left: -23px; top: -32px;
+  opacity: 0;
+  animation: sts-shuffle-fly 0.75s cubic-bezier(.18, .6, .35, 1) forwards;
+}
+@keyframes sts-shuffle-fly {
+  0% { transform: translate(0, 0) rotate(0deg) scale(0.72); opacity: 0; }
+  14% { opacity: 0.95; }
+  72% { opacity: 0.85; }
+  100% { transform: translate(var(--sx, 0px), var(--sy, -90px)) rotate(var(--sr, -90deg)) scale(1); opacity: 0; }
+}
+.sts-shuffle-card:nth-child(1) { --sx: -92px; --sy: -66px; --sr: -152deg; }
+.sts-shuffle-card:nth-child(2) { --sx: -56px; --sy: -108px; --sr: -122deg; }
+.sts-shuffle-card:nth-child(3) { --sx: -20px; --sy: -132px; --sr: -96deg; }
+.sts-shuffle-card:nth-child(4) { --sx: 22px; --sy: -132px; --sr: 78deg; }
+.sts-shuffle-card:nth-child(5) { --sx: 58px; --sy: -108px; --sr: 108deg; }
+.sts-shuffle-card:nth-child(6) { --sx: 94px; --sy: -66px; --sr: 148deg; }
+.sts-shuffle-card:nth-child(7) { --sx: -124px; --sy: -14px; --sr: -178deg; }
+.sts-shuffle-card:nth-child(8) { --sx: 126px; --sy: -14px; --sr: 172deg; }
+
+/* 检视屏（原版 NInspectCardScreen：大卡 + 黑0.9背板 + 金箭头导航 + 升级预览勾选框） */
+.sts-inspect-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0, 0, 0, 0.9);
+  animation: sts-inspect-backdrop-in 0.25s ease-out both;
+}
+.sts-inspect-backdrop.closing { animation: sts-inspect-backdrop-out 0.25s ease-in both; }
+@keyframes sts-inspect-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sts-inspect-backdrop-out { from { opacity: 1; } to { opacity: 0; } }
+/* 大卡入场：黑→亮淡入 0.25s + 0.875→1 缩放 0.15s BackOut(延迟0.1s)（原版开屏参数） */
+.sts-inspect-card-in {
+  animation: sts-inspect-card-fade 0.25s ease-out both, sts-inspect-card-scale 0.15s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s both;
+}
+@keyframes sts-inspect-card-fade { from { filter: brightness(0); opacity: 0; } to { filter: brightness(1); opacity: 1; } }
+@keyframes sts-inspect-card-scale { from { scale: 0.875; } to { scale: 1; } }
+/* 导航切卡：自 ±100px 滑入 0.25s ExpoOut（原版 navigate 参数） */
+.sts-inspect-nav-left { animation: sts-inspect-nav-in-l 0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.sts-inspect-nav-right { animation: sts-inspect-nav-in-r 0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes sts-inspect-nav-in-l { from { translate: -100px 0; } to { translate: 0 0; } }
+@keyframes sts-inspect-nav-in-r { from { translate: 100px 0; } to { translate: 0 0; } }
+/* 金色箭头（原版 NGoldArrowButton：hover brightness1.2+1.1×，press brightness0.7，复归 0.5s ExpoOut / 亮度 1s） */
+.sts-inspect-arrow {
+  display: flex; align-items: center; justify-content: center;
+  width: 76px; height: 76px; cursor: pointer;
+  filter: brightness(0.9);
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), filter 1s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sts-inspect-arrow:hover { filter: brightness(1.2); transform: scale(1.1); transition: filter 0.05s linear, transform 0.05s linear; }
+.sts-inspect-arrow:active { filter: brightness(0.7); transform: scale(1); }
+/* 箭头入场：自 ±100px BackOut 0.25s 延迟 0.1s + 黑→亮淡入（原版 arrowIn） */
+.sts-inspect-arrow-in-l { animation: sts-inspect-arrow-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s both; --adx: -100px; }
+.sts-inspect-arrow-in-r { animation: sts-inspect-arrow-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s both; --adx: 100px; }
+@keyframes sts-inspect-arrow-in {
+  from { translate: var(--adx, 100px) 0; filter: brightness(0); opacity: 0; }
+  to { translate: 0 0; filter: brightness(0.9); opacity: 1; }
+}
+/* 升级预览勾选框（原版 NTickbox：hover ×1.05+brightness1.2（0.05s），press ×0.95+brightness0.8，复归 0.5s ExpoOut） */
+.sts-inspect-tick {
+  display: flex; align-items: center; gap: 10px; cursor: pointer;
+  filter: brightness(1); scale: 1;
+  transition: scale 0.5s cubic-bezier(0.16, 1, 0.3, 1), filter 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sts-inspect-tick:hover { scale: 1.05; filter: brightness(1.2); transition: scale 0.05s linear, filter 0.05s linear; }
+.sts-inspect-tick:active { scale: 0.95; filter: brightness(0.8); }
+.sts-tickbox {
+  width: 40px; height: 40px; flex: none;
+  border: 2.5px solid #a8834e; border-radius: 7px;
+  background: radial-gradient(ellipse at 35% 30%, #3a2a1a, #14100a 75%);
+  display: flex; align-items: center; justify-content: center;
+}
+.sts-tickbox.on { border-color: #ffd76a; box-shadow: 0 0 10px rgba(255, 205, 90, 0.5), inset 0 0 8px rgba(255, 205, 90, 0.25); }
+.sts-tickbox-check { color: #ffd76a; font-size: 26px; font-weight: 900; text-shadow: 0 0 8px rgba(255, 205, 90, 0.8); line-height: 1; }
+
+/* 按钮滑入（原版 NConfirmButton/NBackButton：启用时自隐藏位滑入） */
+@keyframes sts-btn-slide-r { from { translate: 180px 0; opacity: 0; } to { translate: 0 0; opacity: 1; } }
+@keyframes sts-btn-slide-l { from { translate: -180px 0; opacity: 0; } to { translate: 0 0; opacity: 1; } }
+.sts-slide-btn-r { animation: sts-btn-slide-r 0.32s cubic-bezier(0.34, 1.4, 0.64, 1) both; }
+.sts-slide-btn-l { animation: sts-btn-slide-l 0.32s cubic-bezier(0.34, 1.4, 0.64, 1) both; }
+
+/* ACT 横幅（原版 NActBanner：黑带α0.25 + 幕数天蓝 450→440 + 幕名金色，各自延迟淡入，2s 后 1s 淡出） */
+.sts-act-banner { position: absolute; inset: 0; pointer-events: none; z-index: 90; }
+.sts-act-band {
+  position: absolute; left: 0; right: 0; top: 39.5%;
+  height: 19%;
+  background: #000; opacity: 0;
+  animation: sts-act-band-in 0.5s ease-out 0.5s both;
+}
+@keyframes sts-act-band-in { from { opacity: 0; } to { opacity: 0.25; } }
+.sts-act-num {
+  position: absolute; left: 50%; top: 40.5%;
+  transform: translateX(-50%);
+  font-size: 32px; letter-spacing: 4px;
+  color: #87CEEB; text-shadow: 3px 2px 0 rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  animation: sts-act-num-in 1.25s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.5s both;
+}
+@keyframes sts-act-num-in {
+  from { opacity: 0; margin-top: 14px; }
+  to { opacity: 1; margin-top: 0; }
+}
+.sts-act-name {
+  position: absolute; left: 0; right: 0; top: 46.5%;
+  text-align: center;
+  font-size: 60px; font-weight: 700; letter-spacing: 6px;
+  color: #EFC851; text-shadow: 4px 3px 0 rgba(0, 0, 0, 0.5), 0 0 60px rgba(239, 200, 81, 0.35);
+  opacity: 0;
+  animation: sts-act-name-in 1s ease-out 0.25s both;
+  font-family: var(--sts-font-title);
+}
+@keyframes sts-act-name-in { from { opacity: 0; } to { opacity: 1; } }
+.sts-act-banner.bye { animation: sts-act-banner-out 1s ease-out 3.75s both; }
+@keyframes sts-act-banner-out { from { opacity: 1; } to { opacity: 0; } }
+
 /* 格挡破碎（原版 NBlockBrokenVfx：盾牌左右两半 0.4s 分离 + 0.6s 淡出） */
 @keyframes sts-bb-left {
   0% { transform: translate(0, 0) rotate(0deg); opacity: 1; clip-path: inset(0 50% 0 0); }
@@ -881,3 +1000,82 @@
 /* 事件结果消息淡入 */
 @keyframes sts-ev-msg-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 .sts-ev-msg { animation: sts-ev-msg-in 0.5s ease-out both; }
+
+/* ============ 第六批：topbar/shop/treasure/gameover 原版动画还原 ============ */
+/* 药水 hover 弹跳（原版 NPotion.DoBounce：12px 上跳 0.125s Sine Out + 0.125s Sine In） */
+@keyframes sts-pot-bounce {
+  0% { transform: translateY(0); animation-timing-function: cubic-bezier(.61, 1, .88, 1); }
+  50% { transform: translateY(-12px); animation-timing-function: cubic-bezier(.12, 0, .39, 0); }
+  100% { transform: translateY(0); }
+}
+.sts-pot-hover:hover { animation: sts-pot-bounce 0.25s; }
+/* 药水获得入场（原版 PlayNewlyAcquiredAnimation：0.1s 淡入 + 40px 上浮 0.35s Back Out） */
+@keyframes sts-pot-in {
+  from { opacity: 0; transform: translateY(40px); }
+  29% { opacity: 1; }
+  to { opacity: 1; transform: translateY(0); }
+}
+.sts-pot-in { animation: sts-pot-in 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) both; }
+/* 药水退场 ghost：使用 scale→0（0.2s Back In）；丢弃上浮 100px（0.4s Back In） */
+@keyframes sts-pot-use-out { to { transform: scale(0); opacity: 0; } }
+@keyframes sts-pot-discard-out { to { transform: translateY(-100px); opacity: 0; } }
+.sts-pot-ghost { z-index: 5; }
+.sts-pot-ghost-use { animation: sts-pot-use-out 0.2s cubic-bezier(0.6, -0.28, 0.735, 0.045) both; }
+.sts-pot-ghost-discard { animation: sts-pot-discard-out 0.4s cubic-bezier(0.6, -0.28, 0.735, 0.045) both; }
+
+/* 商店：槽位 hover 缩放（原版 NMerchantSlot 0.65→0.8 立即，离开 0.5s Expo Out 回落） */
+.sts-shop-slot { transform: scale(1); transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+.sts-shop-slot.sts-shop-hot { transform: scale(1.16); transition: transform 0.05s linear; }
+.sts-shop-slot-sm.sts-shop-hot { transform: scale(1.12); }
+.sts-shop-slot.sts-shop-sold { opacity: 0.45; filter: saturate(0.4); }
+/* 商店：购买失败抖动（原版 x=sin(p·2π)·10，p=(1-(1-t)²)·2 Quad Out 缓动后采样，0→2，0.4s） */
+@keyframes sts-shop-wiggle {
+  0% { transform: translateX(0); }
+  12.5% { transform: translateX(1.95px); }
+  25% { transform: translateX(-7.07px); }
+  37.5% { transform: translateX(9.81px); }
+  50% { transform: translateX(0); }
+  62.5% { transform: translateX(-9.81px); }
+  75% { transform: translateX(-7.07px); }
+  87.5% { transform: translateX(-1.95px); }
+  100% { transform: translateX(0); }
+}
+.sts-shop-wiggle { animation: sts-shop-wiggle 0.4s linear; }
+
+/* 宝箱：遗物 2× 展示（原版 NTreasureRoomRelicHolder：hover 2.1 / 常态 2 / press 1.9） */
+.sts-chest-relic { transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+.sts-chest-relic.sts-hot { transform: scale(1.05); transition: transform 0.05s linear; }
+.sts-chest-relic.sts-press { transform: scale(0.95); transition: transform 0.05s linear; }
+/* 宝箱稀有度光晕（原版 chestRelicGlow：rare 金 / uncommon 绿 脉冲） */
+@keyframes sts-chest-glow { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.9; } }
+.sts-chest-glow-rare { background: radial-gradient(circle, rgba(255, 210, 90, 0.55) 0%, rgba(255, 180, 50, 0.18) 45%, transparent 70%); animation: sts-chest-glow 1.6s ease-in-out infinite; }
+.sts-chest-glow-uncommon { background: radial-gradient(circle, rgba(110, 240, 130, 0.5) 0%, rgba(80, 200, 100, 0.15) 45%, transparent 70%); animation: sts-chest-glow 1.6s ease-in-out infinite; }
+.sts-chest-glow-common { background: radial-gradient(circle, rgba(140, 190, 255, 0.4) 0%, rgba(100, 150, 220, 0.12) 45%, transparent 70%); animation: sts-chest-glow 1.6s ease-in-out infinite; }
+
+/* 死亡界面：引言滑入（原版 AnimateInQuote：y 90→156，2s Expo Out + 1.5s 淡入） */
+@keyframes sts-go-quote-in {
+  from { opacity: 0; transform: translateY(-66px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.sts-go-quote { animation: sts-go-quote-in 2s cubic-bezier(0.16, 1, 0.3, 1) both; }
+/* 死亡界面：统计行逐项滑入（原版 AnimateBadges：-50px→0 Spring Out 0.3s，间隔 0.1s） */
+@keyframes sts-go-stat-in {
+  from { opacity: 0; transform: translateX(-50px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.sts-go-stat { opacity: 0; animation: sts-go-stat-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+/* 死亡界面：徽章淡入上浮（原版 AnimateInDiscoveries：brightness 0→1 + 100px→0 Back Out 0.3s） */
+@keyframes sts-go-badge-in {
+  from { opacity: 0; filter: brightness(0); transform: translateY(100px); }
+  to { opacity: 1; filter: brightness(1); transform: translateY(0); }
+}
+.sts-go-badge { opacity: 0; animation: sts-go-badge-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+/* 死亡界面：按钮滑入（原版 NGameOverContinueButton：190px→0 Quart Out 0.5s + 从黑淡入 0.5s） */
+@keyframes sts-go-btn-in {
+  from { opacity: 0; filter: brightness(0); transform: translateY(190px); }
+  to { opacity: 1; filter: brightness(1); transform: translateY(0); }
+}
+.sts-go-btn { animation: sts-go-btn-in 0.5s cubic-bezier(0.25, 1, 0.5, 1) both; }
+/* 死亡界面：标题从黑淡入 */
+@keyframes sts-go-title-in { from { opacity: 0; } to { opacity: 1; } }
+.sts-go-title { animation: sts-go-title-in 1.2s ease-out both; }

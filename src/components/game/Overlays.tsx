@@ -1,16 +1,131 @@
 'use client'
-// ============ 遮罩层：牌堆查看 / 卡牌选择 / 预见 ============
+// ============ 遮罩层：牌堆查看 / 卡牌选择 / 预见 / 检视屏 ============
 import { useEffect, useState } from 'react'
 import { useGame } from '@/store/gameStore'
 import { CardInstance } from '@/game/types'
 import { AP } from '@/game/engine'
 import { CardView } from './CardView'
 
+// ============ 检视屏（原版 NInspectCardScreen） ============
+// 点击牌堆网格中的卡牌 → 黑0.9背板 + 大卡 + 金色箭头导航（端点隐藏）+ 升级预览勾选框
+// 开屏：卡 brightness0→1 淡入 0.25s + scale 0.875→1 BackOut 0.15s(延迟0.1s)；箭头 ±100px BackOut 0.25s(延迟0.1s)
+// 切卡：下一张自 ±100px 滑入 0.25s ExpoOut；键盘 ←/→ 导航、Enter/Space 切升级预览、Esc 关闭
+function InspectView({ cards, index, onIndex, onClose }: {
+  cards: CardInstance[]; index: number; onIndex: (i: number) => void; onClose: () => void
+}) {
+  const card = cards[index]
+  // 升级预览：默认勾选 = 卡牌已升级（原版 setCardIndex: ticked = IsUpgraded）
+  const [ticked, setTicked] = useState(card.upgraded > 0)
+  const [closing, setClosing] = useState(false)
+  const [dir, setDir] = useState(0)
+  const [gen, setGen] = useState(0)
+
+  const upgradable = card.upgraded < 10 // 可升级（诅咒/状态卡也能看描述差异，保留勾选）
+  const shown: CardInstance = ticked
+    ? { ...card, upgraded: Math.max(1, card.upgraded + 1) }
+    : card.upgraded > 0 ? { ...card, upgraded: card.upgraded - 1 } : card
+
+  const step = (d: number) => {
+    const i = index + d
+    if (i < 0 || i >= cards.length) return // 端点隐藏箭头，不循环
+    setDir(d); setGen(g => g + 1)
+    setTicked(cards[i].upgraded > 0)
+    onIndex(i)
+  }
+  const close = () => {
+    if (closing) return
+    setClosing(true)
+    setTimeout(onClose, 240)
+  }
+
+  // 检视层开启期间打标记：page.tsx 的 Esc 处理据此让行（由本组件自行处理 Esc）
+  useEffect(() => {
+    document.body.dataset.stsInspect = '1'
+    return () => { delete document.body.dataset.stsInspect }
+  }, [])
+
+  // 键盘导航
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') step(-1)
+      else if (e.key === 'ArrowRight') step(1)
+      else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (upgradable) setTicked(t => !t) }
+      else if (e.key === 'Escape') close()
+    }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [index, ticked, closing])
+
+  return (
+    <div className="absolute inset-0 flex items-center justify-center" style={{ zIndex: 320 }} onClick={e => e.stopPropagation()}>
+      <div className={`sts-inspect-backdrop ${closing ? 'closing' : ''}`} onClick={close} />
+      <div className="relative flex items-center justify-center" style={{ width: '100%' }}>
+        {/* 大卡（切卡时自 ±100px 滑入 0.25s ExpoOut） */}
+        <div
+          key={`card-${gen}`}
+          className={`${gen === 0 ? 'sts-inspect-card-in' : dir < 0 ? 'sts-inspect-nav-left' : 'sts-inspect-nav-right'}`}
+        >
+          <CardView card={shown} width={310} />
+        </div>
+        {/* 金色箭头（原版 NGoldArrowButton：hover 1.2亮度+1.1×，press 0.7） */}
+        {index > 0 && (
+          <div
+            className={`sts-inspect-arrow sts-inspect-arrow-in-l absolute`}
+            style={{ left: 'max(24px, calc(50% - 340px))' }}
+            onClick={() => step(-1)}
+            title="上一张 (←)"
+          >
+            <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
+              <path d="M33 10 L17 26 L33 42" stroke="#e8b855" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+              <path d="M33 10 L17 26 L33 42" stroke="#8a6420" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" fill="none" opacity="0.55" style={{ transform: 'scale(1.06)', transformOrigin: 'center' }} />
+            </svg>
+          </div>
+        )}
+        {index < cards.length - 1 && (
+          <div
+            className={`sts-inspect-arrow sts-inspect-arrow-in-r absolute`}
+            style={{ right: 'max(24px, calc(50% - 340px))' }}
+            onClick={() => step(1)}
+            title="下一张 (→)"
+          >
+            <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
+              <path d="M19 10 L35 26 L19 42" stroke="#e8b855" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+              <path d="M19 10 L35 26 L19 42" stroke="#8a6420" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" fill="none" opacity="0.55" style={{ transform: 'scale(1.06)', transformOrigin: 'center' }} />
+            </svg>
+          </div>
+        )}
+        {/* 升级预览勾选框（原版 NTickbox + VIEW_UPGRADES） */}
+        <div
+          className="sts-inspect-tick absolute"
+          style={{ bottom: -74 }}
+          onClick={() => upgradable && setTicked(t => !t)}
+        >
+          <div className={`sts-tickbox ${ticked ? 'on' : ''}`}>
+            {ticked && <span className="sts-tickbox-check">✓</span>}
+          </div>
+          <span className="sts-title" style={{ fontSize: 18, color: ticked ? '#ffd76a' : '#c8b090', textShadow: '2px 2px 0 #000', letterSpacing: 2 }}>
+            查看升级
+          </span>
+        </div>
+        {/* 计数 */}
+        <div className="absolute sts-num" style={{ bottom: -74, right: 'max(24px, calc(50% - 340px))', fontSize: 20, color: '#a89070', textShadow: '1px 1px 0 #000' }}>
+          {index + 1} / {cards.length}
+        </div>
+        {/* 关闭提示 */}
+        <div className="absolute sts-body" style={{ bottom: -74, left: 'max(24px, calc(50% - 340px))', fontSize: 13, color: '#8a7458', textShadow: '1px 1px 0 #000' }}>
+          ←/→ 切换 · 空格升级预览 · Esc 关闭
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ============ 牌堆查看 ============
 export function PileViewOverlay() {
   const run = useGame(s => s.run)
   const pileView = useGame(s => s.pileView)
   const closePile = useGame(s => s.closePile)
+  const [inspectIdx, setInspectIdx] = useState<number | null>(null)
   // deck 模式（查看牌组）在地图等非战斗场景也可用
   if (!run || !pileView) return null
   if (pileView !== 'deck' && !run.combat) return null
@@ -29,7 +144,7 @@ export function PileViewOverlay() {
 
   return (
     <div className="sts-overlay" onClick={closePile}>
-      <div className="sts-panel p-6 flex flex-col items-center gap-4" style={{ maxWidth: 1440, maxHeight: 800 }}
+      <div className="sts-panel p-6 flex flex-col items-center gap-4 relative" style={{ maxWidth: 1440, maxHeight: 800 }}
         onClick={e => e.stopPropagation()}>
         <div className="sts-title" style={{ fontSize: 26, color: '#ffd980' }}>
           {titles[pileView]} <span style={{ fontSize: 16, color: '#a89070' }}>({cards.length})</span>
@@ -38,12 +153,29 @@ export function PileViewOverlay() {
           {cards.length === 0 && (
             <div className="sts-body" style={{ color: '#a89070', fontSize: 15 }}>空空如也</div>
           )}
-          {cards.map(c => (
-            <CardView key={c.uid} card={c} width={130} />
+          {cards.map((c, i) => (
+            <div
+              key={c.uid}
+              className="transition-transform hover:-translate-y-2"
+              style={{ cursor: 'pointer' }}
+              title="点击放大检视"
+              onClick={() => setInspectIdx(i)}
+            >
+              <CardView card={c} width={130} />
+            </div>
           ))}
         </div>
-        <button className="sts-btn" onClick={closePile}>关闭</button>
+        <button className="sts-btn sts-slide-btn-r" onClick={closePile}>关闭</button>
       </div>
+      {/* 检视屏（原版 NInspectCardScreen：黑0.9背板覆盖全屏） */}
+      {inspectIdx !== null && (
+        <InspectView
+          cards={cards}
+          index={Math.min(inspectIdx, cards.length - 1)}
+          onIndex={setInspectIdx}
+          onClose={() => setInspectIdx(null)}
+        />
+      )}
     </div>
   )
 }

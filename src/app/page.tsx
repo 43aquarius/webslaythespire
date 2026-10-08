@@ -63,11 +63,12 @@ export default function Home() {
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
       const combat = s.run?.combat
 
-      // Esc：关闭遮罩/菜单（游戏内菜单组件自行处理 Esc）
+      // Esc：关闭遮罩/菜单（检视层打开时由检视组件自行处理；关闭任一遮罩后不再触发菜单）
       if (e.key === 'Escape') {
-        if (s.pileView) { s.closePile(); return }
-        if (s.selectedCardUid !== null || s.selectedPotionIdx !== null) { s.cancelSelection(); return }
-        if (s.select && !s.select.kind.startsWith('neow') && s.select.kind !== 'restSmith' && s.select.kind !== 'shopRemove') { s.cancelSelect(); return }
+        if (document.body.dataset.stsInspect) return
+        if (s.pileView) { s.closePile(); e.stopImmediatePropagation(); return }
+        if (s.selectedCardUid !== null || s.selectedPotionIdx !== null) { s.cancelSelection(); e.stopImmediatePropagation(); return }
+        if (s.select && !s.select.kind.startsWith('neow') && s.select.kind !== 'restSmith' && s.select.kind !== 'shopRemove') { s.cancelSelect(); e.stopImmediatePropagation(); return }
         return
       }
       if (!combat || combat.phase !== 'player' || combat.combatOver || s.busy) return

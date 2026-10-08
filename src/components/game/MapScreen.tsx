@@ -22,6 +22,27 @@ const NODE_NAME: Record<string, string> = {
 
 const W = 1100, H = 1450
 
+// ============ ACT 横幅（原版 NActBanner：黑带 + 天蓝幕数 + 金色幕名） ============
+// 幕名（原版第一幕 Exordium / 第二幕 The City / 第三幕 The Beyond / 第四幕 The Ending）
+const ACT_NAMES: Record<number, string> = {
+  1: 'EXORDIUM · 外域',
+  2: 'THE CITY · 城市',
+  3: 'THE BEYOND · 彼岸',
+  4: 'THE ENDING · 终结',
+}
+// 本 run 每幕只展示一次（切房间重挂载不重播；每幕生成新 map 对象，用 WeakSet 追踪）
+const shownMaps = new WeakSet<object>()
+
+function ActBanner({ act }: { act: number }) {
+  return (
+    <div className="sts-act-banner bye">
+      <div className="sts-act-band" />
+      <div className="sts-act-num sts-title">第 {act} 幕</div>
+      <div className="sts-act-name">{ACT_NAMES[act] ?? `第 ${act} 幕`}</div>
+    </div>
+  )
+}
+
 /** 确定性伪随机（同一朵点每次渲染抖动一致，不闪烁） */
 const prand = (seed: number) => {
   const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453
@@ -68,6 +89,8 @@ export function MapScreen() {
   // 墨迹动画：选点后先逐点点亮 0.55s 再真正跳转（黑幕扫落时墨迹在幕下继续）
   const [inking, setInking] = useState<{ from: string; to: string } | null>(null)
   const inkTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // ACT 横幅：新幕首次进入地图时展示（黑带+幕数+幕名，~4.8s 后移除）
+  const [actBanner, setActBanner] = useState<number | null>(null)
 
   // 点状路径预计算（hooks 须在早退 return 之前）
   const { dots, byEdge } = useMemo(
@@ -76,6 +99,17 @@ export function MapScreen() {
   )
 
   useEffect(() => () => { if (inkTimer.current) clearTimeout(inkTimer.current) }, [])
+
+  // ACT 横幅：第 1 幕首次进入地图时展示（2-4 幕已有幕间过渡屏，不重复）~4.8s 后移除
+  useEffect(() => {
+    if (!run) return
+    if (run.act !== 1) return
+    if (shownMaps.has(run.map)) return
+    shownMaps.add(run.map)
+    setActBanner(run.act)
+    const t = setTimeout(() => setActBanner(null), 5000)
+    return () => clearTimeout(t)
+  }, [run?.map, run?.act])
 
   // 自动滚动到当前节点
   useEffect(() => {
@@ -180,6 +214,9 @@ export function MapScreen() {
 
       {/* 图例（原版 map_legend：悬停高亮同类节点） */}
       <MapLegend />
+
+      {/* ACT 横幅（原版 NActBanner：黑带α0.25 + 天蓝幕数 450→440 + 金色幕名） */}
+      {actBanner && <ActBanner act={actBanner} />}
     </div>
   )
 }

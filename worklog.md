@@ -347,3 +347,21 @@ Stage Summary:
 - 部署失败根治：孤儿dev进程占端口+start脚本fuser失效双因，可移植端口清理落地，模拟平台start流程验证通过，预览现服务 v1.12
 - sts2-web 第五批研究成果落地：7大项(房间切换过渡/点状路径+墨迹/节点脉冲动画/玩家标记/图例/事件打字机+选项滑入)×2版本，31+28项E2E全绿，VLM四轮视觉确认
 - 地图从"SVG虚线+静态节点"升级为原版"点状路径+呼吸脉冲+角色标记+图例"，事件界面获得原版叙事节奏(标题→打字机→选项依次滑入)，房间切换有原版黑幕扫落过渡——整体还原度显著提升
+
+---
+Task ID: 17
+Agent: main
+Task: 验证并收尾第十六批（平台自动提交 932ffcb，UUID消息未验证未推送）：跑全套测试+修复测试脆弱性+规范提交推送
+
+Work Log:
+- 恢复上下文：本地HEAD(932ffcb)领先origin 1提交，为平台自动提交的第十六批（sts2-web研究第六批：topbar/shop/treasure/gameover），内容完整但未验证、worklog无记录、提交消息为UUID
+- 运行 test_batch16.ts(Next.js :3000)：首遍30/30全绿
+- 运行 test_batch16_standalone.ts(单文件版)：29/30，失败项「③药水获得入场动画」{found:false}
+- 根因排查（复现脚本 debug_pot16.ts）：游戏逻辑正确——空槽新增药水→sts-pot-in类出现并保持；失败源于测试脆弱性：Neow选项 n2_potions（获得3瓶随机药水）随机命中时玩家槽0非空，测试的 r.potions[0]='firePotion' 成为「替换」而非「新增」（替换/移位不该播入场动画，属正确设计），测试随机性导致偶发失败
+- 修复两个测试文件（test_batch16.ts + test_batch16_standalone.ts）：③步前先 mutateRun 清空药水带再新增，消除随机依赖
+- 重验：standalone 31/31 两遍全绿（随机性消除）；Next.js 30/30；regression 16/16；regression5 412/412；mptest 23/23
+
+Stage Summary:
+- 第十六批 9 组改进（金钱逐级计数/卡组新高弹跳/药水入场+满带抖动+战斗闪耀+退场ghost/商店顶栏+价格配色+购买失败抖动/宝箱两步开箱+稀有度光晕/死亡界面全家桶/奖励顶栏）双版本验证通过
+- 测试脆弱性修复：消除Neow随机选项对③药水入场用例的干扰
+- 待：worklog登记、修正提交消息并推送

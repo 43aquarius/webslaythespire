@@ -415,11 +415,14 @@ function relicIcon(id: string, size = 34, flash = false): string {
   </span>`
 }
 
-function potionHtml(pid: string | null, idx: number, combat: boolean): string {
+function potionHtml(pid: string | null, idx: number, combat: boolean, acquired = false): string {
   const sel = combat && g().selectedPotionIdx === idx
   if (!pid) return `<span class="pslot" style="width:38px;height:44px"></span>`
   const def = POTIONS[pid]
-  return `<span class="pslot has ${sel ? 'sel' : ''}" data-act="potion" data-idx="${idx}" data-tip="<b>${esc(def.name)}</b><br><span style='color:#d8c8a8'>${esc(def.desc)}</span>">
+  // 防御：未知药水 id 渲染为空槽（与 Next.js 版一致，避免渲染循环崩溃）
+  if (!def) return `<span class="pslot" style="width:38px;height:44px"></span>`
+  // 原版 NPotion：hover 弹跳（DoBounce）/ 获得入场（PlayNewlyAcquiredAnimation 0.1s淡入+40px上浮0.35s BackOut）
+  return `<span class="pslot has ${sel ? 'sel' : ''} ${acquired ? 'sts-pot-in' : ''}" data-act="potion" data-idx="${idx}" data-tip="<b>${esc(def.name)}</b><br><span style='color:#d8c8a8'>${esc(def.desc)}</span>">
     <img src="${A('potions/' + pid + '.png')}" alt="">
     ${combat ? `<i class="pdisc" data-act="potionDiscard" data-idx="${idx}">✕</i>` : ''}
   </span>`
@@ -451,6 +454,15 @@ function updateHpNum(el: HTMLElement | null, hp: number, maxHp: number, block?: 
 }
 
 // ============ 顶部 HUD（参照原版：左上 头像+血量78/80+金币+药水+遗物 / 右上 牌组+层数） ============
+// ---- 第六批：HUD 动画模块状态（原版 NTopBarGold 逐级计数 / NTopBarDeckButton 新高弹跳 / NPotion 退场ghost与满带抖动 / ShinePotions 战斗闪耀） ----
+let goldAnim = { cur: -1, label: 0, add: 0, running: false }
+let deckMaxSeen = 0
+let prevPotions: (string | null)[] = []
+let lastPotAct: 'use' | 'discard' = 'use'
+let lastBeltFailSeen = 0
+let combatShineOn = false
+let combatShineTimers: ReturnType<typeof setTimeout>[] = []
+
 function topHudShell(): string {
   // 参照原版：左上 头像+血量+金币+药水+遗物 / 右上 牌组+层数（避开右上控制按钮）
   return `<div class="top-hud"><div class="hud-row">
@@ -482,6 +494,11 @@ function updateHud(run: RunState, combat: boolean) {
   const mp = run.players.length > 1
   const myIdx = mp ? st.net.myIdx : 0
   const me = run.players[myIdx] || run.players[0]
+  // 卡组数量新高弹跳（原版 NTopBarDeckButton：新高时 scale 1.5→1，0.5s Expo Out）
+  if (me.deck.length > deckMaxSeen) {
+    deckMaxSeen = me.deck.length
+    deck.animate?.([{ transform: 'scale(1.5)' }, { transform: 'scale(1)' }], { duration: 500, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' })
+  }
   setText(deck, String(me.deck.length))
   const myBlock = combat && run.combat && run.combat.activeIdx === myIdx ? AP(run.combat).block : 0
   // 头像 + 悬浮名（角色变化时才换图）
@@ -498,8 +515,91 @@ function updateHud(run: RunState, combat: boolean) {
     if (combat) floorEl.style.display = 'none'
     else { floorEl.style.display = ''; setText(floorEl, `第 ${run.act} 幕 · 第 ${run.visitedNodes.length} 层${mp ? ' · 联机合作' : ''}`) }
   }
-  setText(document.getElementById('hud-gold'), mp ? `💰 ${me.gold}（队友 ${run.players[1 - myIdx]?.gold ?? '-'}）` : `💰 ${me.gold}`)
-  setHtml(document.getElementById('hud-potions'), me.potions.map((p, i) => potionHtml(p, i, combat)).join(''))
+  // 金币逐级计数（原版 NTopBarGold.UpdateGoldAnim：0.25+0.15s 延迟后按步长 75/10/1 递变，10-110ms 间隔，0.25s 后结算）
+  const goldEl = document.getElementById('hud-gold')
+  const paintGold = () => {
+    if (!goldEl) return
+    const mate = mp ? `（队友 ${run.players[1 - myIdx]?.gold ?? '-'}）` : ''
+    setText(goldEl, `💰 ${goldAnim.label}${mate}`)
+  }
+  if (goldAnim.cur < 0) { goldAnim.cur = me.gold; goldAnim.label = me.gold }
+  if (me.gold !== goldAnim.cur) {
+    goldAnim.add += me.gold - goldAnim.cur
+    goldAnim.cur = me.gold
+    if (!goldAnim.running) {
+      goldAnim.running = true
+      ;(async () => {
+        await new Promise(r => setTimeout(r, 400))
+        while (goldAnim.add !== 0) {
+          const a = Math.abs(goldAnim.add), n = a > 100 ? 75 : a > 50 ? 10 : 1
+          goldAnim.add = goldAnim.add > 0 ? goldAnim.add - n : goldAnim.add + n
+          goldAnim.label = goldAnim.cur - goldAnim.add
+          paintGold()
+          await new Promise(r => setTimeout(r, Math.trunc(10 + 10 * Math.max(0, 10 - Math.abs(goldAnim.add)))))
+        }
+        await new Promise(r => setTimeout(r, 250))
+        goldAnim.label = goldAnim.cur
+        paintGold()
+        goldAnim.running = false
+      })()
+    }
+  }
+  paintGold()
+  // 药水：入场标记 + 退场 ghost（原版 NPotion：使用 scale→0 0.2s Back In / 丢弃上浮 100px 0.4s Back In）
+  const potRow = document.getElementById('hud-potions')
+  if (potRow) {
+    const ghosts: { idx: number; pid: string; kind: 'use' | 'discard' }[] = []
+    for (let i = 0; i < prevPotions.length; i++) {
+      if (prevPotions[i] && !me.potions[i]) ghosts.push({ idx: i, pid: prevPotions[i]!, kind: lastPotAct })
+    }
+    setHtml(potRow, me.potions.map((p, i) => potionHtml(p, i, combat, !!p && !prevPotions[i])).join(''))
+    // 药水带满失败抖动（原版 NPotionContainer.PlayAddFailedAnim：3·sin(5t)·sin(t/2) px，t 0→2π，0.5s）
+    if (st.potionBeltFail > lastBeltFailSeen) {
+      lastBeltFailSeen = st.potionBeltFail
+      potRow.animate?.(Array.from({ length: 25 }, (_, i) => {
+        const t = (i / 24) * Math.PI * 2
+        return { translate: `${3 * Math.sin(5 * t) * Math.sin(t / 2)}px 0` }
+      }), { duration: 500 })
+    }
+    for (const gh of ghosts) {
+      const el = document.createElement('span')
+      el.className = `pslot has sts-pot-ghost-${gh.kind}`
+      el.style.cssText = `width:38px;height:44px;position:absolute;left:${gh.idx * 44}px;top:0;pointer-events:none;z-index:5`
+      el.innerHTML = `<img src="${A('potions/' + gh.pid + '.png')}" alt="" style="width:100%;height:100%;object-fit:contain">`
+      potRow.appendChild(el)
+      setTimeout(() => el.remove(), 500)
+    }
+    prevPotions = [...me.potions]
+  }
+  // 战斗开始药水闪耀（原版 OnCombatSetUp→ShinePotions：1s 后有药的槽依次弹跳，0.25s 间隔；DoBounce 12px 0.25s）
+  const inCombat = !!run.combat && run.screen === 'combat'
+  if (inCombat && !combatShineOn) {
+    combatShineOn = true
+    const bounce = (k: number) => {
+      const row = document.getElementById('hud-potions')
+      const slot = row?.children[k] as HTMLElement | null
+      slot?.animate?.([
+        { transform: 'translateY(0)', easing: 'cubic-bezier(.61,1,.88,1)' },
+        { transform: 'translateY(-12px)', easing: 'cubic-bezier(.12,0,.39,0)' },
+        { transform: 'translateY(0)' },
+      ], { duration: 250 })
+    }
+    combatShineTimers.forEach(clearTimeout)
+    combatShineTimers = []
+    combatShineTimers.push(setTimeout(() => {
+      let d = 0
+      for (let i = 0; i < me.potions.length; i++) {
+        if (!me.potions[i]) continue
+        const k = i
+        combatShineTimers.push(setTimeout(() => bounce(k), d))
+        d += 250
+      }
+    }, 1000))
+  } else if (!inCombat && combatShineOn) {
+    combatShineOn = false
+    combatShineTimers.forEach(clearTimeout)
+    combatShineTimers = []
+  }
   // 新获遗物闪光（原版三副本叠加爆发；用时间窗而非一次性 diff，避免后续任何状态更新立即移除闪光）
   const relics = me.relics as string[]
   const nowMs = Date.now()
@@ -551,7 +651,7 @@ function rMainMenu(): string {
       ${items.map(it => `<button class="menu-btn sts-title ${it.dis ? 'dis' : ''}" data-act="${it.act}" ${it.arg ? `data-screen="${it.arg}"` : ''} ${it.dis ? 'disabled' : ''}
         style="opacity:${it.dis ? 1 : ''}"><span style="opacity:${it.dis ? .45 : 1};display:block">${it.label}</span></button>`).join('')}
     </div>
-    <div class="sts-body" style="color:#8a7458;font-size:12px;position:absolute;left:16px;bottom:12px">Web 复刻版 v1.12</div>
+    <div class="sts-body" style="color:#8a7458;font-size:12px;position:absolute;left:16px;bottom:12px">Web 复刻版 v1.13</div>
   </div>
   <a class="github-btn" href="https://github.com/43aquarius/webslaythespire" target="_blank" rel="noreferrer" title="GitHub 仓库">${GITHUB_SVG}<span>43aquarius/webslaythespire</span></a>
 </div>`
@@ -1391,7 +1491,7 @@ function updateMapScreen(run: RunState) {
       const meP = run.players[run.players.length > 1 ? g().net.myIdx : 0] || run.players[0]
       const myChar = (meP as any)?.character || 'ironclad'
       if (mh.dataset.cur !== run.currentNodeId) {
-        mh.dataset.cur = run.currentNodeId
+        mh.dataset.cur = run.currentNodeId ?? undefined
         mh.innerHTML = `<div class="map-marker"><img src="${A('hero/' + myChar + '.png')}"></div>`
         const mk = mh.firstElementChild as HTMLElement
         mk.style.left = (cur.x / W * 100) + '%'
@@ -1416,20 +1516,22 @@ function updateMapScreen(run: RunState) {
   }
 }
 
-// ============ 奖励界面 ============
+// ============ 奖励界面（第六批：顶栏 HUD 常驻，原版行为） ============
 function buildRewardScreen(): string {
   return `<div class="screen reward-bg">
-  <div class="big-title sts-title">战利品</div>
+  ${topHudShell()}
+  <div class="big-title sts-title hud-pad-title">战利品</div>
   <div class="reward-list" id="reward-rows"></div>
   <div class="reward-cards-label sts-body" id="reward-label"></div>
   <div class="reward-cards" id="reward-cards"></div>
-  <button class="sts-btn sts-title" data-act="proceedReward" id="reward-proceed" style="font-size:22px;margin-top:26px"></button>
+  <button class="sts-btn sts-title slide-btn-r" data-act="proceedReward" id="reward-proceed" style="font-size:22px;margin-top:26px"></button>
 </div>`
 }
 
 function updateRewardScreen(run: RunState) {
   const r = run.reward
   if (!r) return
+  updateHud(run, false)
   const st = g()
   const mp = run.players.length > 1
   const myIdx = mp ? st.net.myIdx : 0
@@ -1514,10 +1616,11 @@ function updateRewardScreen(run: RunState) {
   if (btn) setText(btn, run.combat?.isBoss ? '继续' : '返回地图')
 }
 
-// ============ 商店界面 ============
+// ============ 商店界面（第六批：槽位 hover 缩放/购买失败抖动/价格原版配色 + 顶栏 HUD 常驻） ============
 function buildShopScreen(): string {
   return `<div class="screen shop-bg">
-  <div class="center-col" style="padding:26px 16px;gap:22px">
+  ${topHudShell()}
+  <div class="center-col hud-pad" style="padding:96px 16px 26px;gap:22px">
     <div class="row" style="gap:20px;align-items:center">
       <img src="${A('mapicons/shop.png')}" width="88" height="88" style="filter:drop-shadow(0 0 20px rgba(255,180,80,.4))">
       <div><div class="big-title sts-title" style="font-size:38px">商店</div>
@@ -1529,20 +1632,42 @@ function buildShopScreen(): string {
       <div class="row" style="gap:14px;flex-wrap:wrap" id="shop-relics"></div>
       <div class="row" style="gap:14px;flex-wrap:wrap" id="shop-potions"></div>
     </div>
-    <button class="sts-btn sts-btn-gold sts-title" data-act="buyRemoval" id="shop-removal" style="font-size:18px"></button>
+    <button class="sts-btn sts-btn-gold sts-title sts-shop-slot" data-act="buyRemoval" id="shop-removal" style="font-size:18px"></button>
     <button class="sts-btn sts-title" data-act="leaveShop" style="font-size:22px">离开商店</button>
   </div>
 </div>`
 }
 
+// 价格标签（原版 NMerchantSlot：#FF5555 买不起 / #7FFF00 打折 / #FFF6E2 正常）
 function shopPriceTag(sold: boolean, price: number, gold: number, discount?: boolean): string {
   if (sold) return `<span class="price-tag">已售出</span>`
-  return `<span class="price-tag ${gold >= price ? 'ok' : ''}">💰 ${price}${discount ? ' <i style="font-style:normal;color:#8ee888;font-size:12px">5折</i>' : ''}</span>`
+  const color = gold < price ? '#FF5555' : discount ? '#7FFF00' : '#FFF6E2'
+  return `<span class="price-tag ${gold >= price ? 'ok' : ''}" style="color:${color}">💰 ${price}${discount ? ` <i style="font-style:normal;color:#7FFF00;font-size:12px">5折</i>` : ''}</span>`
+}
+
+// 购买失败槽位抖动（原版 NMerchantSlot：x=sin(p·2π)·10，p=(1-(1-t)²)·2 Quad Out 采样 25 帧，0.4s）
+let shopFailSeen = 0
+function watchShopFail() {
+  const st = g()
+  if (!st.shopFail || st.shopFail.ts === shopFailSeen) return
+  shopFailSeen = st.shopFail.ts
+  const f = st.shopFail
+  let el: HTMLElement | null = null
+  if (f.kind === 'card') el = document.querySelector(`#shop-cards [data-sidx="${f.idx}"]`)
+  else if (f.kind === 'relic') el = document.querySelector(`#shop-relics [data-ridx="${f.idx}"]`)
+  else if (f.kind === 'potion') el = document.querySelector(`#shop-potions [data-pidx="${f.idx}"]`)
+  else el = document.getElementById('shop-removal')
+  el?.animate?.(Array.from({ length: 25 }, (_, i) => {
+    const t = i / 24, p = (1 - (1 - t) * (1 - t)) * 2
+    return { translate: `${Math.sin(p * 2 * Math.PI) * 10}px 0` }
+  }), { duration: 400 })
 }
 
 function updateShopScreen(run: RunState) {
   const shop = run.shop
   if (!shop) return
+  updateHud(run, false)
+  watchShopFail()
   const stS = g()
   const mpS = run.players.length > 1
   const meS = run.players[mpS ? stS.net.myIdx : 0] || run.players[0]
@@ -1560,7 +1685,7 @@ function updateShopScreen(run: RunState) {
         el.innerHTML = cardHtml({ uid: 's' + i, id: item.cardId, upgraded: 0 }, 150) + `<span class="shop-price" style="margin-top:6px"></span>`
         cardsEl.appendChild(el)
       }
-      el.className = `shop-card ${item.sold ? 'sold' : ''}`
+      el.className = `shop-card sts-shop-slot ${item.sold ? 'sold' : ''}`
       if (item.sold) delete el.dataset.act
       else el.dataset.act = 'buyCard'
       setHtml(el.querySelector('.shop-price'), shopPriceTag(item.sold, item.price, meS.gold, item.discount))
@@ -1581,7 +1706,7 @@ function updateShopScreen(run: RunState) {
           <div class="sts-body" style="font-size:13px;color:#f5e5c8">${esc(def.name)}</div><span class="shop-price"></span>`
         relicsEl.appendChild(el)
       }
-      el.className = `sts-panel shop-item ${item.sold ? 'sold' : ''}`
+      el.className = `sts-panel shop-item sts-shop-slot ${item.sold ? 'sold' : ''}`
       if (item.sold) delete el.dataset.act
       else { el.dataset.act = 'buyRelic'; el.dataset.idx = String(i) }
       setHtml(el.querySelector('.shop-price'), shopPriceTag(item.sold, item.price, meS.gold))
@@ -1602,7 +1727,7 @@ function updateShopScreen(run: RunState) {
           <div class="sts-body" style="font-size:12px;color:#f5e5c8">${esc(def.name)}</div><span class="shop-price"></span>`
         potsEl.appendChild(el)
       }
-      el.className = `sts-panel shop-item ${item.sold ? 'sold' : ''}`
+      el.className = `sts-panel shop-item sts-shop-slot ${item.sold ? 'sold' : ''}`
       if (item.sold) delete el.dataset.act
       else { el.dataset.act = 'buyPotion'; el.dataset.idx = String(i) }
       setHtml(el.querySelector('.shop-price'), shopPriceTag(item.sold, item.price, meS.gold))
@@ -1664,12 +1789,35 @@ function rRest(run: RunState): string {
 </div>`
 }
 
-function rTreasure(): string {
-  return `<div class="screen treasure-bg center-col">
-  <div class="big-title sts-title">宝箱</div>
-  <button data-act="takeTreasure" style="filter:drop-shadow(0 0 26px rgba(255,200,60,.55))">
-    <img src="${A('mapicons/treasure.png')}" width="180" height="180"></button>
-  <button class="sts-btn sts-title" data-act="takeTreasure" style="font-size:20px">打开宝箱</button>
+// ============ 宝箱两步（第六批原版还原：开箱 → 遗物 2× 展示+稀有度光晕 → 拾取；顶栏 HUD 常驻） ============
+let lastGoQuote = ''
+function rTreasure(run: RunState): string {
+  const tr = run.pendingTreasureRelic
+  const opened = tr !== undefined
+  const def = tr ? RELICS[tr] : null
+  const rarityCls = def && (def.rarity === 'rare' || def.rarity === 'uncommon') ? def.rarity : 'common'
+  if (!opened) {
+    return `<div class="screen treasure-bg center-col hud-pad">
+    ${topHudShell()}
+    <div class="big-title sts-title">宝箱</div>
+    <button data-act="openTreasure" style="filter:drop-shadow(0 0 26px rgba(255,200,60,.55))">
+      <img src="${A('mapicons/treasure.png')}" width="180" height="180"></button>
+    <button class="sts-btn sts-title" data-act="openTreasure" style="font-size:20px">打开宝箱</button>
+  </div>`
+  }
+  // 开箱后：遗物 2× 展示 + 稀有度光晕脉冲 + hover 2.1/press 1.9（原版 NTreasureRoomRelicHolder）
+  return `<div class="screen treasure-bg center-col hud-pad">
+  ${topHudShell()}
+  <div class="big-title sts-title">${def ? '获得了遗物！' : '箱子是空的……'}</div>
+  ${def ? `<div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:12px">
+    <div class="sts-chest-glow-${rarityCls}" style="position:absolute;width:340px;height:340px;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none"></div>
+    <div class="sts-chest-relic" data-act="confirmTreasure" data-tip="<b>${esc(def.name)}</b><br><span style='color:#d8c8a8'>${esc(def.desc)}</span>" style="cursor:pointer">
+      <img src="${A('relics/' + tr + '.png')}" width="140" height="140" style="filter:drop-shadow(0 6px 14px rgba(0,0,0,.6))">
+    </div>
+    <div class="sts-title" style="font-size:26px;color:#ffe9a0;text-shadow:2px 2px 0 #000">${esc(def.name)}</div>
+    <div class="sts-body" style="font-size:15px;color:#d8c8a8;max-width:420px;text-align:center;line-height:1.6">${esc(def.desc)}</div>
+  </div>` : ''}
+  <button class="sts-btn sts-title" data-act="confirmTreasure" style="font-size:20px">${def ? '拿走' : '离开'}</button>
 </div>`
 }
 
@@ -1697,7 +1845,8 @@ function startEvTypewriter(text: string) {
 function rEvent(run: RunState, animate = true): string {
   const ev = EVENTS[run.currentEvent!]
   const msg = g().eventMsg
-  return `<div class="screen event-bg center-col">
+  return `<div class="screen event-bg center-col hud-pad">
+  ${topHudShell()}
   <div class="sts-panel event-panel">
     <div class="sts-title ev-title" style="font-size:34px;color:#ffd980;text-shadow:2px 2px 0 #000">${esc(ev.name)}</div>
     <div class="sts-body event-desc ev-desc-wrap"><span id="ev-shown"></span><span id="ev-rest" style="opacity:0">${esc(ev.desc)}</span></div>
@@ -1712,17 +1861,47 @@ function rEvent(run: RunState, animate = true): string {
 </div>`
 }
 
+// ============ 死亡引言（原版 NGameOverScreen.AnimateInQuote：随机 QUOTES，红色斜体滑入淡入） ============
+const DEATH_QUOTES = [
+  '「尖塔从不仁慈。」',
+  '「死亡只是循环的一部分。」',
+  '「你的旅程在此结束……暂时的。」',
+  '「尖塔嘲弄着你的失败。」',
+  '「或许下一次，你会爬得更高。」',
+  '「死者无法讲述他们的故事。」',
+  '「尖塔又添一缕亡魂。」',
+  '「攀登者的尸骸铺就了尖塔的石阶。」',
+]
+
 function rGameOver(run: RunState): string {
   const info = run.gameOverInfo!
+  if (!lastGoQuote) lastGoQuote = DEATH_QUOTES[Math.floor(Math.random() * DEATH_QUOTES.length)]
+  const st = g()
+  const mp = run.players.length > 1
+  const me = run.players[mp ? st.net.myIdx : 0] || run.players[0]
+  // 条件徽章（原版 badges：小/大卡组、收藏家、守财奴）
+  const badges: { label: string; color: string }[] = []
+  const deckN = me.deck.length
+  if (deckN <= 20) badges.push({ label: `小卡组 · ${deckN} 张`, color: '#8fe89a' })
+  if (deckN >= 40) badges.push({ label: `大卡组 · ${deckN} 张`, color: '#ffd980' })
+  if (me.relics.length >= 25) badges.push({ label: `收藏家 · ${me.relics.length} 个遗物`, color: '#c9a8ff' })
+  if (me.gold >= 3000) badges.push({ label: `黄金之神 · ${me.gold} 金币`, color: '#ffd980' })
+  else if (me.gold >= 1000) badges.push({ label: `守财奴 · ${me.gold} 金币`, color: '#ffe9a0' })
+  // 统计行逐项滑入（原版 AnimateBadges：-50px→0 Spring Out 0.3s，间隔 0.1s）
+  const statRow = (label: string, val: string | number, i: number) =>
+    `<div class="srow sts-go-stat" style="animation-delay:${0.8 + i * 0.1}s"><span>${label}</span><b>${val}</b></div>`
   return `<div class="screen gameover-bg center-col">
-  <div class="sts-title" style="font-size:64px;color:${info.victory ? '#ffd980' : '#c85040'};text-shadow:4px 4px 0 #000">${info.victory ? '登顶成功！' : '你死了'}</div>
+  <div class="sts-title sts-go-title" style="font-size:64px;color:${info.victory ? '#ffd980' : '#c85040'};text-shadow:4px 4px 0 #000">${info.victory ? '登顶成功！' : '你死了'}</div>
+  ${info.victory ? '' : `<div class="sts-body sts-go-quote" style="font-size:17px;color:#c86858;font-style:italic;letter-spacing:1px">${lastGoQuote}</div>`}
   <div class="sts-panel" style="padding:30px;min-width:320px;display:flex;flex-direction:column;gap:12px">
-    <div class="srow"><span>到达层数</span><b>${info.floor}</b></div>
-    <div class="srow"><span>消灭怪物</span><b>${info.monstersSlain}</b></div>
-    <div class="srow"><span>消灭精英</span><b>${info.elitesSlain}</b></div>
-    <div class="srow"><span>赚取金币</span><b>${info.goldEarned}</b></div>
+    ${statRow('到达层数', info.floor, 0)}
+    ${statRow('消灭怪物', info.monstersSlain, 1)}
+    ${statRow('消灭精英', info.elitesSlain, 2)}
+    ${statRow('赚取金币', info.goldEarned, 3)}
+    ${mp ? statRow('模式', '联机合作', 4) : ''}
   </div>
-  <div class="row" style="gap:18px">
+  ${badges.length ? `<div class="row" style="gap:12px;flex-wrap:wrap;justify-content:center;max-width:520px">${badges.map((b, i) => `<span class="sts-go-badge sts-body" style="animation-delay:${1.3 + i * 0.12}s;font-size:14px;font-weight:bold;color:${b.color};border:1.5px solid ${b.color}55;background:rgba(0,0,0,.35);padding:6px 16px;border-radius:999px;text-shadow:1px 1px 0 #000">${b.label}</span>`).join('')}</div>` : ''}
+  <div class="row sts-go-btn" style="gap:18px;animation-delay:1.5s">
     <button class="sts-btn sts-title" data-act="startRun" style="font-size:22px">再来一局</button>
     <button class="sts-btn sts-title" data-act="backTitle" style="font-size:22px">回到主菜单</button>
   </div>
@@ -1736,10 +1915,84 @@ let scryMarked: Set<string> = new Set()
 // 战斗内升级预览选中的卡 uid（原版 NUpgradePreview；空 = 未预览）
 let armPreviewUid: string | null = null
 
+// ============ 检视屏状态（原版 NInspectCardScreen：大卡+金箭头+升级预览勾选） ============
+let inspectUid: string | null = null
+let inspectTicked = false
+let inspectGen = 0
+let inspectDir = 0
+let inspectClosing = false
+
+function pileCardsOf(run: RunState, pile: string): CardInstance[] {
+  if (pile === 'draw') return [...(run.combat ? AP(run.combat).drawPile : [])].reverse()
+  if (pile === 'discard') return [...(run.combat ? AP(run.combat).discardPile : [])].reverse()
+  if (pile === 'exhaust') return [...(run.combat ? AP(run.combat).exhaustPile : [])]
+  return run.deck
+}
+
+// 检视层 HTML：黑0.9背板 + 大卡（切卡±100px滑入）+ 金箭头（端点隐藏）+ 升级预览勾选框
+function inspectLayerHtml(cards: CardInstance[]): string {
+  const idx = Math.max(0, cards.findIndex(c => c.uid === inspectUid))
+  const card = cards[idx]
+  if (!card) return ''
+  const shown: CardInstance = inspectTicked
+    ? { ...card, upgraded: Math.max(1, card.upgraded + 1) }
+    : card.upgraded > 0 ? { ...card, upgraded: card.upgraded - 1 } : card
+  const animCls = inspectGen === 0 ? 'inspect-card-in' : (inspectDir < 0 ? 'inspect-nav-l' : 'inspect-nav-r')
+  const arrow = (left: boolean) => `<svg width="52" height="52" viewBox="0 0 52 52" fill="none"><path d="${left ? 'M33 10 L17 26 L33 42' : 'M19 10 L35 26 L19 42'}" stroke="#e8b855" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`
+  return `<div class="inspect-root" onclick="event.stopPropagation()">
+    <div class="inspect-backdrop ${inspectClosing ? 'closing' : ''}" data-act="inspectClose"></div>
+    <div class="inspect-body">
+      <div class="inspect-card-wrap ${animCls}" key="insp-${inspectGen}">${cardHtml(shown, 300)}</div>
+      ${idx > 0 ? `<div class="inspect-arrow inspect-arr-in-l" data-act="inspectStep" data-dir="-1" title="上一张 (←)">${arrow(true)}</div>` : ''}
+      ${idx < cards.length - 1 ? `<div class="inspect-arrow inspect-arr-in-r" data-act="inspectStep" data-dir="1" title="下一张 (→)">${arrow(false)}</div>` : ''}
+      <div class="inspect-tick" data-act="inspectToggle">
+        <div class="tickbox ${inspectTicked ? 'on' : ''}">${inspectTicked ? '<span class="tickbox-check">✓</span>' : ''}</div>
+        <span class="sts-title" style="font-size:17px;color:${inspectTicked ? '#ffd76a' : '#c8b090'};text-shadow:2px 2px 0 #000;letter-spacing:2px">查看升级</span>
+      </div>
+      <div class="inspect-count">${idx + 1} / ${cards.length}</div>
+      <div class="inspect-hint">←/→ 切换 · 空格升级预览 · Esc 关闭</div>
+    </div>
+  </div>`
+}
+
+function inspectRerender() {
+  const layer = document.getElementById('overlay-layer')
+  if (layer) { (layer as any).__sig = ''; renderOverlays(g()) }
+}
+
+function doInspectStep(d: number) {
+  const st = g()
+  if (!st.pileView || !st.run || inspectClosing) return
+  const cards = pileCardsOf(st.run, st.pileView)
+  const idx = cards.findIndex(c => c.uid === inspectUid)
+  const i = idx + d
+  if (i < 0 || i >= cards.length) return
+  inspectDir = d
+  inspectGen++
+  inspectUid = cards[i].uid
+  inspectTicked = cards[i].upgraded > 0
+  inspectRerender()
+}
+
+function doInspectToggle() {
+  if (!inspectUid || inspectClosing) return
+  inspectTicked = !inspectTicked
+  inspectRerender()
+}
+
+function doInspectClose() {
+  if (!inspectUid || inspectClosing) return
+  inspectClosing = true
+  inspectRerender()
+  setTimeout(() => { inspectUid = null; inspectClosing = false; inspectGen = 0; inspectRerender() }, 240)
+}
+
 function overlayHtml(st: ReturnType<typeof g>): { html: string; sig: string } {
   const run = st.run
   if (!run) return { html: '', sig: '' }
-  if (run.combat && AP(run.combat).pendingScry) {
+  // 防御：combat 结构不完整（缺 players/activeIdx）时跳过预见层，避免整个渲染循环崩溃
+  const apOk = !!run.combat && Array.isArray(run.combat.players) && !!run.combat.players[run.combat.activeIdx]
+  if (apOk && AP(run.combat).pendingScry) {
     // 预见：展示抽牌堆顶 N 张，点击标记弃置
     const n = AP(run.combat).pendingScry!
     const top = AP(run.combat).drawPile.slice(-n)
@@ -1763,20 +2016,18 @@ function overlayHtml(st: ReturnType<typeof g>): { html: string; sig: string } {
   if (st.pileView) {
     const pile = st.pileView
     const titles: Record<string, string> = { draw: '抽牌堆（随机排序）', discard: '弃牌堆', exhaust: '消耗堆', deck: '牌组' }
-    let cards: CardInstance[] = []
-    if (pile === 'draw') cards = [...(run.combat ? AP(run.combat).drawPile : [])].reverse()
-    else if (pile === 'discard') cards = [...(run.combat ? AP(run.combat).discardPile : [])].reverse()
-    else if (pile === 'exhaust') cards = [...(run.combat ? AP(run.combat).exhaustPile : [])]
-    else cards = run.deck
-    const sig = `pile:${pile}:${cards.length}`
+    const cards = pileCardsOf(run, pile)
+    const sig = `pile:${pile}:${cards.length}:insp:${inspectUid ?? ''}:${inspectTicked ? 1 : 0}:${inspectGen}`
+    const grid = cards.map(c => `<div class="pile-card-hover" style="cursor:pointer" title="点击放大检视" data-act="inspectOpen" data-uid="${c.uid}">${cardHtml(c, 128)}</div>`).join('')
     return {
       sig,
       html: `<div class="overlay" data-act="closePile">
         <div class="sts-panel" style="padding:22px;max-width:1440px;max-height:800px;display:flex;flex-direction:column;align-items:center;gap:14px" onclick="event.stopPropagation()">
           <div class="sts-title" style="font-size:24px;color:#ffd980">${titles[pile]} <small style="font-size:15px;color:#a89070">(${cards.length})</small></div>
-          <div class="sel-cards" style="max-height:620px">${cards.map(c => cardHtml(c, 128)).join('') || '<div class="sts-body">空空如也</div>'}</div>
-          <button class="sts-btn" data-act="closePile">关闭</button>
+          <div class="sel-cards" style="max-height:620px">${grid || '<div class="sts-body">空空如也</div>'}</div>
+          <button class="sts-btn slide-btn-r" data-act="closePile">关闭</button>
         </div>
+        ${inspectUid ? inspectLayerHtml(cards) : ''}
       </div>`
     }
   }
@@ -2049,6 +2300,22 @@ function spawnIntentBurst(uid: string, type: string) {
   setTimeout(() => wrap.remove(), 1900)
 }
 
+// 洗牌黑色剪影（原版 NCardFlyShuffleVfx：8 张黑色小卡剪影自抽牌堆飞散旋转淡出）
+function spawnShuffleFx() {
+  const pileBtn = document.getElementById('pile-draw')
+  const holder = pileBtn || fxLayer
+  const wrap = document.createElement('div')
+  wrap.className = 'shuffle-wrap'
+  for (let k = 0; k < 8; k++) {
+    const b = document.createElement('div')
+    b.className = 'shuffle-card'
+    b.style.animationDelay = (k * 0.05) + 's'
+    wrap.appendChild(b)
+  }
+  holder.appendChild(wrap)
+  setTimeout(() => wrap.remove(), 1300)
+}
+
 // 格挡破碎（原版 NBlockBrokenVfx：盾牌左右两半 0.4s 分离 + 0.6s 淡出）
 function spawnBlockBreak(hpbarEl: HTMLElement) {
   const el = document.createElement('div')
@@ -2076,6 +2343,7 @@ function renderNewFx() {
     if (f.kind === 'slash') spawnSlash(f.target)
     if (f.kind === 'orb') spawnOrbFx(f.text || '')
     if (f.kind === 'intentBurst') { spawnIntentBurst(f.target, f.text || ''); st.removeFx(f.id); continue }
+    if (f.kind === 'shuffle') { spawnShuffleFx(); st.removeFx(f.id); continue }
     const pos = fxPositions[f.target]
     if (!pos) { st.removeFx(f.id); continue }
     const el = document.createElement('div')
@@ -2138,7 +2406,7 @@ function updateScreen(scr: string, run: RunState | null) {
     updateLobbyDynamics()
   }
   if (scr === 'combat') updateCombatScreen(run)
-  else if (scr === 'map') updateMapScreen(run)
+  else if (scr === 'map') { updateMapScreen(run); maybeActBanner(run) }
   else if (scr === 'reward') updateRewardScreen(run)
   else if (scr === 'shop') updateShopScreen(run)
   else if (scr === 'neow') sigScreen(`neow:${run.character}:${run.neow?.chosen ?? ''}:${run.neow?.options.map(o => o.id).join(',')}:${run.players.length}:${run.neow?.chooserIdx}:${run.neow?.mpOptions?.map(o => o.map(x => x.id).join('+')).join('|')}`, () => rNeow(run))
@@ -2154,7 +2422,7 @@ function updateScreen(scr: string, run: RunState | null) {
     }
   }
   else if (scr === 'rest') sigScreen(`rest:${run.hp}:${run.maxHp}:${run.relics.length}:${run.mpRest?.join(',') ?? ''}:${g().net.myIdx}`, () => rRest(run))
-  else if (scr === 'treasure') sigScreen('treasure', () => rTreasure())
+  else if (scr === 'treasure') sigScreen(`treasure:${run.pendingTreasureRelic ?? ''}`, () => rTreasure(run))
   else if (scr === 'bossRelic') sigScreen('bossRelic', () => rBossRelic(run))
   else if (scr === 'gameover' || scr === 'victory') sigScreen('gameover', () => rGameOver(run))
 }
@@ -2233,6 +2501,7 @@ function render() {
   const run = st.run
   const scr = run ? run.screen : (st.menuScreen || 'title')
   if (!st.select) armPreviewUid = null
+  if (!st.pileView && inspectUid !== null) { inspectUid = null; inspectClosing = false; inspectGen = 0 }
   updateMusic(st)
   lobbyWatchTick(scr)
   if (scr !== curScreenKey) {
@@ -2280,6 +2549,22 @@ function autoAdvanceAct() {
   }, 2600)
 }
 
+// ============ ACT 横幅（原版 NActBanner：黑带α0.25 + 天蓝幕数 450→440 + 金色幕名） ============
+// 仅第 1 幕首次进入地图时展示（2-4 幕已有幕间过渡屏）；每幕新 map 对象只展示一次
+let actBannerMap: object | null = null
+const STS_ACT_NAMES: Record<number, string> = { 1: 'EXORDIUM · 外域' }
+function maybeActBanner(run: RunState) {
+  if (run.act !== 1 || actBannerMap === run.map) return
+  actBannerMap = run.map
+  const el = document.createElement('div')
+  el.className = 'act-banner bye'
+  el.innerHTML = `<div class="act-band"></div>
+    <div class="act-num sts-title">第 1 幕</div>
+    <div class="act-name">${STS_ACT_NAMES[run.act] ?? '第 1 幕'}</div>`
+  stageEl.appendChild(el)
+  setTimeout(() => el.remove(), 5000)
+}
+
 // ============ 游戏内齿轮菜单遮罩 ============
 function renderMenuOverlay(st: ReturnType<typeof g>) {
   let el = document.getElementById('ingame-menu')
@@ -2323,9 +2608,19 @@ function setupKeyboard() {
     const tgt = e.target as HTMLElement
     if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA')) return
     const st = g()
-    // Esc：菜单 / 取消
+    // 检视屏导航（原版 NInspectCardScreen：←/→ 切卡，Enter/空格 升级预览）
+    if (inspectUid && st.pileView) {
+      if (e.key === 'ArrowLeft') { doInspectStep(-1); e.preventDefault(); return }
+      if (e.key === 'ArrowRight') { doInspectStep(1); e.preventDefault(); return }
+      if (e.key === 'Enter' || e.key === ' ') { doInspectToggle(); e.preventDefault(); return }
+    }
+    // Esc：检视 → 牌堆 → 菜单（逐层关闭，不抢占）
     if (e.key === 'Escape') {
-      if (st.run) { g().toggleMenu(); e.preventDefault(); return }
+      if (inspectUid) { doInspectClose(); e.preventDefault(); return }
+      if (st.run) {
+        if (st.pileView || st.select || st.busy) return
+        g().toggleMenu(); e.preventDefault(); return
+      }
       return
     }
     const c = st.run?.combat
@@ -2471,8 +2766,23 @@ const ACTIONS: Record<string, (el: HTMLElement) => void> = {
   clickCard: (el) => g().clickCard(el.dataset.uid!),
   clickEnemy: (el) => g().clickEnemy(el.dataset.uid!),
   endTurn: () => g().endTurn(),
-  openPile: (el) => g().openPile(el.dataset.pile as any),
-  closePile: () => g().closePile(),
+  openPile: (el) => { inspectUid = null; inspectGen = 0; g().openPile(el.dataset.pile as any) },
+  closePile: () => { inspectUid = null; inspectGen = 0; g().closePile() },
+  inspectOpen: (el) => {
+    inspectUid = el.dataset.uid || null
+    inspectGen = 0
+    inspectDir = 0
+    inspectClosing = false
+    const st = g()
+    if (st.run && st.pileView) {
+      const c = pileCardsOf(st.run, st.pileView).find(x => x.uid === inspectUid)
+      inspectTicked = !!c && c.upgraded > 0
+    }
+    inspectRerender()
+  },
+  inspectStep: (el) => doInspectStep(Number(el.dataset.dir || 1)),
+  inspectToggle: () => doInspectToggle(),
+  inspectClose: () => doInspectClose(),
   takeGold: () => g().takeGold(),
   takeCard: (el) => g().takeCard(el.dataset.cid!),
   takePotion: () => g().takePotion(),
@@ -2515,6 +2825,8 @@ const ACTIONS: Record<string, (el: HTMLElement) => void> = {
   },
   chooseEvent: (el) => g().chooseEvent(Number(el.dataset.idx)),
   takeTreasure: () => g().takeTreasure(),
+  openTreasure: () => g().openTreasure(),
+  confirmTreasure: () => g().confirmTreasure(),
   resolveSelect: (el) => { armPreviewUid = null; g().resolveSelect(el.dataset.uid!) },
   armPreview: (el) => {
     armPreviewUid = el.dataset.uid || null
@@ -2527,11 +2839,12 @@ const ACTIONS: Record<string, (el: HTMLElement) => void> = {
     const idx = Number(el.dataset.idx)
     const pid = st.run?.potions[idx]
     if (!pid) return
+    lastPotAct = 'use'
     // 非战斗场景（地图）：直接使用；战斗中：先选中再点目标（防误触）
     if (!st.run?.combat) { g().usePotionMap(idx); return }
     useGame.setState({ selectedPotionIdx: st.selectedPotionIdx === idx ? null : idx })
   },
-  potionDiscard: (el) => g().discardPotion(Number(el.dataset.idx)),
+  potionDiscard: (el) => { lastPotAct = 'discard'; g().discardPotion(Number(el.dataset.idx)) },
 }
 
 document.addEventListener('click', (e) => {
@@ -2739,7 +3052,7 @@ net.onRooms(list => {
 })
 useGame.subscribe(render)
 render()
-console.log('[STS standalone] 游戏就绪 v1.12（单人 + 联机合作 · 服务器中转/P2P双通道 + 房间大厅）')
+console.log('[STS standalone] 游戏就绪 v1.13（单人 + 联机合作 · 服务器中转/P2P双通道 + 房间大厅）')
 
 
 

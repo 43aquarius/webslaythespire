@@ -4,9 +4,9 @@ import { useGame } from '@/store/gameStore'
 import { CardView } from './CardView'
 import { CARDS } from '@/game/cards'
 import { RELICS } from '@/game/relics'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { POTIONS } from '@/game/potions'
-import { Tip, RelicIcon, PotionSlot } from './Shared'
+import { Tip, RelicIcon, PotionSlot, TopHud } from './Shared'
 
 const A = '/assets'
 
@@ -33,12 +33,13 @@ export function RewardScreen() {
   return (
     <div className="w-full h-full relative select-none"
       style={{ background: 'radial-gradient(ellipse at 50% 30%, #3a2214 0%, #140a06 65%, #080402 100%)' }}>
+      <TopHud />
       <div className="absolute top-6 left-1/2 -translate-x-1/2 sts-title"
         style={{ fontSize: 42, color: '#ffd980', textShadow: '3px 3px 0 #000' }}>
         战利品
       </div>
 
-      <div className="absolute inset-x-0 flex flex-col items-center gap-3" style={{ top: 110 }}>
+      <div className="absolute inset-x-0 flex flex-col items-center gap-3" style={{ top: 150 }}>
         {/* 金币（联机：每人各自领取） */}
         {r.gold !== undefined && (
           <RewardRow
@@ -106,7 +107,7 @@ export function RewardScreen() {
           </RewardRow>
         )}
 
-        <button className="sts-btn sts-title mt-6" style={{ fontSize: 24 }} onClick={proceed}>
+        <button className="sts-btn sts-title mt-6 sts-slide-btn-r" style={{ fontSize: 24 }} onClick={proceed}>
           {run.combat.isBoss ? '继续' : '返回地图'}
         </button>
         {mp && !allConfirmed && (
@@ -244,57 +245,159 @@ export function RestScreen() {
   )
 }
 
-// ============ 宝箱界面 ============
+// ============ 宝箱界面（第六批原版还原：开箱 → 遗物 2× 展示+稀有度光晕 → 拾取） ============
+// 原版 NTreasureRoomRelicHolder：120px 图标 2× 展示，hover 2.1（0.05s）/ press 1.9 / 常态 2.0（0.4s Expo Out）；稀有度光晕脉冲
 export function TreasureScreen() {
   const run = useGame(s => s.run)
-  const take = useGame(s => s.takeTreasure)
+  const openTreasure = useGame(s => s.openTreasure)
+  const confirmTreasure = useGame(s => s.confirmTreasure)
+  const [relicSt, setRelicSt] = useState<'' | 'hover' | 'press'>('')
+
   if (!run) return null
+  const treasureRelic = run.pendingTreasureRelic
+  const opened = treasureRelic !== undefined
+  const def = treasureRelic ? RELICS[treasureRelic] : null
+  const rarity = def?.rarity as 'common' | 'uncommon' | 'rare' | undefined
   return (
-    <div className="w-full h-full relative flex flex-col items-center justify-center gap-10 select-none"
+    <div className="w-full h-full relative flex flex-col items-center justify-center gap-8 select-none"
       style={{ background: 'radial-gradient(ellipse at 50% 75%, #4a3a10 0%, #160e04 60%, #080402 100%)' }}>
-      <div className="sts-title" style={{ fontSize: 44, color: '#ffd980', textShadow: '3px 3px 0 #000' }}>
-        宝箱
+      <TopHud />
+      <div className="w-full h-full flex flex-col items-center justify-center gap-8" style={{ paddingTop: 60 }}>
+      {!opened ? (
+        <>
+          <div className="sts-title" style={{ fontSize: 44, color: '#ffd980', textShadow: '3px 3px 0 #000' }}>宝箱</div>
+          <button
+            className="transition-transform hover:scale-105 active:scale-95"
+            onClick={openTreasure}
+            style={{ filter: 'drop-shadow(0 0 26px rgba(255,200,60,0.55))' }}
+          >
+            <img src={`${A}/mapicons/treasure.png`} alt="宝箱" width={180} height={180} draggable={false} />
+          </button>
+          <button
+            className="sts-btn sts-title"
+            style={{ fontSize: 20 }}
+            onClick={openTreasure}
+          >
+            打开宝箱
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="sts-title" style={{ fontSize: 40, color: '#ffd980', textShadow: '3px 3px 0 #000' }}>
+            {def ? '获得了遗物！' : '箱子是空的……'}
+          </div>
+          {def && (
+            <div className="relative flex flex-col items-center gap-4">
+              {/* 稀有度光晕（原版 chestRelicGlow：rare 金 / uncommon 绿 / common 蓝，脉冲） */}
+              <div className={`sts-chest-glow-${rarity && rarity in { common: 1, uncommon: 1, rare: 1 } ? rarity : 'common'}`}
+                style={{ position: 'absolute', width: 340, height: 340, left: '50%', top: '50%', transform: 'translate(-50%,-50%)', pointerEvents: 'none' }} />
+              <Tip tip={<><b>{def.name}</b><br /><span style={{ color: '#d8c8a8' }}>{def.desc}</span></>}>
+                <div
+                  className={`sts-chest-relic ${relicSt === 'hover' ? 'sts-hot' : relicSt === 'press' ? 'sts-press' : ''}`}
+                  onPointerEnter={() => setRelicSt('hover')}
+                  onPointerLeave={() => setRelicSt('')}
+                  onPointerDown={() => setRelicSt('press')}
+                  onPointerUp={() => { if (relicSt === 'press') { setRelicSt('hover'); confirmTreasure() } }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <img src={`${A}/relics/${treasureRelic}.png`} alt={def.name} width={140} height={140} draggable={false}
+                    style={{ filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.6))' }} />
+                </div>
+              </Tip>
+              <div className="sts-title" style={{ fontSize: 26, color: '#ffe9a0', textShadow: '2px 2px 0 #000' }}>{def.name}</div>
+              <div className="sts-body" style={{ fontSize: 15, color: '#d8c8a8', maxWidth: 420, textAlign: 'center', lineHeight: 1.6 }}>{def.desc}</div>
+            </div>
+          )}
+          <button className="sts-btn sts-title" style={{ fontSize: 20 }} onClick={confirmTreasure}>
+            {def ? '拿走' : '离开'}
+          </button>
+        </>
+      )}
       </div>
-      <button
-        className="transition-transform hover:scale-110"
-        onClick={take}
-        style={{ filter: 'drop-shadow(0 0 26px rgba(255,200,60,0.55))' }}
-      >
-        <img src={`${A}/mapicons/treasure.png`} alt="宝箱" width={180} height={180} draggable={false} />
-      </button>
-      <button className="sts-btn sts-title" style={{ fontSize: 20 }} onClick={take}>
-        打开宝箱
-      </button>
     </div>
   )
 }
 
-// ============ 结算界面 ============
+// ============ 结算界面（第六批原版还原：阶段动画 + 随机死亡引言 + 徽章） ============
+// 原版 NGameOverScreen：标题淡入 → 随机死亡引言（y 90→156 2s Expo Out + 1.5s 淡入）→
+// 统计行逐项滑入（-50px→0 Spring Out 0.3s 间隔 0.1s）→ 徽章（brightness 0→1 + 100px→0 Back Out）→ 按钮滑入（190px Quart Out）
+const DEATH_QUOTES = [
+  '「尖塔从不仁慈。」',
+  '「死亡只是循环的一部分。」',
+  '「你的旅程在此结束……暂时的。」',
+  '「尖塔嘲弄着你的失败。」',
+  '「或许下一次，你会爬得更高。」',
+  '「死者无法讲述他们的故事。」',
+  '「尖塔又添一缕亡魂。」',
+  '「攀登者的尸骸铺就了尖塔的石阶。」',
+]
+
 export function GameOverScreen() {
   const run = useGame(s => s.run)
   const startRun = useGame(s => s.startRun)
   const backToTitle = useGame(s => s.backToTitle)
+  const myIdx = useGame(s => s.net.myIdx)
+  const quoteRef = useRef('')
+  useEffect(() => {
+    if (!quoteRef.current) quoteRef.current = DEATH_QUOTES[Math.floor(Math.random() * DEATH_QUOTES.length)]
+  }, [])
   if (!run?.gameOverInfo) return null
   const info = run.gameOverInfo
   const mp = run.players.length > 1
+  const me = run.players[mp ? myIdx : 0] || run.players[0]
+
+  // 徽章（原版 badges 条件徽章：小/大卡组、收藏家、守财奴）
+  const badges: { label: string; color: string }[] = []
+  const deckN = me.deck.length
+  if (deckN <= 20) badges.push({ label: `小卡组 · ${deckN} 张`, color: '#8fe89a' })
+  if (deckN >= 40) badges.push({ label: `大卡组 · ${deckN} 张`, color: '#ffd980' })
+  if (me.relics.length >= 25) badges.push({ label: `收藏家 · ${me.relics.length} 个遗物`, color: '#c9a8ff' })
+  if (me.gold >= 3000) badges.push({ label: `黄金之神 · ${me.gold} 金币`, color: '#ffd980' })
+  else if (me.gold >= 1000) badges.push({ label: `守财奴 · ${me.gold} 金币`, color: '#ffe9a0' })
 
   return (
-    <div className="w-full h-full relative flex flex-col items-center justify-center gap-8 select-none"
+    <div className="w-full h-full relative flex flex-col items-center justify-center gap-7 select-none overflow-y-auto sts-scroll py-10"
       style={{ background: 'radial-gradient(ellipse at 50% 35%, #2a1210 0%, #100806 60%, #050202 100%)' }}>
-      <div className="sts-title" style={{
+      {/* 标题：从黑淡入（原版 0.25s UI 淡入） */}
+      <div className="sts-title sts-go-title" style={{
         fontSize: 66, color: info.victory ? '#ffd980' : '#c85040',
         textShadow: '4px 4px 0 #000, 0 0 60px rgba(0,0,0,0.8)',
       }}>
         {info.victory ? '登顶成功！' : '你死了'}
       </div>
+      {/* 死亡引言：滑入 + 淡入（原版 quote_y 90→156 2s Expo Out / 淡入 1.5s；随机选取） */}
+      {!info.victory && (
+        <div className="sts-body sts-go-quote" style={{ fontSize: 17, color: '#c86858', fontStyle: 'italic', letterSpacing: 1 }}>
+          {quoteRef.current}
+        </div>
+      )}
       <div className="sts-panel p-8 flex flex-col gap-3" style={{ minWidth: 340 }}>
-        <StatRow label="到达层数" value={String(info.floor)} />
-        <StatRow label="消灭怪物" value={String(info.monstersSlain)} />
-        <StatRow label="消灭精英" value={String(info.elitesSlain)} />
-        <StatRow label="赚取金币" value={String(info.goldEarned)} />
-        {mp && <StatRow label="模式" value="联机合作" />}
+        {/* 统计行逐项滑入（Spring Out 0.3s，第 i 个延迟 0.8+0.1i） */}
+        {[
+          { label: '到达层数', value: String(info.floor) },
+          { label: '消灭怪物', value: String(info.monstersSlain) },
+          { label: '消灭精英', value: String(info.elitesSlain) },
+          { label: '赚取金币', value: String(info.goldEarned) },
+          ...(mp ? [{ label: '模式', value: '联机合作' }] : []),
+        ].map((row, i) => (
+          <div key={row.label} className="sts-go-stat" style={{ animationDelay: `${0.8 + i * 0.1}s` }}>
+            <StatRow label={row.label} value={row.value} />
+          </div>
+        ))}
       </div>
-      <div className="flex gap-5">
+      {/* 条件徽章（原版 AnimateInDiscoveries：brightness 0→1 + 100px→0 Back Out 0.3s） */}
+      {badges.length > 0 && (
+        <div className="flex flex-wrap gap-3 justify-center" style={{ maxWidth: 520 }}>
+          {badges.map((b, i) => (
+            <span key={b.label} className="sts-go-badge sts-body font-bold px-4 py-1.5 rounded-full"
+              style={{ animationDelay: `${1.3 + i * 0.12}s`, fontSize: 14, color: b.color, border: `1.5px solid ${b.color}55`, background: 'rgba(0,0,0,0.35)', textShadow: '1px 1px 0 #000' }}>
+              {b.label}
+            </span>
+          ))}
+        </div>
+      )}
+      {/* 按钮：滑入（原版 190px Quart Out 0.5s + 从黑淡入） */}
+      <div className="flex gap-5 sts-go-btn" style={{ animationDelay: '1.5s' }}>
         <button className="sts-btn sts-title" style={{ fontSize: 22 }} onClick={() => startRun()}>再来一局</button>
         <button className="sts-btn sts-title" style={{ fontSize: 22 }} onClick={backToTitle}>回到主菜单</button>
       </div>

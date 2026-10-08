@@ -132,6 +132,51 @@ export function useValueFloat(value: number) {
   return items
 }
 
+// ============ 金钱逐级计数（原版 NTopBarGold.UpdateGoldAnim：0.25+0.15s 延迟后按步长 75/10/1 递变，10-110ms 间隔，0.25s 后结算） ============
+const goldWait = (ms: number) => new Promise(r => setTimeout(r, ms))
+export function useGoldLabel(gold: number) {
+  const [label, setLabel] = useState(gold)
+  const st = useRef({ cur: gold, add: 0, running: false })
+  useEffect(() => {
+    const s = st.current
+    s.add += gold - s.cur
+    s.cur = gold
+    if (s.running || s.add === 0) return
+    s.running = true
+    let alive = true
+    ;(async () => {
+      await goldWait(400)
+      while (s.add !== 0 && alive) {
+        const a = Math.abs(s.add), n = a > 100 ? 75 : a > 50 ? 10 : 1
+        s.add = s.add > 0 ? s.add - n : s.add + n
+        if (alive) setLabel(s.cur - s.add)
+        await goldWait(Math.trunc(10 + 10 * Math.max(0, 10 - Math.abs(s.add))))
+      }
+      await goldWait(250)
+      if (alive) setLabel(s.cur)
+      s.running = false
+    })()
+    return () => { alive = false }
+  }, [gold])
+  return label
+}
+
+// ============ 卡组数量新高弹跳（原版 NTopBarDeckButton：新高时 scale 1.5→1，0.5s Expo Out） ============
+export function DeckCount({ n }: { n: number }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const max = useRef(0)
+  useEffect(() => {
+    if (n > max.current) {
+      max.current = n
+      ref.current?.animate?.(
+        [{ transform: 'scale(1.5)' }, { transform: 'scale(1)' }],
+        { duration: 500, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' },
+      )
+    }
+  }, [n])
+  return <span ref={ref} className="inline-block" style={{ transformOrigin: 'center' }}>{n}</span>
+}
+
 // ============ 玩家血量文字（原版：无血条，红色 78/80 样式） ============
 export function HpText({ hp, maxHp, block, size = 21, showName }: { hp: number; maxHp: number; block?: number; size?: number; showName?: string }) {
   const low = hp > 0 && hp <= maxHp * 0.3
@@ -170,11 +215,14 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
   const usePotionMap = useGame(s => s.usePotionMap)
   const selectedPotionIdx = useGame(s => s.selectedPotionIdx)
   const net = useGame(s => s.net)
+  const potionBeltFail = useGame(s => s.potionBeltFail)
+  const combatOn = useGame(s => !!s.run?.combat)
 
   // 金币/血量变化浮动动画 + 新获遗物闪光（原版动画还原；hooks 须在早退前）
   const me0 = run ? (run.players[run.players.length > 1 ? net.myIdx : 0] || run.players[0]) : null
   const goldFloats = useValueFloat(me0?.gold ?? 0)
   const hpFloats = useValueFloat(me0?.hp ?? 0)
+  const goldLabel = useGoldLabel(me0?.gold ?? 0)   // 原版 NTopBarGold：逐级计数
   const relicCount = me0?.relics.length ?? 0
   const [newRelic, setNewRelic] = useState(false)
   const prevRelics = useRef(relicCount)
@@ -188,6 +236,72 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
     prevRelics.current = relicCount
   }, [relicCount])
 
+  // 药水退场 ghost（原版 NPotion：使用 scale→0 0.2s Back In / 丢弃上浮 100px 0.4s Back In）
+  const potions0 = me0?.potions ?? []
+  const prevPotions = useRef<(string | null)[]>(potions0)
+  const [potGhosts, setPotGhosts] = useState<{ id: number; idx: number; pid: string; kind: 'use' | 'discard' }[]>([])
+  const lastPotAct = useRef<'use' | 'discard'>('use')
+  useEffect(() => {
+    const prev = prevPotions.current, cur = potions0
+    const gone: { id: number; idx: number; pid: string; kind: 'use' | 'discard' }[] = []
+    for (let i = 0; i < prev.length; i++) {
+      if (prev[i] && !cur[i]) gone.push({ id: Date.now() + Math.random(), idx: i, pid: prev[i]!, kind: lastPotAct.current })
+    }
+    if (gone.length) {
+      setPotGhosts(g => [...g, ...gone])
+      const ids = new Set(gone.map(x => x.id))
+      setTimeout(() => setPotGhosts(g => g.filter(x => !ids.has(x.id))), 550)
+    }
+    prevPotions.current = cur
+  }, [potions0])
+
+  // 药水带满失败抖动（原版 NPotionContainer.PlayAddFailedAnim：3·sin(5t)·sin(t/2) px，0→2π，0.5s）
+  const beltRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!potionBeltFail || !beltRef.current) return
+    beltRef.current.animate(
+      Array.from({ length: 25 }, (_, i) => {
+        const t = (i / 24) * Math.PI * 2
+        return { translate: `${3 * Math.sin(5 * t) * Math.sin(t / 2)}px 0` }
+      }),
+      { duration: 500 },
+    )
+  }, [potionBeltFail])
+
+  // 战斗开始药水闪耀（原版 OnCombatSetUp→ShinePotions：1s 后有药的槽依次弹跳，0.25s 间隔）
+  const [shineIdx, setShineIdx] = useState(-1)
+  useEffect(() => {
+    if (!combatOn) return
+    let alive = true
+    const timers: ReturnType<typeof setTimeout>[] = []
+    const cur = me0?.potions ?? []
+    setTimeout(() => {
+      if (!alive) return
+      let d = 0
+      for (let i = 0; i < cur.length; i++) {
+        if (!cur[i]) continue
+        const k = i
+        timers.push(setTimeout(() => { if (alive) setShineIdx(k) }, d))
+        d += 250
+      }
+      timers.push(setTimeout(() => { if (alive) setShineIdx(-1) }, d + 300))
+    }, 1000)
+    return () => { alive = false; timers.forEach(clearTimeout) }
+  }, [combatOn])
+  // 闪耀弹跳（原版 NPotion.DoBounce：12px 上跳 0.125s Sine Out + 0.125s Sine In）
+  useEffect(() => {
+    if (shineIdx < 0 || !beltRef.current) return
+    const el = beltRef.current.children[shineIdx]?.querySelector('.sts-slot') as HTMLElement | null
+    el?.animate?.(
+      [
+        { transform: 'translateY(0)', easing: 'cubic-bezier(.61,1,.88,1)' },
+        { transform: 'translateY(-12px)', easing: 'cubic-bezier(.12,0,.39,0)' },
+        { transform: 'translateY(0)' },
+      ],
+      { duration: 250 },
+    )
+  }, [shineIdx])
+
   if (!run) return null
 
   const mp = run.players.length > 1
@@ -199,6 +313,7 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
   const onPotionClick = (idx: number) => {
     const pid = me.potions[idx]
     if (!pid) return
+    lastPotAct.current = 'use'
     if (!combat) { usePotionMap(idx); return }
     useGame.setState(s => ({ selectedPotionIdx: s.selectedPotionIdx === idx ? null : idx }))
   }
@@ -237,11 +352,11 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
                 <HudFloat items={hpFloats.map(f => ({ ...f, color: f.v > 0 ? '#7fe08a' : '#ff5a4a' }))} />
                 <HpText hp={me.hp} maxHp={me.maxHp} block={myBlock} />
               </div>
-              {/* 行2：金币（原版在头像下方） */}
-              <div className="relative sts-body font-bold sts-num flex items-center gap-1.5"
+              {/* 行2：金币（原版在头像下方；逐级计数动画） */}
+              <div id="hud-gold" className="relative sts-body font-bold sts-num flex items-center gap-1.5"
                 style={{ color: '#ffd980', textShadow: '1px 1px 0 #000', fontSize: 17, lineHeight: 1 }}>
                 <HudFloat items={goldFloats.map(f => ({ ...f, color: '#ffd980' }))} />
-                <span style={{ fontSize: 15 }}>💰</span>{me.gold}
+                <span style={{ fontSize: 15 }}>💰</span>{goldLabel}
                 {mp && (
                   <span className="sts-num" style={{ color: '#a8b8c8', fontSize: 12 }}>
                     （队友 {run.players[1 - myIdx]?.gold ?? '-'}）
@@ -250,15 +365,22 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
               </div>
             </div>
           </div>
-          {/* 行3：药水 */}
-          <div className="pointer-events-auto flex gap-1.5" style={{ marginLeft: 2 }}>
+          {/* 行3：药水（退场 ghost / 入场动画 / 满带抖动） */}
+          <div id="hud-potions" ref={beltRef} className="pointer-events-auto flex gap-1.5 relative" style={{ marginLeft: 2 }}>
             {me.potions.map((pid, i) => (
               <PotionSlot
-                key={i} potionId={pid} size={38}
+                key={pid ?? `empty-${i}`} potionId={pid} size={38}
                 selected={combat && selectedPotionIdx === i}
+                acquired={!!pid && !prevPotions.current[i]}
                 onClick={() => onPotionClick(i)}
-                onDiscard={combat ? () => discardPotion(i) : undefined}
+                onDiscard={combat ? () => { lastPotAct.current = 'discard'; discardPotion(i) } : undefined}
               />
+            ))}
+            {potGhosts.map(g => (
+              <span key={g.id} className={`sts-pot-ghost sts-pot-ghost-${g.kind}`}
+                style={{ left: g.idx * 44, top: 0, width: 38, height: 44, position: 'absolute', pointerEvents: 'none' }}>
+                <img src={`${A}/potions/${g.pid}.png`} alt="" className="w-full h-full object-contain" draggable={false} />
+              </span>
             ))}
           </div>
           {/* 行4：遗物行（新获遗物闪光） */}
@@ -277,7 +399,7 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
             >
               <img src={`${A}/frames/cardRedOrb.png`} alt="" width={26} height={20} draggable={false}
                 style={{ objectFit: 'contain' }} />
-              <span className="sts-num font-bold" style={{ fontSize: 15, lineHeight: 1.1 }}>{me.deck.length}</span>
+              <span id="hud-deck-count" className="sts-num font-bold" style={{ fontSize: 15, lineHeight: 1.1 }}><DeckCount n={me.deck.length} /></span>
             </button>
           </Tip>
           {floor !== undefined && (
@@ -410,8 +532,8 @@ export function RelicIcon({ id, size = 42, flash }: { id: string; size?: number;
   )
 }
 
-// ============ 药水槽 ============
-export function PotionSlot({ potionId, size = 40, onClick, onDiscard, selected }: { potionId: string | null; size?: number; onClick?: () => void; onDiscard?: () => void; selected?: boolean }) {
+// ============ 药水槽（hover 弹跳 / 获得入场 / 原版 NPotion 外观） ============
+export function PotionSlot({ potionId, size = 40, onClick, onDiscard, selected, acquired }: { potionId: string | null; size?: number; onClick?: () => void; onDiscard?: () => void; selected?: boolean; acquired?: boolean }) {
   const def = potionId ? POTIONS[potionId] : null
   if (!def) {
     return (
@@ -428,12 +550,12 @@ export function PotionSlot({ potionId, size = 40, onClick, onDiscard, selected }
   return (
     <Tip tip={<><b>{def.name}</b><br /><span style={{ color: '#d8c8a8' }}>{def.desc}</span></>}>
       <span
-        className={`sts-slot relative inline-block cursor-pointer ${selected ? 'sts-targetable' : ''}`}
+        className={`sts-slot sts-pot-hover relative inline-block cursor-pointer ${selected ? 'sts-targetable' : ''} ${acquired ? 'sts-pot-in' : ''}`}
         onClick={onClick} style={{ width: size, height: size * 1.15, borderRadius: selected ? 8 : undefined }}>
         <img src={`${A}/potions/${potionId}.png`} alt={def.name} className="w-full h-full object-contain" draggable={false} />
         {onDiscard && (
           <span
-            className="absolute sts-body font-bold"
+            className="pdisc absolute sts-body font-bold"
             style={{ right: -8, top: -6, width: 16, height: 16, borderRadius: '50%', background: '#6a2016', border: '1px solid #a05040', color: '#ffd0c0', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             onClick={(e) => { e.stopPropagation(); onDiscard() }}
           >✕</span>

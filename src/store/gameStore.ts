@@ -54,6 +54,8 @@ interface GameStore {
   bossOptions: string[]
   toast: string | null
   endBanner: 'win' | 'lose' | null
+  shopFail: { kind: 'card' | 'relic' | 'potion' | 'removal'; idx: number; ts: number } | null  // 购买失败信号（原版 NMerchantSlot 槽位抖动）
+  potionBeltFail: number  // 药水栏满信号（原版 NPotionContainer.PlayAddFailedAnim 抖动）
   selectedCharacter: CharacterId
   net: NetState
   mpSmithQueue: number[]       // 联机篝火：待锻造玩家队列
@@ -67,6 +69,8 @@ interface GameStore {
   continueRun: () => void
   abandonRun: () => void
   chooseNeow: (idx: number) => void
+  openTreasure: () => void
+  confirmTreasure: () => void
   backToTitle: () => void
   continueFromActTransition: () => void
   chooseNode: (nodeId: string) => void
@@ -405,6 +409,8 @@ export const useGame = create<GameStore>((set, get) => {
     bossOptions: [],
     toast: null,
     endBanner: null,
+    shopFail: null,
+    potionBeltFail: 0,
     selectedCharacter: 'ironclad',
     net: { ...EMPTY_NET },
     mpSmithQueue: [],
@@ -424,6 +430,7 @@ export const useGame = create<GameStore>((set, get) => {
       set({
         run: newRun(character), menuScreen: 'title', menuOpen: false, busy: false, fxList: [], select: null, pileView: null,
         selectedCardUid: null, selectedPotionIdx: null, eventMsg: null, bossOptions: [], toast: null, endBanner: null,
+        shopFail: null,
         selectedCharacter: character, mpSmithQueue: [], upgradeFx: null,
       })
     },
@@ -438,6 +445,7 @@ export const useGame = create<GameStore>((set, get) => {
         run, menuScreen: 'title', menuOpen: false, busy: false, fxList: [], select: p.select as SelectState | null,
         pileView: null, selectedCardUid: null, selectedPotionIdx: null, eventMsg: null,
         bossOptions: p.bossOptions || [], toast: null, endBanner: null,
+        shopFail: null,
         selectedCharacter: run.character, mpSmithQueue: [],
       })
     },
@@ -703,6 +711,7 @@ export const useGame = create<GameStore>((set, get) => {
       set({
         run: null, menuScreen: 'title', menuOpen: false, busy: false, fxList: [], select: null, pileView: null,
         selectedCardUid: null, selectedPotionIdx: null, eventMsg: null, bossOptions: [], toast: null, endBanner: null,
+        shopFail: null,
         mpSmithQueue: [],
       })
     },
@@ -1262,6 +1271,7 @@ export const useGame = create<GameStore>((set, get) => {
         set({ run: r })
       } else {
         showToastSafe('药水栏已满')
+        set(s => ({ potionBeltFail: s.potionBeltFail + 1 }))
       }
     }),
 
@@ -1349,7 +1359,7 @@ export const useGame = create<GameStore>((set, get) => {
       const item = run.shop.cards[idx]
       if (!item || item.sold) return
       const actor = actorIdx(run)
-      if (run.players[actor].gold < item.price) { showToastSafe('金币不足'); return }
+      if (run.players[actor].gold < item.price) { showToastSafe('金币不足'); set(s => ({ shopFail: { kind: 'card', idx, ts: Date.now() } })); return }
       const r = clone(run)
       setRunActive(r, actor)
       r.gold -= item.price
@@ -1367,7 +1377,7 @@ export const useGame = create<GameStore>((set, get) => {
       const item = run.shop.relics[idx]
       if (!item || item.sold) return
       const actor = actorIdx(run)
-      if (run.players[actor].gold < item.price) { showToastSafe('金币不足'); return }
+      if (run.players[actor].gold < item.price) { showToastSafe('金币不足'); set(s => ({ shopFail: { kind: 'relic', idx, ts: Date.now() } })); return }
       const r = clone(run)
       setRunActive(r, actor)
       r.gold -= item.price
@@ -1384,8 +1394,8 @@ export const useGame = create<GameStore>((set, get) => {
       const item = run.shop.potions[idx]
       if (!item || item.sold) return
       const actor = actorIdx(run)
-      if (!run.players[actor].potions.some(p => p === null)) { showToastSafe('药水栏已满'); return }
-      if (run.players[actor].gold < item.price) { showToastSafe('金币不足'); return }
+      if (!run.players[actor].potions.some(p => p === null)) { showToastSafe('药水栏已满'); set(s => ({ potionBeltFail: s.potionBeltFail + 1, shopFail: { kind: 'potion', idx, ts: Date.now() } })); return }
+      if (run.players[actor].gold < item.price) { showToastSafe('金币不足'); set(s => ({ shopFail: { kind: 'potion', idx, ts: Date.now() } })); return }
       const r = clone(run)
       setRunActive(r, actor)
       r.gold -= item.price
@@ -1402,7 +1412,7 @@ export const useGame = create<GameStore>((set, get) => {
       const shop = run.shop
       if (shop.removalUsed) return
       const actor = actorIdx(run)
-      if (run.players[actor].gold < shop.removalPrice) { showToastSafe('金币不足'); return }
+      if (run.players[actor].gold < shop.removalPrice) { showToastSafe('金币不足'); set(s => ({ shopFail: { kind: 'removal', idx: 0, ts: Date.now() } })); return }
       set({
         select: {
           kind: 'shopRemove', title: `移除一张牌（${shop.removalPrice} 金币）`,
@@ -1541,6 +1551,35 @@ export const useGame = create<GameStore>((set, get) => {
       r.screen = 'map'
       set({ run: r, eventMsg: result.msg || null })
       setTimeout(() => set({ eventMsg: null }), 2000)
+    }),
+
+    // ============ 宝箱两步（原版 NTreasureRoom：开箱 → 遗物 2× 展示+稀有度光晕 → 拾取；存 run 内随联机快照同步） ============
+    openTreasure: fwd('openTreasure', () => {
+      const { run } = get()
+      if (!run || run.pendingTreasureRelic !== undefined) return
+      const owned = new Set(run.relics)
+      const pool = Object.values(RELICS).filter(x => (x.rarity === 'common' || x.rarity === 'uncommon') && !owned.has(x.id))
+      const relicId = pool.length ? pool[Math.floor(Math.random() * pool.length)].id : null
+      const r = clone(run)
+      r.pendingTreasureRelic = relicId
+      set({ run: r })
+    }),
+
+    confirmTreasure: fwd('confirmTreasure', () => {
+      const { run } = get()
+      if (!run || run.pendingTreasureRelic === undefined) return
+      const actor = actorIdx(run)
+      const relicId = run.pendingTreasureRelic
+      const r = clone(run)
+      setRunActive(r, actor)
+      if (relicId) {
+        gainRelic(r, relicId)
+        r.players[actor].relics = r.relics
+      }
+      r.pendingTreasureRelic = undefined
+      r.screen = 'map'
+      set({ run: r, toast: relicId ? `获得遗物：${RELICS[relicId].name}` : '箱子是空的' })
+      setTimeout(() => { if (get().toast) set({ toast: null }) }, 2200)
     }),
 
     takeTreasure: fwd('takeTreasure', () => {

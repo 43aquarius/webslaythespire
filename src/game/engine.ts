@@ -306,6 +306,7 @@ export function drawCards(combat: CombatState, run: RunState, n: number) {
       if (AP(combat).discardPile.length === 0) break
       AP(combat).drawPile = shuffle(AP(combat).discardPile)
       AP(combat).discardPile = []
+      fx(combat, 'shuffle', ptgt(combat))
       // 日晷
       if (run.relics.includes('sundial')) {
         run.relicCounters.sundial = (run.relicCounters.sundial || 0) + 1
@@ -2034,6 +2035,7 @@ function applyCardEffect(combat: CombatState, run: RunState, card: CardInstance,
     case 'reboot':
       AP(combat).drawPile = shuffle([...AP(combat).drawPile, ...AP(combat).discardPile])
       AP(combat).discardPile = []
+      fx(combat, 'shuffle', ptgt(combat))
       drawCards(combat, run, v[0])
       break
     case 'seek': {

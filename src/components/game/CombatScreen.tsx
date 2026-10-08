@@ -150,6 +150,33 @@ function IntentBurst({ items, removeFx }: { items: FxItem[]; removeFx: (id: numb
   )
 }
 
+// ============ 洗牌黑色剪影（原版 NCardFlyShuffleVfx：弃牌堆洗回抽牌堆时黑色卡牌剪影飞散） ============
+// 8 张黑色小卡剪影自抽牌堆按钮位置向外弧线飞散 + 随机旋转 + 淡出，0.75s，错峰 0.05s
+function ShuffleFx({ items, removeFx }: { items: FxItem[]; removeFx: (id: number) => void }) {
+  const timedRef = useRef<Set<number>>(new Set())
+  useEffect(() => {
+    let timers: ReturnType<typeof setTimeout>[] = []
+    for (const it of items) {
+      if (timedRef.current.has(it.id)) continue
+      timedRef.current.add(it.id)
+      timers.push(setTimeout(() => removeFx(it.id), 1300))
+    }
+    return () => timers.forEach(clearTimeout)
+  }, [items, removeFx])
+  if (!items.length) return null
+  return (
+    <>
+      {items.map(it => (
+        <div key={it.id} className="absolute pointer-events-none" style={{ left: 59, bottom: 204, zIndex: 57 }}>
+          {[0, 1, 2, 3, 4, 5, 6, 7].map(k => (
+            <div key={k} className="sts-shuffle-card absolute" style={{ animationDelay: `${k * 0.05}s` }} />
+          ))}
+        </div>
+      ))}
+    </>
+  )
+}
+
 // ============ 浮动数字（原版 NDamageNumVfx / NHealNumVfx 物理还原） ============
 // 伤害数字：红 #F72B14 → 奶油 #FFF6E2（0.5s）、2.5×→1× 缩放（1.2s QuadOut）、
 //   重力 1000px/s² 抛物弧线、初速 vy=-(700±100) vx=±100、随机旋转 ±5°、透明度 1-(t/2)²、共 2s
@@ -1006,6 +1033,8 @@ export function CombatScreen() {
 
       {/* ===== 抽牌堆 ===== */}
       <PileButton label="抽牌堆" count={AP(combat).drawPile.length} style={{ left: 26, bottom: 158 }} onClick={() => openPile('draw')} shuffled />
+      {/* 洗牌黑色剪影（原版 NCardFlyShuffleVfx） */}
+      <ShuffleFx items={fxList.filter(f => f.kind === 'shuffle')} removeFx={removeFx} />
       {/* ===== 弃牌堆 ===== */}
       <PileButton label="弃牌堆" count={AP(combat).discardPile.length} style={{ right: 26, bottom: 158 }} onClick={() => openPile('discard')} />
       {/* ===== 消耗堆 ===== */}

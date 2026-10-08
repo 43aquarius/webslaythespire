@@ -1,14 +1,69 @@
 'use client'
-// ============ 商店界面 + 事件界面（打字机/滑入选项为第五批原版还原） ============
-import { useEffect, useState } from 'react'
+// ============ 商店界面 + 事件界面（打字机/滑入选项为第五批原版还原；商店槽位动画为第六批） ============
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useGame } from '@/store/gameStore'
 import { CardView } from './CardView'
 import { RELICS } from '@/game/relics'
 import { POTIONS } from '@/game/potions'
 import { EVENTS } from '@/game/events'
-import { Tip } from './Shared'
+import { Tip, TopHud } from './Shared'
 
 const A = '/assets'
+
+// ============ 商店槽位（原版 NMerchantSlot：hover 0.65→0.8 立即，离开 0.5s Expo Out；购买失败 sin 抖动 0.4s） ============
+function ShopSlot({ kind, idx, sold, onBuy, small, tip, children }: {
+  kind: 'card' | 'relic' | 'potion' | 'removal'; idx: number; sold: boolean; onBuy: () => void
+  small?: boolean; tip?: ReactNode; children: ReactNode
+}) {
+  const shopFail = useGame(s => s.shopFail)
+  const [hot, setHot] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const wig = shopFail && shopFail.kind === kind && shopFail.idx === idx ? shopFail.ts : 0
+  useEffect(() => {
+    if (!wig || !ref.current?.animate) return
+    // 原版：x = sin(p·2π)·10，p = (1-(1-t)²)·2（Quad Out 缓动后采样 25 帧）
+    ref.current.animate(
+      Array.from({ length: 25 }, (_, i) => {
+        const t = i / 24, p = (1 - (1 - t) * (1 - t)) * 2
+        return { translate: `${Math.sin(p * 2 * Math.PI) * 10}px 0` }
+      }),
+      { duration: 400 },
+    )
+  }, [wig])
+  const inner = (
+    <div
+      ref={ref}
+      data-sidx={kind === 'card' ? idx : undefined}
+      data-ridx={kind === 'relic' ? idx : undefined}
+      data-pidx={kind === 'potion' ? idx : undefined}
+      className={`sts-shop-slot ${small ? 'sts-shop-slot-sm' : ''} ${hot && !sold ? 'sts-shop-hot' : ''} ${sold ? 'sts-shop-sold' : ''} flex flex-col items-center gap-1`}
+      style={{ cursor: sold ? 'default' : 'pointer' }}
+      onPointerEnter={() => setHot(true)}
+      onPointerLeave={() => setHot(false)}
+      onClick={() => !sold && onBuy()}
+    >
+      {children}
+    </div>
+  )
+  return tip ? <Tip tip={tip}>{inner}</Tip> : inner
+}
+
+// ============ 价格标签（原版 NMerchantSlot 价格：金币图标 + 数字；#FF5555 买不起 / #7FFF00 打折 / #FFF6E2 正常） ============
+function ShopPrice({ price, sold, canAfford, sale }: { price: number; sold: boolean; canAfford: boolean; sale?: boolean }) {
+  const color = !canAfford ? '#FF5555' : sale ? '#7FFF00' : '#FFF6E2'
+  return (
+    <div className="shop-price sts-body font-bold sts-num px-3 py-0.5 rounded flex items-center gap-1"
+      style={{
+        background: sold || !canAfford ? '#3a2a1a' : '#6e5116',
+        border: '1.5px solid #8a6a2e', fontSize: 15,
+      }}>
+      {sold ? '已售出' : (
+        <><span style={{ fontSize: 13 }}>💰</span><span style={{ color }}>{price}</span>
+          {sale && <span style={{ color: '#7FFF00', fontSize: 12 }}>5折</span>}</>
+      )}
+    </div>
+  )
+}
 
 export function ShopScreen() {
   const run = useGame(s => s.run)
@@ -28,9 +83,11 @@ export function ShopScreen() {
   const gold = myGold  // 以下所有价格判断基于自己的金币
 
   return (
-    <div className="w-full h-full relative overflow-y-auto sts-scroll select-none"
-      style={{ background: 'radial-gradient(ellipse at 50% 20%, #3a2618 0%, #150c06 60%, #080402 100%)' }}>
-      <div className="flex flex-col items-center gap-6 py-8 px-4">
+    <div className="w-full h-full relative sts-scroll select-none">
+      <TopHud />
+      <div className="w-full h-full relative overflow-y-auto sts-scroll"
+        style={{ background: 'radial-gradient(ellipse at 50% 20%, #3a2618 0%, #150c06 60%, #080402 100%)' }}>
+        <div className="flex flex-col items-center gap-6 py-8 px-4" style={{ paddingTop: 128 }}>
         {/* 商店老板 */}
         <div className="flex items-center gap-6">
           <img src={`${A}/mapicons/shop.png`} alt="" width={100} height={100} draggable={false}
@@ -52,90 +109,73 @@ export function ShopScreen() {
         </div>
 
         {/* 卡牌 */}
-        <div className="flex gap-5 flex-wrap justify-center">
+        <div id="shop-cards" className="flex gap-5 flex-wrap justify-center">
           {shop.cards.map((item, i) => {
             const canAfford = gold >= item.price
             return (
-              <div key={i} className={`flex flex-col items-center gap-1 transition-all ${item.sold ? 'opacity-30' : canAfford ? 'hover:-translate-y-1' : 'opacity-70'}`}
-                style={{ cursor: item.sold ? 'default' : 'pointer' }}
-                onClick={() => !item.sold && buyCard(i)}
-              >
+              <ShopSlot key={i} kind="card" idx={i} sold={item.sold} onBuy={() => buyCard(i)}>
                 <CardView card={{ uid: 'shop_' + i, id: item.cardId, upgraded: 0 }} width={150} dimmed={item.sold} />
-                <div className="sts-body font-bold sts-num px-3 py-0.5 rounded"
-                  style={{
-                    background: canAfford && !item.sold ? '#6e5116' : '#3a2a1a',
-                    color: canAfford && !item.sold ? '#ffe9a0' : '#a89070',
-                    border: '1.5px solid #8a6a2e', fontSize: 15,
-                  }}>
-                  {item.sold ? '已售出' : item.discount ? (
-                    <>💰 {item.price} <span style={{ color: '#8ee888', fontSize: 12 }}>5折</span></>
-                  ) : `💰 ${item.price}`}
-                </div>
-              </div>
+                <ShopPrice price={item.price} sold={item.sold} canAfford={canAfford} sale={item.discount} />
+              </ShopSlot>
             )
           })}
         </div>
 
         {/* 遗物 + 药水 */}
         <div className="flex gap-10 flex-wrap justify-center items-start">
-          <div className="flex gap-4 flex-wrap justify-center">
+          <div id="shop-relics" className="flex gap-4 flex-wrap justify-center">
             {shop.relics.map((item, i) => {
               const def = RELICS[item.relicId]
               const canAfford = gold >= item.price
               return (
-                <Tip key={i} tip={<><b>{def.name}</b><br />{def.desc}</>}>
-                  <button
-                    className={`sts-panel flex flex-col items-center gap-1 p-3 transition-all ${item.sold ? 'opacity-30' : canAfford ? 'hover:brightness-125 hover:-translate-y-1' : 'opacity-70'}`}
-                    style={{ width: 130, cursor: item.sold ? 'default' : 'pointer' }}
-                    onClick={() => !item.sold && buyRelic(i)}
-                  >
+                <ShopSlot key={i} kind="relic" idx={i} sold={item.sold} small
+                  onBuy={() => buyRelic(i)}
+                  tip={<><b>{def.name}</b><br />{def.desc}</>}
+                >
+                  <div className="sts-panel flex flex-col items-center gap-1 p-3" style={{ width: 130 }}>
                     <img src={`${A}/relics/${item.relicId}.png`} alt={def.name} width={56} height={56} draggable={false} />
                     <div className="sts-body" style={{ fontSize: 13, color: '#f5e5c8' }}>{def.name}</div>
-                    <div className="sts-num font-bold" style={{ fontSize: 14, color: canAfford ? '#ffe9a0' : '#a89070' }}>
-                      {item.sold ? '已售出' : `💰 ${item.price}`}
-                    </div>
-                  </button>
-                </Tip>
+                    <ShopPrice price={item.price} sold={item.sold} canAfford={canAfford} />
+                  </div>
+                </ShopSlot>
               )
             })}
           </div>
 
-          <div className="flex gap-4 flex-wrap justify-center">
+          <div id="shop-potions" className="flex gap-4 flex-wrap justify-center">
             {shop.potions.map((item, i) => {
               const def = POTIONS[item.potionId]
               const canAfford = gold >= item.price
               return (
-                <Tip key={i} tip={<><b>{def.name}</b><br />{def.desc}</>}>
-                  <button
-                    className={`sts-panel flex flex-col items-center gap-1 p-3 transition-all ${item.sold ? 'opacity-30' : canAfford ? 'hover:brightness-125 hover:-translate-y-1' : 'opacity-70'}`}
-                    style={{ width: 120, cursor: item.sold ? 'default' : 'pointer' }}
-                    onClick={() => !item.sold && buyPotion(i)}
-                  >
+                <ShopSlot key={i} kind="potion" idx={i} sold={item.sold} small
+                  onBuy={() => buyPotion(i)}
+                  tip={<><b>{def.name}</b><br />{def.desc}</>}
+                >
+                  <div className="sts-panel flex flex-col items-center gap-1 p-3" style={{ width: 120 }}>
                     <img src={`${A}/potions/${item.potionId}.png`} alt={def.name} width={44} height={50} draggable={false} />
                     <div className="sts-body" style={{ fontSize: 12, color: '#f5e5c8' }}>{def.name}</div>
-                    <div className="sts-num font-bold" style={{ fontSize: 14, color: canAfford ? '#ffe9a0' : '#a89070' }}>
-                      {item.sold ? '已售出' : `💰 ${item.price}`}
-                    </div>
-                  </button>
-                </Tip>
+                    <ShopPrice price={item.price} sold={item.sold} canAfford={canAfford} />
+                  </div>
+                </ShopSlot>
               )
             })}
           </div>
         </div>
 
-        {/* 移除服务 */}
-        <button
-          className="sts-btn sts-btn-gold sts-title"
-          style={{ fontSize: 19, opacity: shop.removalUsed ? 0.4 : 1 }}
-          disabled={shop.removalUsed}
-          onClick={buyRemoval}
-        >
-          {shop.removalUsed ? '移除服务已使用' : `🧹 移除一张牌 —— 💰 ${shop.removalPrice}`}
-        </button>
+        {/* 移除服务（原版 NMerchantCardRemoval：使用后帧动画划掉、价格隐藏、槽位保留） */}
+        <ShopSlot kind="removal" idx={0} sold={shop.removalUsed} onBuy={buyRemoval}>
+          <button
+            className="sts-btn sts-btn-gold sts-title"
+            style={{ fontSize: 19, opacity: shop.removalUsed ? 0.4 : 1, pointerEvents: 'none' }}
+          >
+            {shop.removalUsed ? '✂ 移除服务已使用' : `🧹 移除一张牌 —— 💰 ${shop.removalPrice}`}
+          </button>
+        </ShopSlot>
 
         <button className="sts-btn sts-title" style={{ fontSize: 22 }} onClick={leave}>
           离开商店
         </button>
+        </div>
       </div>
     </div>
   )
@@ -178,7 +218,8 @@ export function EventScreen() {
   return (
     <div className="w-full h-full relative flex items-center justify-center select-none"
       style={{ background: 'radial-gradient(ellipse at 50% 25%, #2e2038 0%, #120a18 60%, #060306 100%)' }}>
-      <div className="sts-panel flex flex-col items-center gap-5 p-10" style={{ maxWidth: 720 }}>
+      <TopHud />
+      <div className="sts-panel flex flex-col items-center gap-5 p-10" style={{ maxWidth: 720, marginTop: 60 }}>
         {/* 标题：0.5s 后 0.5s 淡入（原版 useTitleFade） */}
         <div key={`evt-${run.currentEvent}`} className="sts-title sts-ev-title" style={{ fontSize: 36, color: '#ffd980', textShadow: '2px 2px 0 #000' }}>
           {ev.name}
