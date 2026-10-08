@@ -1,7 +1,7 @@
 'use client'
 // ============ 主入口：界面路由 + 全局键盘快捷键 ============
 // 快捷键（还原原版）：1-9 出牌 / E·空格·回车 结束回合 / Esc 菜单
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useGame } from '@/store/gameStore'
 import { Stage } from '@/components/game/Stage'
 import { MainMenuScreen, CharacterSelectScreen, SettingsScreen, StatsScreen, CreditsScreen } from '@/components/game/MenuScreens'
@@ -18,12 +18,41 @@ import { ActTransition } from '@/components/game/RewardScreen'
 import { AP } from '@/game/engine'
 import { CARDS } from '@/game/cards'
 
+// ============ 房间切换过渡（原版 NTransition） ============
+// RoomFadeOut：0.5s 停顿 → 0.6s 软边黑幕自上扫落 + 平黑淡入（旧画面保持可见）
+// 全黑瞬间切换画面；RoomFadeIn：0.8s 平黑淡出
+const ROOM_FADE_OUT_MS = 1100, ROOM_FADE_IN_MS = 800
+function useRoomFade(actual: string): { shown: string; phase: 'none' | 'out' | 'in'; seq: number } {
+  const [state, setState] = useState({ shown: actual, phase: 'none' as 'none' | 'out' | 'in', seq: 0 })
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([])
+  useEffect(() => {
+    if (actual === state.shown) return
+    if (state.phase === 'in') {
+      // 淡入途中再次切换：直接换画面并重播淡入（黑幕基本不透明，视觉平滑）
+      setState(s => ({ shown: actual, phase: 'in', seq: s.seq + 1 }))
+      return
+    }
+    timers.current.forEach(clearTimeout); timers.current = []
+    setState(s => ({ shown: s.shown, phase: 'out', seq: s.seq + 1 }))
+    timers.current.push(setTimeout(() => {
+      setState(s => ({ shown: actual, phase: 'in', seq: s.seq + 1 }))
+    }, ROOM_FADE_OUT_MS))
+    timers.current.push(setTimeout(() => {
+      setState(s => (s.phase === 'in' ? { ...s, phase: 'none' } : s))
+    }, ROOM_FADE_OUT_MS + ROOM_FADE_IN_MS))
+  }, [actual]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => timers.current.forEach(clearTimeout), [])
+  return state
+}
+
 export default function Home() {
   const run = useGame(s => s.run)
   const menuScreen = useGame(s => s.menuScreen)
 
   // 根据 run 的 screen 决定显示内容；无 run 时按 menuScreen 路由
-  const cur = run ? run.screen : menuScreen
+  const actual = run ? run.screen : menuScreen
+  // 房间过渡期间渲染旧画面，黑幕全黑后再切换
+  const { shown, phase, seq } = useRoomFade(actual)
 
   // ===== 全局键盘快捷键 =====
   useEffect(() => {
@@ -75,24 +104,31 @@ export default function Home() {
     <Stage>
       <div className="w-full h-full relative">
         {/* ===== 主菜单系列（无 run） ===== */}
-        {cur === 'title' && <MainMenuScreen />}
-        {cur === 'charSelect' && <CharacterSelectScreen />}
-        {cur === 'mpLobby' && <MultiplayerScreen />}
-        {cur === 'stats' && <StatsScreen />}
-        {cur === 'settings' && <SettingsScreen />}
-        {cur === 'credits' && <CreditsScreen />}
+        {shown === 'title' && <MainMenuScreen />}
+        {shown === 'charSelect' && <CharacterSelectScreen />}
+        {shown === 'mpLobby' && <MultiplayerScreen />}
+        {shown === 'stats' && <StatsScreen />}
+        {shown === 'settings' && <SettingsScreen />}
+        {shown === 'credits' && <CreditsScreen />}
         {/* ===== 游戏画面（有 run） ===== */}
-        {cur === 'neow' && <NeowScreen />}
-        {cur === 'map' && <MapScreen />}
-        {cur === 'combat' && <CombatScreen />}
-        {cur === 'reward' && <RewardScreen />}
-        {cur === 'shop' && <ShopScreen />}
-        {cur === 'rest' && <RestScreen />}
-        {cur === 'treasure' && <TreasureScreen />}
-        {cur === 'event' && <EventScreen />}
-        {cur === 'bossRelic' && <BossRelicScreen />}
-        {(cur === 'gameover' || cur === 'victory') && <GameOverScreen />}
-        {cur === 'actTransition' && run && <ActTransition />}
+        {shown === 'neow' && <NeowScreen />}
+        {shown === 'map' && <MapScreen />}
+        {shown === 'combat' && <CombatScreen />}
+        {shown === 'reward' && <RewardScreen />}
+        {shown === 'shop' && <ShopScreen />}
+        {shown === 'rest' && <RestScreen />}
+        {shown === 'treasure' && <TreasureScreen />}
+        {shown === 'event' && <EventScreen />}
+        {shown === 'bossRelic' && <BossRelicScreen />}
+        {(shown === 'gameover' || shown === 'victory') && <GameOverScreen />}
+        {shown === 'actTransition' && <ActTransition />}
+        {/* 房间切换黑幕（原版 NTransition：软边黑幕扫落 + 平黑淡入/淡出；key 确保重触发） */}
+        {phase !== 'none' && (
+          <div key={`rf-${seq}`} className={`sts-room-fade ${phase}`}>
+            <div className="rf-sweep" />
+            <div className="rf-black" />
+          </div>
+        )}
         {/* 遮罩层 */}
         {run && <PileViewOverlay />}
         {run && <CardSelectOverlay />}

@@ -580,3 +580,104 @@ img { -webkit-user-drag: none; }
   0%, 100% { transform: translateX(0); opacity: .8; }
   50% { transform: translateX(7px); opacity: 1; }
 }
+
+/* ============ 第五批：房间切换过渡（原版 NTransition） ============ */
+@keyframes sts-room-sweep { from { transform: translateY(-104%); } to { transform: translateY(0); } }
+@keyframes sts-room-black-out { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sts-room-black-in { from { opacity: 1; } to { opacity: 0; } }
+.room-fade { position: absolute; inset: 0; z-index: 700; pointer-events: none; }
+.room-fade .rf-sweep {
+  position: absolute; left: 0; right: 0; height: 130%; top: -15%;
+  background: linear-gradient(180deg, #000 57.5%, rgba(0,0,0,0.75) 72%, transparent 100%);
+  transform: translateY(-104%);
+  animation: sts-room-sweep 0.6s cubic-bezier(0.33, 1, 0.68, 1) 0.5s forwards;
+}
+.room-fade .rf-black { position: absolute; inset: 0; background: #000; opacity: 0; }
+.room-fade.out .rf-black { animation: sts-room-black-out 0.6s linear 0.5s forwards; }
+.room-fade.in .rf-black { opacity: 1; animation: sts-room-black-in 0.8s linear forwards; }
+.room-fade.in .rf-sweep { display: none; }
+
+/* ============ 第五批：地图节点原版脉冲 / 标记 / 点状路径 / 图例 ============ */
+@keyframes sts-map-node-pulse {
+  0% { transform: scale(1.2); filter: drop-shadow(0 0 4px rgba(255,220,120,0.65)); }
+  25% { transform: scale(1.45); filter: drop-shadow(0 0 10px rgba(255,225,140,0.9)); }
+  50% { transform: scale(1.2); filter: drop-shadow(0 0 4px rgba(255,220,120,0.65)); }
+  75% { transform: scale(0.95); filter: drop-shadow(0 0 2px rgba(255,220,120,0.45)); }
+  100% { transform: scale(1.2); filter: drop-shadow(0 0 4px rgba(255,220,120,0.65)); }
+}
+/* 新脉冲替换旧 glow-only 脉冲 */
+.node.reach { z-index: 20; cursor: pointer; animation: sts-map-node-pulse 1.571s linear infinite; }
+.node { transition: transform 0.5s cubic-bezier(0.33, 1, 0.68, 1), filter 0.5s cubic-bezier(0.33, 1, 0.68, 1); }
+.node.reach:hover, .node.map-hover {
+  animation: none; transform: scale(1.45);
+  filter: drop-shadow(0 0 12px rgba(255,240,200,0.95));
+  transition: transform 0.05s linear, filter 0.05s linear;
+}
+.node.reach:active { animation: none; transform: scale(0.9); transition: transform 0.05s linear; }
+.node.map-select { animation: none; transform: scale(1); transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.node[data-ntype="boss"] { animation: none; }
+.node[data-ntype="boss"].reach:hover { transform: scale(1.05); transition: transform 0.05s linear; }
+.node[data-ntype="boss"].reach:active { transform: scale(1.02); }
+/* 节点白描边 */
+@keyframes sts-map-outline-in { from { opacity: 0; } to { opacity: 0.75; } }
+.node .node-outline {
+  position: absolute; inset: -7%; border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.9), 0 0 16px 4px rgba(255,255,255,0.35);
+  opacity: 0; pointer-events: none;
+}
+.node.reach:hover .node-outline, .node.map-hover .node-outline { animation: sts-map-outline-in 0.05s linear forwards; }
+/* 玩家标记（X轴展开+弹性落地） */
+@keyframes sts-map-marker-in {
+  0% { transform: translateX(-50%) scale(0, 1); opacity: 0; }
+  27% { transform: translateX(-50%) scale(1, 1) translateY(-25px); opacity: 1; }
+  60% { transform: translateX(-50%) scale(1, 1) translateY(4px); }
+  80% { transform: translateX(-50%) scale(1, 1) translateY(-2px); }
+  100% { transform: translateX(-50%) scale(1, 1) translateY(0); }
+}
+.map-marker {
+  position: absolute; width: 44px; height: 44px; z-index: 30;
+  transform: translateX(-50%);
+  animation: sts-map-marker-in 0.95s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  pointer-events: none; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.7));
+}
+.map-marker img { width: 100%; height: 100%; object-fit: contain; }
+/* 点状路径 */
+.map-dot {
+  position: absolute; width: 9px; height: 9px; border-radius: 50%;
+  background: rgba(125, 106, 85, 0.85);
+  box-shadow: 0 1px 1px rgba(30, 18, 8, 0.5);
+  transform: translate(-50%, -50%);
+  transition: background-color 0.25s ease, transform 0.25s ease;
+}
+.map-dot.traveled { background: #241f1a; transform: translate(-50%, -50%) scale(1.25); }
+/* 图例 */
+.map-legend {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  z-index: 40; display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 12px; border-radius: 10px;
+  background: linear-gradient(180deg, rgba(38, 26, 14, 0.92), rgba(24, 16, 8, 0.94));
+  border: 2px solid #5a4226; box-shadow: 0 4px 18px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,220,160,0.12);
+}
+.map-legend .lg-title { font-family: var(--font-title, serif); color: #ffd980; font-size: 13px; letter-spacing: 3px; text-align: center; margin-bottom: 4px; text-shadow: 1px 1px 0 #000; }
+.map-legend .lg-item { display: flex; align-items: center; gap: 8px; padding: 3px 6px; border-radius: 6px; cursor: pointer; transition: background 0.15s ease; }
+.map-legend .lg-item:hover { background: rgba(255, 215, 120, 0.14); }
+.map-legend .lg-item img { width: 22px; height: 22px; object-fit: contain; }
+.map-legend .lg-item span { font-size: 12px; color: #d8c4a0; text-shadow: 1px 1px 0 #000; }
+.map-legend .lg-item.lg-hot span { color: #ffe9a8; }
+.map-legend .lg-item.lg-hot img { filter: drop-shadow(0 0 6px rgba(255,235,170,0.9)); transform: scale(1.15); }
+@media (max-width: 700px) { .map-legend { display: none; } }
+
+/* ============ 第五批：事件界面（打字机/标题淡入/选项滑入/锁定红化） ============ */
+@keyframes sts-ev-title-in { from { opacity: 0; } to { opacity: 1; } }
+.ev-title { opacity: 0; animation: sts-ev-title-in 0.5s ease-out 0.5s forwards; }
+@keyframes sts-ev-desc-in { from { opacity: 0; } to { opacity: 1; } }
+.ev-desc-wrap { opacity: 0; animation: sts-ev-desc-in 1s cubic-bezier(0.61, 1, 0.88, 1) 0.75s forwards; }
+@keyframes sts-ev-opt-in { from { transform: translateX(-60px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.ev-opt { animation: sts-ev-opt-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.ev-opt:not(.dis):hover {
+  filter: brightness(1.2); transform: translateX(2px) scale(1.01);
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.75), 0 0 18px rgba(255,230,170,0.35), inset 0 1px 0 rgba(255,200,140,0.25), 0 3px 0 #1c0a06, 0 5px 10px rgba(0,0,0,0.6);
+}
+.ev-opt.dis { color: #ff8070; filter: hue-rotate(173deg) saturate(0.35) brightness(0.65); }
+@keyframes sts-ev-msg-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.ev-msg { animation: sts-ev-msg-in 0.5s ease-out both; }

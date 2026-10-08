@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "1) 是，节点间路径由点状圆点组成。\n2) 是，左侧已走过的路径点颜色更深。\n3) 是，当前节点（顶部）上方有角色头像标记。\n4) 是，右侧有图例面板。",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1791431958,
+  "id": "202610081159159220abb9811f465e",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610081159159220abb9811f465e",
+  "usage": {
+    "completion_tokens": 52,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 947,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 999
+  }
+}

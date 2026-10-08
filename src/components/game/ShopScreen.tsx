@@ -1,5 +1,6 @@
 'use client'
-// ============ 商店界面 ============
+// ============ 商店界面 + 事件界面（打字机/滑入选项为第五批原版还原） ============
+import { useEffect, useState } from 'react'
 import { useGame } from '@/store/gameStore'
 import { CardView } from './CardView'
 import { RELICS } from '@/game/relics'
@@ -141,6 +142,29 @@ export function ShopScreen() {
 }
 
 // ============ 事件界面 ============
+// ============ 事件描述打字机（原版 NEventLayout Typewriter） ============
+// 0.75s 后 1s 内按 Sine Out 分布逐字揭示（前快后慢），容器同步淡入
+function Typewriter({ text }: { text: string }) {
+  const [shown, setShown] = useState(0)
+  useEffect(() => {
+    let raf = 0
+    const t0 = performance.now()
+    const delay = 750, dur = 1000
+    const tick = (t: number) => {
+      const k = Math.min(1, Math.max(0, (t - t0 - delay) / dur))
+      setShown(Math.round(Math.sin((k * Math.PI) / 2) * text.length))
+      if (k < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [text])
+  return (
+    <span className="sts-ev-desc" style={{ display: 'inline-block' }}>
+      {text.slice(0, shown)}<span style={{ opacity: 0 }}>{text.slice(shown)}</span>
+    </span>
+  )
+}
+
 export function EventScreen() {
   const run = useGame(s => s.run)
   const chooseEvent = useGame(s => s.chooseEvent)
@@ -155,11 +179,12 @@ export function EventScreen() {
     <div className="w-full h-full relative flex items-center justify-center select-none"
       style={{ background: 'radial-gradient(ellipse at 50% 25%, #2e2038 0%, #120a18 60%, #060306 100%)' }}>
       <div className="sts-panel flex flex-col items-center gap-5 p-10" style={{ maxWidth: 720 }}>
-        <div className="sts-title" style={{ fontSize: 36, color: '#ffd980', textShadow: '2px 2px 0 #000' }}>
+        {/* 标题：0.5s 后 0.5s 淡入（原版 useTitleFade） */}
+        <div key={`evt-${run.currentEvent}`} className="sts-title sts-ev-title" style={{ fontSize: 36, color: '#ffd980', textShadow: '2px 2px 0 #000' }}>
           {ev.name}
         </div>
-        <div className="sts-body" style={{ fontSize: 16, color: '#e8d8c0', lineHeight: 1.8, textAlign: 'justify' }}>
-          {ev.desc}
+        <div className="sts-body" style={{ fontSize: 16, color: '#e8d8c0', lineHeight: 1.8, textAlign: 'justify', minHeight: 84 }}>
+          <Typewriter key={`tw-${run.currentEvent}`} text={ev.desc} />
         </div>
         {mp && (
           <div className="sts-body" style={{ fontSize: 13, color: '#a8b8c8' }}>
@@ -167,16 +192,16 @@ export function EventScreen() {
           </div>
         )}
         {eventMsg && (
-          <div className="sts-body" style={{ fontSize: 15, color: '#8fe89a' }}>{eventMsg}</div>
+          <div className="sts-body sts-ev-msg" style={{ fontSize: 15, color: '#8fe89a' }}>{eventMsg}</div>
         )}
         <div className="flex flex-col gap-3 w-full mt-2">
           {ev.choices.map((c: any, i: number) => {
             const disabled = c.effect === 'cleric_heal' && me.gold < 35 || c.effect === 'cleric_purify' && me.gold < 50
             return (
               <button
-                key={i}
-                className="sts-btn text-left"
-                style={{ fontSize: 16, opacity: disabled ? 0.45 : 1, width: '100%' }}
+                key={`${run.currentEvent}-${i}`}
+                className={`sts-btn sts-ev-opt text-left ${disabled ? 'sts-ev-locked' : ''}`}
+                style={{ fontSize: 16, opacity: 1, width: '100%', animationDelay: `${0.5 + i * 0.2}s` }}
                 disabled={disabled}
                 onClick={() => chooseEvent(i)}
               >

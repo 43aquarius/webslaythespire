@@ -323,3 +323,27 @@ Work Log:
 Stage Summary:
 - sts2-web 第四批研究成果落地：4大项（遗物闪光精确参数/卡牌涟漪高亮/篝火去饱和+烟雾/战斗内升级预览）×2版本，19+18项E2E全绿，VLM视觉确认
 - 至此 sts2-web 研究的高价值可移植项已全部落地（四批共 19 大项）；剩余候选（房间切换渐变过渡、检视屏大图浏览）价值/成本比较低，待后续需要时再做
+---
+Task ID: 16
+Agent: main
+Task: ①修复预览界面"部署失败" ②sts2-web 研究第五批落地：房间切换过渡/地图点状路径/节点脉冲/玩家标记/图例/事件打字机（两版本同步）
+
+Work Log:
+- 【部署失败根因】诊断链：平台发布构建成功(.next产物完整+BUILD_ID存在)但部署失败 → 排查发现上个会话 double-fork 的孤儿 dev 服务器(PPID=1)占着 3000 端口，平台 start 启动生产服务器 EADDRINUSE 崩溃 → 服务器日志确认 EADDRINUSE。次要根因：环境无 fuser 命令，最初加固的 start 脚本端口清理静默失效
+- 【部署修复】①杀掉孤儿 dev 服务器释放 3000 ②start_prod.sh 重写：ss -tlnp 解析 PID kill + pkill -f "[s]tandalone/server.js"（[s]技巧防自匹配自杀）+ 端口释放等待+强杀兜底 + double-fork 分离启动 + 版本回显验证 ③package.json start 同步可移植端口清理 ④模拟 bun run start 验证：旧服务器被清、新服务器成功绑定无 EADDRINUSE。生产 v1.12 已在 :3000 服务（Caddy :81 反代验证 200）
+- 【研究新模块】重新克隆 sts2-web：transition.tsx(RoomFadeOut 0.5s停顿→0.6s软边黑幕扫落+平黑淡入/RoomFadeIn 0.8s淡出)、map.tsx 980行全读(点状路径22px间距+随机翻转/旋转/抖动±3、走过#241F1A 1.2×、可达节点sin(phase·4)·0.25+1.2脉冲、unfocus相位重置3.926991、hover 1.45×+白描边α0.75@0.05s、press 0.9×、select Back ease、Boss节点Hover-only 1.05×、NMapMarker 40px在节点上35px X轴0→1展开0.2s+上浮25px Elastic 0.75s落地、图例悬停S.highlight高亮同类、墨迹逐朵点亮0.8s、开图动画0.25s+图例从x+120滑入Back、关闭+200px下滑、滚动lerp15/s+橡皮筋12/s、ACT横幅数字450→440+幕名+0.25底带、地图绘图右键羽毛笔)、event.tsx(标题0.5s后0.5s淡入、描述打字机glyphs Sine Out揭示0.75s+1s、选项800×100自-60px滑入0.5s BackOut第i个延迟0.5+0.2i、hover brightness1.2+1.01×+描边0.75、锁定hue-rotate(173deg)饱和0.2亮度0.65红字)、cardfx.ts(NCardTrailVfx双色叠加拖尾按角色配色/物品投掷0.55s弧高350px旋转-2880°/s/洗牌黑色剪影)、buttons.tsx(确认/返回/继续按钮滑入滑出参数)、timeline.tsx(STS2专属元进度，跳过)
+- 【落地①房间过渡】Next.js: useRoomFade hook(shown/phase/seq 三态) —— 画面切换时旧画面保持渲染，黑幕(软边扫落rf-sweep+平黑rf-black)0.5s+0.6s扫落后全黑瞬间切换，再0.8s淡出；淡入途中再切换直接换画面重播淡入；seq key 确保动画重触发。单文件版: render() 拦截换屏分支(startRoomFade/applyScreenNow/makeFadeOverlay)，out 阶段旧画面继续 updateScreen 更新，t1 读最新状态切换
+- 【落地②点状路径】替代 SVG 虚线：每 22 单距一朵 9px 圆点，确定性伪随机抖动±3.5(prand(seed)，两版本一致公式)，走过 #241F1A 1.25× / 未走 rgba(125,106,85,.85)；Next.js useMemo 预计算+按边分组；单文件版键控 children 更新+data-edge/data-idx
+- 【落地③节点动画】可达节点 sts-map-node-pulse 动画(sin 5关键帧采样，周期1.571s=4rad/s)；hover 1.45×+白描边(0.05s)；:active 0.9×；选中 Back ease 弹回；Boss 节点不脉冲(原版Hover-only)悬停1.05×；不可达 0.5 透明
+- 【落地④玩家标记】当前节点上方62px处44px角色头像，入场动画 X轴scale(0,1)展开+上浮25px Elastic 落地(0.95s)；联机取 myIdx 角色；两版本
+- 【落地⑤选点墨迹】点击可达节点 → 先墨迹(该边圆点逐朵 traveled，transitionDelay=k×min(0.55/n,0.1)) + 节点 map-select 态 → 550ms 后才真正 chooseNode（与黑幕扫落时序对齐，原版 visited 为空首步无墨迹同样处理）
+- 【落地⑥图例】右侧图例面板(6项:未知/商店/宝箱/篝火/敌人/精英)，悬停条目高亮同类节点(1.45×+白描边)；Next.js MapLegendHighlight effect 加类；单文件版全局 mouseover 委托 closest('.lg-item')；窄屏(<700px)隐藏
+- 【落地⑦事件界面】标题 0.5s 后 0.5s 淡入；描述打字机(0.75s 后 1s 内 sin(kπ/2) 分布逐字揭示+隐藏尾span保持排版，rAF 驱动)；选项自 -60px 滑入 0.5s Back Out 错峰 0.5+0.2i；hover brightness1.2+白描边；锁定选项红字+hue-rotate(173deg)滤镜；结果消息淡入；事件切换才重播动画(结果更新不重播)
+- 【测试】test_batch15(Next.js 31/31)：过渡黑幕out/in/移除+旧画面保持+扫落/平黑动画参数/圆点>60+SVG移除/脉冲动画+周期+Boss不脉冲/首步无墨迹(原版行为)+跳转延迟550ms/标记渲染+动画+头像+位置/第二跳墨迹≥3朵+延迟递增≤0.56s/图例6项+原生hover高亮同类/标题淡入+打字机进行中+完成+选项滑入+错峰延迟+锁定滤镜；test_batch15_standalone(28/28)同套(单文件版图片为data URL改断言)；regression 16/16；regression5 412/412；mptest 22/22；fulltest 两幕全流程(含新过渡时序)；VLM核验4次：Next.js地图(点状✓走过深✓图例✓原版风格✓)+墨迹中途+黑幕扫落(顶部黑底部可见✓)+打字机(部分→完整✓)+单文件版地图(含标记✓)
+- 【调试经验】①本环境无 fuser——端口清理须用 ss 解析 PID + pkill "[s]"正则技巧防自匹配 ②agent-browser eval 的 JSON.stringify 结果会被二次解包(直接返回对象字面量最稳) ③React onMouseEnter 无法用 dispatchEvent(mouseenter) 触发——用 agent-browser 原生 hover 命令或 mouseover+relatedTarget ④分离式 next dev 服务器在本环境两次静默死亡(bun 单进程存活)——dev 用直接 node 二进制+disown，测试端口用 3100 与生产 3000 隔离 ⑤shell sleep 单位是秒，别把 JS 的 2500ms 写成 sleep 2500
+- 【版本】v1.11→v1.12(两版本)；生产构建+单文件 18.88MB 重建；生产服务器 :3000 已运行 v1.12
+
+Stage Summary:
+- 部署失败根治：孤儿dev进程占端口+start脚本fuser失效双因，可移植端口清理落地，模拟平台start流程验证通过，预览现服务 v1.12
+- sts2-web 第五批研究成果落地：7大项(房间切换过渡/点状路径+墨迹/节点脉冲动画/玩家标记/图例/事件打字机+选项滑入)×2版本，31+28项E2E全绿，VLM四轮视觉确认
+- 地图从"SVG虚线+静态节点"升级为原版"点状路径+呼吸脉冲+角色标记+图例"，事件界面获得原版叙事节奏(标题→打字机→选项依次滑入)，房间切换有原版黑幕扫落过渡——整体还原度显著提升

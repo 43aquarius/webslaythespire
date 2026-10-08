@@ -725,3 +725,159 @@
   50% { transform: translateX(7px); opacity: 1; }
 }
 .sts-up-preview-card { filter: drop-shadow(0 0 16px rgba(255, 210, 100, .35)); }
+
+/* ============ 第五批：房间切换过渡（原版 NTransition RoomFadeOut/RoomFadeIn） ============ */
+/* RoomFadeOut: 0.5s 停顿 → 0.6s 软边黑幕自上扫落 + 平黑淡入；RoomFadeIn: 0.8s 平黑淡出 */
+@keyframes sts-room-sweep {
+  from { transform: translateY(-104%); }
+  to { transform: translateY(0); }
+}
+@keyframes sts-room-black-out {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes sts-room-black-in {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.sts-room-fade {
+  position: absolute; inset: 0; z-index: 200; pointer-events: none;
+}
+.sts-room-fade .rf-sweep {
+  position: absolute; left: 0; right: 0; height: 130%; top: -15%;
+  background: linear-gradient(180deg, #000 57.5%, rgba(0,0,0,0.75) 72%, transparent 100%);
+  transform: translateY(-104%);
+  animation: sts-room-sweep 0.6s cubic-bezier(0.33, 1, 0.68, 1) 0.5s forwards;
+}
+.sts-room-fade .rf-black {
+  position: absolute; inset: 0; background: #000; opacity: 0;
+}
+.sts-room-fade.out .rf-black { animation: sts-room-black-out 0.6s linear 0.5s forwards; }
+.sts-room-fade.in .rf-black { opacity: 1; animation: sts-room-black-in 0.8s linear forwards; }
+.sts-room-fade.in .rf-sweep { display: none; }
+
+/* ============ 第五批：地图节点原版脉冲（sin·0.25+1.2 @4rad/s，周期1.571s） ============ */
+@keyframes sts-map-node-pulse {
+  0% { transform: scale(1.2); filter: drop-shadow(0 0 4px rgba(255,220,120,0.65)); }
+  25% { transform: scale(1.45); filter: drop-shadow(0 0 10px rgba(255,225,140,0.9)); }
+  50% { transform: scale(1.2); filter: drop-shadow(0 0 4px rgba(255,220,120,0.65)); }
+  75% { transform: scale(0.95); filter: drop-shadow(0 0 2px rgba(255,220,120,0.45)); }
+  100% { transform: scale(1.2); filter: drop-shadow(0 0 4px rgba(255,220,120,0.65)); }
+}
+.sts-map-pulse { animation: sts-map-node-pulse 1.571s linear infinite; }
+/* 基础缓动：悬停离开 0.5s Cubic 回落（原版 unhover） */
+.sts-map-node { transition: transform 0.5s cubic-bezier(0.33, 1, 0.68, 1), filter 0.5s cubic-bezier(0.33, 1, 0.68, 1); }
+/* 自然悬停 + 图例高亮（.map-hover）：瞬间 1.45× + 白描边（原版 hover 0.05s） */
+.sts-map-node.sts-map-pulse:hover,
+.sts-map-node.map-hover.sts-map-pulse {
+  animation: none;
+  transform: scale(1.45);
+  filter: drop-shadow(0 0 12px rgba(255,240,200,0.95));
+  transition: transform 0.05s linear, filter 0.05s linear;
+}
+/* 按下 0.9×（原版 press） */
+.sts-map-node.sts-map-pulse:active {
+  animation: none;
+  transform: scale(0.9);
+  transition: transform 0.05s linear;
+}
+/* 选中：Back 弹回 1×（原版 select） */
+.sts-map-node.map-select.sts-map-pulse {
+  animation: none;
+  transform: scale(1);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+/* Boss 节点：不脉冲（原版仅 Hover 缩放），悬停 1.05×、按下 1.02× */
+.sts-map-node[data-ntype="boss"] { animation: none; }
+.sts-map-node[data-ntype="boss"]:hover { transform: scale(1.05); transition: transform 0.05s linear; }
+.sts-map-node[data-ntype="boss"]:active { transform: scale(1.02); }
+
+/* 地图节点白描边（原版 OUTLINE_HOVER α0.75） */
+@keyframes sts-map-outline-in { from { opacity: 0; } to { opacity: 0.75; } }
+.sts-map-outline {
+  position: absolute; inset: -7%; border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.9), 0 0 16px 4px rgba(255,255,255,0.35);
+  opacity: 0; pointer-events: none;
+}
+.sts-map-node.sts-map-pulse:hover .sts-map-outline,
+.sts-map-node.map-hover.sts-map-pulse .sts-map-outline { animation: sts-map-outline-in 0.05s linear forwards; }
+
+/* 地图玩家标记（原版 NMapMarker：X轴0→1展开0.2s + 上浮25px弹性落地0.75s） */
+@keyframes sts-map-marker-in {
+  0% { transform: translateX(-50%) scale(0, 1); opacity: 0; }
+  27% { transform: translateX(-50%) scale(1, 1) translateY(-25px); opacity: 1; }
+  60% { transform: translateX(-50%) scale(1, 1) translateY(4px); }
+  80% { transform: translateX(-50%) scale(1, 1) translateY(-2px); }
+  100% { transform: translateX(-50%) scale(1, 1) translateY(0); }
+}
+.sts-map-marker {
+  position: absolute; width: 44px; height: 44px; z-index: 30;
+  transform: translateX(-50%);
+  animation: sts-map-marker-in 0.95s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  pointer-events: none;
+  filter: drop-shadow(0 3px 5px rgba(0,0,0,0.7));
+}
+.sts-map-marker img { width: 100%; height: 100%; object-fit: contain; }
+
+/* 地图路径圆点（原版 map_dot：走过 #241F1A 1.2×，未走 #7D6A55D8） */
+.sts-map-dot {
+  position: absolute; width: 9px; height: 9px; border-radius: 50%;
+  background: rgba(125, 106, 85, 0.85);
+  box-shadow: 0 1px 1px rgba(30, 18, 8, 0.5);
+  transform: translate(-50%, -50%);
+  transition: background-color 0.25s ease, transform 0.25s ease;
+}
+.sts-map-dot.traveled { background: #241f1a; transform: translate(-50%, -50%) scale(1.25); }
+.sts-map-dot.inking { background: #241f1a; transform: translate(-50%, -50%) scale(1.25); }
+
+/* 地图图例（原版 map_legend 卷轴） */
+.sts-map-legend {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  z-index: 40; display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 12px; border-radius: 10px;
+  background: linear-gradient(180deg, rgba(38, 26, 14, 0.92), rgba(24, 16, 8, 0.94));
+  border: 2px solid #5a4226; box-shadow: 0 4px 18px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,220,160,0.12);
+}
+.sts-map-legend .lg-title {
+  font-family: var(--sts-font-title); color: #ffd980; font-size: 13px; letter-spacing: 3px;
+  text-align: center; margin-bottom: 4px; text-shadow: 1px 1px 0 #000;
+}
+.sts-map-legend .lg-item {
+  display: flex; align-items: center; gap: 8px; padding: 3px 6px; border-radius: 6px;
+  cursor: pointer; transition: background 0.15s ease;
+}
+.sts-map-legend .lg-item:hover { background: rgba(255, 215, 120, 0.14); }
+.sts-map-legend .lg-item img { width: 22px; height: 22px; object-fit: contain; }
+.sts-map-legend .lg-item span {
+  font-family: var(--sts-font-body); font-size: 12px; color: #d8c4a0; text-shadow: 1px 1px 0 #000;
+}
+.sts-map-legend .lg-item.lg-hot span { color: #ffe9a8; }
+.sts-map-legend .lg-item.lg-hot img { filter: drop-shadow(0 0 6px rgba(255,235,170,0.9)); transform: scale(1.15); }
+/* 窄屏隐藏图例（避免遮挡地图） */
+@media (max-width: 700px) { .sts-map-legend { display: none; } }
+
+/* ============ 第五批：事件界面（原版 NEventLayout） ============ */
+/* 标题 0.5s 后 0.5s 淡入 */
+@keyframes sts-ev-title-in { from { opacity: 0; } to { opacity: 1; } }
+.sts-ev-title { opacity: 0; animation: sts-ev-title-in 0.5s ease-out 0.5s forwards; }
+/* 描述打字机容器：0.75s 后 1s 淡入（字符揭示由 JS 驱动） */
+@keyframes sts-ev-desc-in { from { opacity: 0; } to { opacity: 1; } }
+.sts-ev-desc { opacity: 0; animation: sts-ev-desc-in 1s cubic-bezier(0.61, 1, 0.88, 1) 0.75s forwards; }
+/* 选项：自左侧 -60px 滑入（0.5s Back Out，第 i 个延迟 0.5+0.2i） */
+@keyframes sts-ev-opt-in {
+  from { transform: translateX(-60px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.sts-ev-opt {
+  animation: sts-ev-opt-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transition: filter 0.05s linear, transform 0.05s linear;
+}
+.sts-ev-opt:not(:disabled):hover {
+  filter: brightness(1.2); transform: translateX(2px) scale(1.01);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.75), 0 0 18px rgba(255, 230, 170, 0.35), inset 0 1px 0 rgba(255,200,140,0.25), 0 3px 0 #1c0a06, 0 5px 10px rgba(0,0,0,0.6);
+}
+.sts-ev-opt:not(:disabled):active { transform: scale(0.99); }
+.sts-ev-opt:disabled { color: #ff8070; filter: hue-rotate(173deg) saturate(0.35) brightness(0.65); }
+/* 事件结果消息淡入 */
+@keyframes sts-ev-msg-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.sts-ev-msg { animation: sts-ev-msg-in 0.5s ease-out both; }

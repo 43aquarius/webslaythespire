@@ -551,7 +551,7 @@ function rMainMenu(): string {
       ${items.map(it => `<button class="menu-btn sts-title ${it.dis ? 'dis' : ''}" data-act="${it.act}" ${it.arg ? `data-screen="${it.arg}"` : ''} ${it.dis ? 'disabled' : ''}
         style="opacity:${it.dis ? 1 : ''}"><span style="opacity:${it.dis ? .45 : 1};display:block">${it.label}</span></button>`).join('')}
     </div>
-    <div class="sts-body" style="color:#8a7458;font-size:12px;position:absolute;left:16px;bottom:12px">Web 复刻版 v1.11</div>
+    <div class="sts-body" style="color:#8a7458;font-size:12px;position:absolute;left:16px;bottom:12px">Web 复刻版 v1.12</div>
   </div>
   <a class="github-btn" href="https://github.com/43aquarius/webslaythespire" target="_blank" rel="noreferrer" title="GitHub 仓库">${GITHUB_SVG}<span>43aquarius/webslaythespire</span></a>
 </div>`
@@ -1279,23 +1279,39 @@ function updateCombatScreen(run: RunState) {
 }
 
 // ============ 地图界面（骨架 + 键控节点/边更新） ============
+// 第五批：点状路径(替代SVG虚线)/节点脉冲/玩家标记/图例/选点墨迹
 const NODE_ICON: Record<string, string> = { monster: 'monster', elite: 'elite', event: 'event', shop: 'shop', treasure: 'treasure', rest: 'rest', boss: 'boss' }
 const NODE_NAME: Record<string, string> = { monster: '普通敌人', elite: '精英敌人', event: '未知事件', shop: '商店', treasure: '宝箱', rest: '篝火', boss: 'BOSS' }
+const LEGEND_ITEMS: [string, string][] = [
+  ['event', '未知'], ['shop', '商店'], ['treasure', '宝箱'],
+  ['rest', '篝火'], ['monster', '敌人'], ['elite', '精英'],
+]
+
+/** 确定性伪随机（与 Next.js 版一致） */
+const frac = (x: number) => x - Math.floor(x)
+const prand = (seed: number) => frac(Math.sin(seed * 127.1 + 311.7) * 43758.5453)
 
 function buildMapScreen(): string {
   return `<div class="screen">
   ${topHudShell()}
   <div class="map-scroll" id="mapScroll">
     <div class="map-canvas" style="background-image:url('${A('bg/map.jpg')}')">
-      <svg id="map-edges"></svg>
+      <div id="map-dots"></div>
       <div id="map-nodes"></div>
+      <div id="map-marker-holder"></div>
       <div class="map-fade"></div>
     </div>
+  </div>
+  <div class="map-legend">
+    <div class="lg-title">图 例</div>
+    ${LEGEND_ITEMS.map(([t, n]) => `<div class="lg-item" data-ltype="${t}"><img src="${A('mapicons/' + t + '.png')}"><span>${n}</span></div>`).join('')}
   </div>
 </div>`
 }
 
 let lastMapScrollNode: string | null | undefined
+// 选点墨迹状态（防重入）
+let mapInking = false
 
 function updateMapScreen(run: RunState) {
   updateHud(run, false)
@@ -1312,19 +1328,21 @@ function updateMapScreen(run: RunState) {
       if (!el) {
         el = document.createElement('div')
         el.dataset.nid = nd.id
-        el.innerHTML = `<img src="${A('mapicons/' + NODE_ICON[nd.type] + '.png')}" alt=""><span class="cur-ring" style="display:none"></span>`
+        el.dataset.ntype = nd.type
+        el.innerHTML = `<img src="${A('mapicons/' + NODE_ICON[nd.type] + '.png')}" alt=""><span class="cur-ring" style="display:none"></span><span class="node-outline"></span>`
         holder.appendChild(el)
       }
+      el.dataset.ntype = nd.type
       const isCur = run.currentNodeId === nd.id
       const isReach = reach.includes(nd.id)
       const visited = run.visitedNodes.includes(nd.id)
-      const cls = `node ${isReach ? 'reach' : ''} ${!isReach && !visited && !isCur ? 'locked' : ''}`
+      const cls = ['node', nd.type === 'boss' ? 'boss' : '', isReach ? 'reach' : '', !isReach && !visited && !isCur ? 'locked' : ''].filter(Boolean).join(' ')
       if (el.className !== cls) el.className = cls
       el.style.left = `calc(${(nd.x / W) * 100}% - ${size / 2}px)`
       el.style.top = `calc(${(nd.y / H) * 100}% - ${size / 2}px)`
       el.style.width = el.style.height = size + 'px'
       el.style.zIndex = isReach || isCur ? '20' : '10'
-      el.style.opacity = visited && !isCur ? '0.45' : '1'
+      el.style.opacity = visited && !isCur ? '0.5' : '1'
       if (isReach) { el.dataset.act = 'chooseNode'; el.dataset.id = nd.id }
       else { delete el.dataset.act }
       el.dataset.tip = `<b>${NODE_NAME[nd.type]}</b>`
@@ -1335,32 +1353,54 @@ function updateMapScreen(run: RunState) {
     }
   }
 
-  // 边（属性级更新）
-  const svg = document.getElementById('map-edges')
-  if (svg) {
+  // 边：点状路径（原版 map_dot：每 22 单距一朵，确定性抖动 ±3.5；走过变深色 1.25×）
+  const dotHolder = document.getElementById('map-dots')
+  if (dotHolder) {
     let i = 0
     for (const nd of Object.values(map.nodes)) {
       for (const toId of nd.edges) {
         const to = map.nodes[toId]
         if (!to) continue
-        let line = svg.children[i] as SVGLineElement
-        if (!line) { line = document.createElementNS('http://www.w3.org/2000/svg', 'line'); svg.appendChild(line) }
         const visitedEdge = run.visitedNodes.includes(toId) && (run.currentNodeId === nd.id || run.visitedNodes.includes(nd.id))
-        const fromCurrent = run.currentNodeId === nd.id
-        line.setAttribute('x1', `${(nd.x / W) * 100}%`)
-        line.setAttribute('y1', `${(nd.y / H) * 100}%`)
-        line.setAttribute('x2', `${(to.x / W) * 100}%`)
-        line.setAttribute('y2', `${(to.y / H) * 100}%`)
-        line.setAttribute('stroke', visitedEdge ? '#ffd97a' : fromCurrent ? '#f0e6cc' : '#cfc2a4')
-        line.setAttribute('stroke-width', visitedEdge ? '6' : '5')
-        if (visitedEdge) line.removeAttribute('stroke-dasharray')
-        else line.setAttribute('stroke-dasharray', '0.5 13')
-        line.setAttribute('stroke-linecap', 'round')
-        line.setAttribute('opacity', visitedEdge || fromCurrent ? '0.95' : '0.75')
-        i++
+        const len = Math.hypot(to.x - nd.x, to.y - nd.y)
+        const count = Math.floor(len / 22)
+        const vx = (to.x - nd.x) / len, vy = (to.y - nd.y) / len
+        const edgeKey = `${nd.id}>${toId}`
+        for (let k = 1; k <= count; k++) {
+          let dot = dotHolder.children[i] as HTMLElement | null
+          if (!dot) { dot = document.createElement('div'); dotHolder.appendChild(dot) }
+          const seed = nd.id.length * 131 + toId.length * 977 + k * 37
+          dot.dataset.edge = edgeKey
+          dot.dataset.idx = String(k)
+          const cls = 'map-dot' + (visitedEdge ? ' traveled' : '')
+          if (dot.className !== cls) dot.className = cls
+          dot.style.left = ((nd.x + vx * k * 22 + (prand(seed) - 0.5) * 7) / W * 100) + '%'
+          dot.style.top = ((nd.y + vy * k * 22 + (prand(seed + 0.5) - 0.5) * 7) / H * 100) + '%'
+          i++
+        }
       }
     }
-    while (svg.children.length > i) svg.lastChild!.remove()
+    while (dotHolder.children.length > i) dotHolder.lastChild!.remove()
+  }
+
+  // 玩家标记（原版 NMapMarker：当前节点上方，X轴展开+弹性落地）
+  const mh = document.getElementById('map-marker-holder')
+  if (mh) {
+    const cur = run.currentNodeId ? map.nodes[run.currentNodeId] : null
+    if (cur) {
+      const meP = run.players[run.players.length > 1 ? g().net.myIdx : 0] || run.players[0]
+      const myChar = (meP as any)?.character || 'ironclad'
+      if (mh.dataset.cur !== run.currentNodeId) {
+        mh.dataset.cur = run.currentNodeId
+        mh.innerHTML = `<div class="map-marker"><img src="${A('hero/' + myChar + '.png')}"></div>`
+        const mk = mh.firstElementChild as HTMLElement
+        mk.style.left = (cur.x / W * 100) + '%'
+        mk.style.top = `calc(${(cur.y / H * 100)}% - 62px)`
+      }
+    } else if (mh.dataset.cur) {
+      mh.dataset.cur = ''
+      mh.innerHTML = ''
+    }
   }
 
   // 节点变化时自动滚动
@@ -1633,18 +1673,40 @@ function rTreasure(): string {
 </div>`
 }
 
-function rEvent(run: RunState): string {
+// 事件界面打字机（原版 NEventLayout：0.75s 后 1s 内 Sine Out 逐字揭示）
+let lastEvTyped = ''
+let evTypeRaf = 0
+function startEvTypewriter(text: string) {
+  cancelAnimationFrame(evTypeRaf)
+  const shown = document.getElementById('ev-shown')
+  const rest = document.getElementById('ev-rest')
+  if (!shown || !rest) return
+  shown.textContent = ''
+  rest.textContent = text
+  const t0 = performance.now()
+  const tick = (t: number) => {
+    const k = Math.min(1, Math.max(0, (t - t0 - 750) / 1000))
+    const n = Math.round(Math.sin((k * Math.PI) / 2) * text.length)
+    shown.textContent = text.slice(0, n)
+    rest.textContent = text.slice(n)
+    if (k < 1) evTypeRaf = requestAnimationFrame(tick)
+  }
+  evTypeRaf = requestAnimationFrame(tick)
+}
+
+function rEvent(run: RunState, animate = true): string {
   const ev = EVENTS[run.currentEvent!]
   const msg = g().eventMsg
   return `<div class="screen event-bg center-col">
   <div class="sts-panel event-panel">
-    <div class="sts-title" style="font-size:34px;color:#ffd980;text-shadow:2px 2px 0 #000">${esc(ev.name)}</div>
-    <div class="sts-body event-desc">${esc(ev.desc)}</div>
-    ${msg ? `<div class="sts-body" style="color:#8fe89a">${esc(msg)}</div>` : ''}
+    <div class="sts-title ev-title" style="font-size:34px;color:#ffd980;text-shadow:2px 2px 0 #000">${esc(ev.name)}</div>
+    <div class="sts-body event-desc ev-desc-wrap"><span id="ev-shown"></span><span id="ev-rest" style="opacity:0">${esc(ev.desc)}</span></div>
+    ${msg ? `<div class="sts-body ev-msg" style="color:#8fe89a">${esc(msg)}</div>` : ''}
     <div class="event-choices">${ev.choices.map((ch: any, i: number) => {
       const meE = run.players[run.players.length > 1 ? g().net.myIdx : 0] || run.players[0]
       const dis = (ch.effect === 'cleric_heal' && meE.gold < 35) || (ch.effect === 'cleric_purify' && meE.gold < 50)
-      return `<button class="sts-btn event-btn ${dis ? 'dis' : ''}" data-act="chooseEvent" data-idx="${i}">${esc(ch.text)}</button>`
+      const animStyle = animate ? `animation-delay:${0.5 + i * 0.2}s` : 'animation:none'
+      return `<button class="sts-btn event-btn ev-opt ${dis ? 'dis' : ''}" data-act="chooseEvent" data-idx="${i}" style="${animStyle}">${esc(ch.text)}</button>`
     }).join('')}</div>
   </div>
 </div>`
@@ -2081,7 +2143,16 @@ function updateScreen(scr: string, run: RunState | null) {
   else if (scr === 'shop') updateShopScreen(run)
   else if (scr === 'neow') sigScreen(`neow:${run.character}:${run.neow?.chosen ?? ''}:${run.neow?.options.map(o => o.id).join(',')}:${run.players.length}:${run.neow?.chooserIdx}:${run.neow?.mpOptions?.map(o => o.map(x => x.id).join('+')).join('|')}`, () => rNeow(run))
   else if (scr === 'actTransition') { /* 骨架已含 data-act=continueAct，自动推进 */ autoAdvanceAct() }
-  else if (scr === 'event') sigScreen(`event:${run.currentEvent}:${g().eventMsg}:${run.gold}`, () => rEvent(run))
+  else if (scr === 'event') {
+    const evId = run.currentEvent ?? ''
+    const first = lastEvTyped !== evId
+    sigScreen(`event:${evId}:${g().eventMsg}:${run.gold}`, () => rEvent(run, first))
+    // 新事件：启动打字机（仅事件切换时，结果消息更新不重播）
+    if (first && run.currentEvent && EVENTS[run.currentEvent]) {
+      lastEvTyped = evId
+      startEvTypewriter(EVENTS[run.currentEvent].desc)
+    }
+  }
   else if (scr === 'rest') sigScreen(`rest:${run.hp}:${run.maxHp}:${run.relics.length}:${run.mpRest?.join(',') ?? ''}:${g().net.myIdx}`, () => rRest(run))
   else if (scr === 'treasure') sigScreen('treasure', () => rTreasure())
   else if (scr === 'bossRelic') sigScreen('bossRelic', () => rBossRelic(run))
@@ -2106,6 +2177,57 @@ function watchUpgradeFx() {
   setTimeout(() => { el.remove(); st.clearUpgradeFx() }, 2900)
 }
 
+// ============ 房间切换过渡（原版 NTransition：0.5s停顿→0.6s软边黑幕扫落+平黑淡入→全黑切换→0.8s淡出） ============
+let roomFading = false
+let roomFadePhase: 'out' | 'in' = 'out'
+let roomFadeT1: ReturnType<typeof setTimeout> | null = null
+let roomFadeT2: ReturnType<typeof setTimeout> | null = null
+
+function killRoomFade() {
+  if (roomFadeT1) clearTimeout(roomFadeT1)
+  if (roomFadeT2) clearTimeout(roomFadeT2)
+  roomFadeT1 = roomFadeT2 = null
+  document.querySelectorAll('.room-fade').forEach(e => e.remove())
+  roomFading = false
+}
+
+function applyScreenNow(scr: string, run: RunState | null) {
+  curScreenKey = scr
+  ;(app as any).__sig = ''
+  app.innerHTML = buildScreen(scr, run)
+  updateScreen(scr, run)
+}
+
+function makeFadeOverlay(phase: 'out' | 'in') {
+  document.querySelectorAll('.room-fade').forEach(e => e.remove())
+  const ov = document.createElement('div')
+  ov.className = `room-fade ${phase}`
+  ov.innerHTML = '<div class="rf-sweep"></div><div class="rf-black"></div>'
+  stageEl.appendChild(ov)
+}
+
+function startRoomFade() {
+  killRoomFade()
+  roomFading = true
+  roomFadePhase = 'out'
+  makeFadeOverlay('out')
+  roomFadeT1 = setTimeout(() => {
+    // 全黑：读取最新目标画面切换
+    const st = g()
+    const s2 = st.run ? st.run.screen : (st.menuScreen || 'title')
+    applyScreenNow(s2, st.run)
+    roomFadePhase = 'in'
+    makeFadeOverlay('in')
+    roomFadeT2 = setTimeout(() => {
+      document.querySelectorAll('.room-fade').forEach(e => e.remove())
+      roomFading = false
+      const st2 = g()
+      const s3 = st2.run ? st2.run.screen : (st2.menuScreen || 'title')
+      if (s3 !== curScreenKey) startRoomFade()
+    }, 800)
+  }, 1100)
+}
+
 function render() {
   const st = g()
   const run = st.run
@@ -2114,11 +2236,32 @@ function render() {
   updateMusic(st)
   lobbyWatchTick(scr)
   if (scr !== curScreenKey) {
-    curScreenKey = scr
-    ;(app as any).__sig = ''
-    app.innerHTML = buildScreen(scr, run)
+    if (curScreenKey === '') {
+      // 首次渲染不过渡
+      applyScreenNow(scr, run)
+    } else if (!roomFading) {
+      // 正常房间切换：旧画面保持，黑幕扫落后再换
+      startRoomFade()
+      updateScreen(curScreenKey, run)
+    } else if (roomFadePhase === 'in') {
+      // 淡入途中再切换：直接换画面重播淡入
+      applyScreenNow(scr, run)
+      makeFadeOverlay('in')
+      if (roomFadeT2) clearTimeout(roomFadeT2)
+      roomFadeT2 = setTimeout(() => {
+        document.querySelectorAll('.room-fade').forEach(e => e.remove())
+        roomFading = false
+        const st2 = g()
+        const s3 = st2.run ? st2.run.screen : (st2.menuScreen || 'title')
+        if (s3 !== curScreenKey) startRoomFade()
+      }, 800)
+    } else {
+      // 黑幕 out 阶段：旧画面继续更新，切换时读最新
+      updateScreen(curScreenKey, run)
+    }
+  } else {
+    updateScreen(scr, run)
   }
-  updateScreen(scr, run)
   computeFxPositions()
   renderNewFx()
   watchUpgradeFx()
@@ -2298,7 +2441,33 @@ const ACTIONS: Record<string, (el: HTMLElement) => void> = {
     scryMarked = new Set()
   },
   backTitle: () => g().backToTitle(),
-  chooseNode: (el) => g().chooseNode(el.dataset.id!),
+  chooseNode: (el) => {
+    // 选点墨迹（原版：先逐朵点亮 0.55s 再跳转，与房间黑幕时序对齐）
+    const id = el.dataset.id!
+    if (mapInking) return
+    const r = g().run
+    if (!r) return
+    const from = r.currentNodeId ?? ''
+    if (from) {
+      mapInking = true
+      const dots = [...document.querySelectorAll(`#map-dots .map-dot[data-edge="${from}>${id}"]`)] as HTMLElement[]
+      const per = Math.min(0.55 / Math.max(dots.length, 1), 0.1)
+      dots.forEach(d => {
+        const k = Number(d.dataset.idx || 1)
+        d.style.transitionDelay = (k * per).toFixed(3) + 's'
+        d.classList.add('traveled')
+      })
+      const nodeEl = document.querySelector(`#map-nodes [data-nid="${id}"]`)
+      nodeEl?.classList.add('map-select')
+      setTimeout(() => { mapInking = false; g().chooseNode(id) }, 550)
+    } else {
+      // 首次移动：无路径可墨迹（原版行为），仍延迟与黑幕对齐
+      mapInking = true
+      const nodeEl = document.querySelector(`#map-nodes [data-nid="${id}"]`)
+      nodeEl?.classList.add('map-select')
+      setTimeout(() => { mapInking = false; g().chooseNode(id) }, 550)
+    }
+  },
   clickCard: (el) => g().clickCard(el.dataset.uid!),
   clickEnemy: (el) => g().clickEnemy(el.dataset.uid!),
   endTurn: () => g().endTurn(),
@@ -2392,6 +2561,18 @@ document.addEventListener('mouseover', (e) => {
     tipEl.style.display = 'block'
   } else {
     tipEl.style.display = 'none'
+  }
+  // 地图图例：悬停条目 → 高亮同类节点（原版 S.highlight 机制）
+  const lg = (e.target as HTMLElement).closest('.lg-item') as HTMLElement | null
+  if (lg && lg.dataset.ltype) {
+    document.querySelectorAll('.lg-item.lg-hot').forEach(x => x.classList.remove('lg-hot'))
+    lg.classList.add('lg-hot')
+    document.querySelectorAll('#map-nodes .node').forEach((n: Element) => {
+      n.classList.toggle('map-hover', (n as HTMLElement).dataset.ntype === lg.dataset.ltype)
+    })
+  } else if (document.querySelector('.lg-item.lg-hot')) {
+    document.querySelectorAll('.lg-item.lg-hot').forEach(x => x.classList.remove('lg-hot'))
+    document.querySelectorAll('#map-nodes .node.map-hover').forEach(x => x.classList.remove('map-hover'))
   }
 })
 document.addEventListener('mousemove', (e) => {
@@ -2558,7 +2739,7 @@ net.onRooms(list => {
 })
 useGame.subscribe(render)
 render()
-console.log('[STS standalone] 游戏就绪 v1.11（单人 + 联机合作 · 服务器中转/P2P双通道 + 房间大厅）')
+console.log('[STS standalone] 游戏就绪 v1.12（单人 + 联机合作 · 服务器中转/P2P双通道 + 房间大厅）')
 
 
 

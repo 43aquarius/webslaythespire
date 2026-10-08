@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "图1：是，事件描述文字只显示了一部分（末尾为“治疗......”），处于逐字显示过程中。\n图2：是，描述已完整显示（末尾补充了“......或者净化。当然，一切都需要代价。”）；否，三个选项按钮均正常显示（两个绿色选项可用，一个红色“离开”选项也可用），并未出现灰色锁定的按钮。",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1791431007,
+  "id": "20261008114322663efbbbcbf74367",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261008114322663efbbbcbf74367",
+  "usage": {
+    "completion_tokens": 84,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1847,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1931
+  }
+}

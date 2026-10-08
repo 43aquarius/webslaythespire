@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "图1：是，路径圆点呈现深浅不一的墨迹点亮效果。\n图2：是，画面被黑色渐变幕布自上而下遮盖，顶部全黑、底部仍可见旧地图画面。",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1791430998,
+  "id": "20261008114316882bb85fe9ef4db4",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261008114316882bb85fe9ef4db4",
+  "usage": {
+    "completion_tokens": 48,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1860,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1908
+  }
+}
