@@ -49,11 +49,14 @@ export function PileViewOverlay() {
 }
 
 // ============ 卡牌选择（升级/移除/置顶等） ============
+// 可选卡牌带原版涟漪描边高亮（NCardHighlight 的 CSS 近似：金色光带沿边框循环扫过）
+// 武装等战斗内升级选择：点击先显示升级预览（原卡 → 金箭头 → 升级后卡），确认后才生效
 export function CardSelectOverlay() {
   const run = useGame(s => s.run)
   const select = useGame(s => s.select)
   const resolveSelect = useGame(s => s.resolveSelect)
   const cancelSelect = useGame(s => s.cancelSelect)
+  const [previewUid, setPreviewUid] = useState<string | null>(null)
   if (!run || !select) return null
 
   const findCard = (uid: string): CardInstance | undefined => {
@@ -74,6 +77,43 @@ export function CardSelectOverlay() {
   const cancellable = select.kind === 'eventUpgrade' || select.kind === 'eventRemove' ||
     select.kind === 'sacrifice' || select.kind === 'restSmith' || select.kind === 'shopRemove'
 
+  // ===== 战斗内升级预览（原版 NUpgradePreview：选卡 → 三箭头 → 升级后副本 + 确认按钮） =====
+  const isUpgradePreview = select.kind === 'armaments'
+  const previewCard = previewUid ? (findCard(previewUid) || cards.find(c => c.uid === previewUid)) : null
+
+  if (isUpgradePreview && previewCard) {
+    return (
+      <div className="sts-overlay">
+        <div className="flex flex-col items-center gap-6" onClick={e => e.stopPropagation()}>
+          <div className="sts-title" style={{ fontSize: 28, color: '#ffd980', textShadow: '2px 2px 0 #000' }}>
+            升级预览
+          </div>
+          <div className="flex items-center justify-center gap-8">
+            <div className="sts-up-preview-card transition-transform hover:scale-110" style={{ cursor: 'pointer' }}
+              onClick={() => setPreviewUid(null)} title="点击返回选择">
+              <CardView card={previewCard} width={170} />
+            </div>
+            <div className="flex flex-col items-center" style={{ gap: 2 }}>
+              {[0, 1, 2].map(k => (
+                <span key={k} className="sts-title" style={{ fontSize: 34, color: '#ffd34d', textShadow: '0 0 10px rgba(255,200,80,.8)', animation: `sts-arrow-nudge 1.2s ease-in-out ${k * 0.15}s infinite` }}>➤</span>
+              ))}
+            </div>
+            <div className="sts-up-preview-card">
+              <CardView card={{ ...previewCard, upgraded: Math.max(1, previewCard.upgraded) }} width={170} />
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <button className="sts-btn sts-title" style={{ fontSize: 20, padding: '8px 40px' }}
+              onClick={() => resolveSelect(previewCard.uid)}>
+              确认升级
+            </button>
+            <button className="sts-btn" onClick={() => setPreviewUid(null)}>重选</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="sts-overlay">
       <div className="flex flex-col items-center gap-5" style={{ maxWidth: 1480, maxHeight: 840 }}
@@ -83,9 +123,9 @@ export function CardSelectOverlay() {
         </div>
         <div className="flex flex-wrap gap-3 justify-center overflow-y-auto sts-scroll" style={{ maxHeight: 640, padding: 8 }}>
           {cards.map((c, i) => (
-            <div key={c.uid} className="sts-card-in transition-transform hover:-translate-y-2" style={{ animationDelay: `${Math.min(i, 8) * 0.05}s`, cursor: 'pointer' }}
-              onClick={() => resolveSelect(c.uid)}>
-              <CardView card={c} width={138} hoverPlay />
+            <div key={c.uid} className="sts-card-in sts-card-selectable transition-transform hover:-translate-y-2" style={{ animationDelay: `${Math.min(i, 8) * 0.05}s`, cursor: 'pointer' }}
+              onClick={() => (isUpgradePreview ? setPreviewUid(c.uid) : resolveSelect(c.uid))}>
+              <CardView card={c} width={138} hoverPlay={!isUpgradePreview} />
             </div>
           ))}
           {cards.length === 0 && (

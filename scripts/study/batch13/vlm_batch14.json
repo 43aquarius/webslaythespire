@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "图1 (upgrade_preview)：是。显示两张相同的卡牌（打击）并排，中间有三个金色箭头指示升级，底部有“确认升级”和“重选”按钮。\n图2 (rest_desat)：是。篝火界面整体呈去饱和的暗淡灰色调，篝火图标上方有烟雾效果，左侧按钮文字显示为“休息中...”。\n图3 (card_shimmer)：是。一排可选卡牌的边框具有明显的金色微光/光带扫过（涟漪）效果，视觉上非常醒目。",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1791427122,
+  "id": "202610081038393e58b543cbd54045",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610081038393e58b543cbd54045",
+  "usage": {
+    "completion_tokens": 123,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 2791,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 2914
+  }
+}

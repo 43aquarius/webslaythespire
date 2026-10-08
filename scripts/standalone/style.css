@@ -515,3 +515,68 @@ img { -webkit-user-drag: none; }
   25% { opacity: 1; }
   100% { transform: translate(-50%,-50%) scale(2.6) rotate(120deg); opacity: 0; }
 }
+
+/* ============ 第十四批：sts2-web 研究第四批（原版表现还原） ============ */
+
+/* 遗物获得闪光（原版 NRelicFlashVfx：三份叠加副本 α0.627、间隔0.2s、0.75→1.25 放大1s CubicOut、1.5s 淡出） */
+@keyframes sts-relic-burst {
+  0% { transform: scale(0.75); opacity: 0.627; }
+  66.7% { transform: scale(1.25); opacity: 0.627; }
+  100% { transform: scale(1.3); opacity: 0; }
+}
+.relic { position: relative; }
+.relic-burst {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
+  mix-blend-mode: plus-lighter; pointer-events: none; z-index: 4; opacity: 0;
+  animation: sts-relic-burst 1.5s cubic-bezier(.22,1,.36,1) forwards;
+}
+
+/* 可选卡牌涟漪描边（原版 NCardHighlight SDF 涟漪的 CSS 近似：金色光带沿边框循环扫过） */
+@keyframes sts-shimmer-sweep {
+  0% { background-position: 220% 0; }
+  100% { background-position: -120% 0; }
+}
+.card-selectable { position: relative; }
+.card-selectable::after {
+  content: '';
+  position: absolute; inset: -2px; border-radius: 12px; padding: 3px;
+  background: linear-gradient(115deg, rgba(255,215,120,0) 35%, rgba(255,225,150,.7) 47%, rgba(255,250,220,.95) 50%, rgba(255,225,150,.7) 53%, rgba(255,215,120,0) 65%);
+  background-size: 250% 100%;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  animation: sts-shimmer-sweep 2.2s linear infinite;
+  pointer-events: none; z-index: 6;
+}
+
+/* 篝火休息去饱和（原版 NDesaturateTransitionVfx：亮度/对比/饱和度三段式下降再回升） */
+@keyframes sts-rest-desat {
+  0% { filter: brightness(1) contrast(1) saturate(1); }
+  38% { filter: brightness(.55) contrast(.82) saturate(.42); }
+  70% { filter: brightness(.5) contrast(.8) saturate(.38); }
+  100% { filter: brightness(1) contrast(1) saturate(1); }
+}
+.rest-bg.resting { animation: sts-rest-desat 2.2s ease-in-out; }
+
+/* 篝火烟雾（原版 NRestSmokeVfx） */
+.smoke-slot { position: absolute; inset: 0; pointer-events: none; }
+.smoke-puff {
+  position: absolute; bottom: 52%; width: 52px; height: 52px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(205,205,215,.5) 0%, rgba(165,165,180,.18) 62%, transparent 72%);
+  filter: blur(7px); opacity: 0;
+  animation: sts-smoke-rise 2.1s ease-out infinite;
+}
+@keyframes sts-smoke-rise {
+  0% { transform: translate(-50%, 0) scale(.45); opacity: 0; }
+  22% { opacity: .55; }
+  100% { transform: translate(-50%, -140px) scale(1.8); opacity: 0; }
+}
+
+/* 升级预览（原版 NUpgradePreview：原卡 → 三箭头 → 升级后卡） */
+.up-preview-card { filter: drop-shadow(0 0 16px rgba(255,210,100,.35)); cursor: pointer; }
+.arrow-nudge { display: block; animation: sts-arrow-nudge 1.2s ease-in-out infinite; }
+@keyframes sts-arrow-nudge {
+  0%, 100% { transform: translateX(0); opacity: .8; }
+  50% { transform: translateX(7px); opacity: 1; }
+}

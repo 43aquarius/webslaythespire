@@ -393,13 +393,18 @@ export function HpBar({ hp, maxHp, block, width = 200, label, poison = 0, poison
 }
 
 // ============ 遗物提示 ============
+// flash：获得闪光（原版 NRelicFlashVfx：三份叠加副本 α0.627、间隔0.2s、0.75→1.25 放大1s CubicOut、1.5s 淡出）
 export function RelicIcon({ id, size = 42, flash }: { id: string; size?: number; flash?: boolean }) {
   const def = RELICS[id]
   if (!def) return null
   return (
     <Tip tip={<><b>{def.name}</b><br /><span style={{ color: '#d8c8a8' }}>{def.desc}</span></>}>
-      <span className={`sts-relic ${flash ? 'sts-relic-flash' : ''}`} style={{ width: size, height: size }}>
+      <span className="sts-relic" style={{ width: size, height: size, position: 'relative' }}>
         <img src={`${A}/relics/${id}.png`} alt={def.name} className="w-[82%] h-[82%] object-contain" draggable={false} />
+        {flash === true && [0, 1, 2].map(k => (
+          <img key={`${id}-${k}`} src={`${A}/relics/${id}.png`} alt="" draggable={false}
+            className="sts-relic-burst" style={{ animationDelay: `${k * 0.2}s` }} />
+        ))}
       </span>
     </Tip>
   )

@@ -403,10 +403,16 @@ function updateHpBar(el: HTMLElement | null, hp: number, maxHp: number, block?: 
   }
 }
 
-function relicIcon(id: string, size = 34): string {
+// 遗物图标（flash：获得闪光，原版 NRelicFlashVfx：三份叠加副本 α0.627、间隔0.2s、0.75→1.25 放大1s、1.5s 淡出）
+let seenRelics = new Set<string>()
+const relicFlashUntil: Record<string, number> = {}
+function relicIcon(id: string, size = 34, flash = false): string {
   const def = RELICS[id]
   if (!def) return ''
-  return `<span class="relic" data-tip="<b>${esc(def.name)}</b><br><span style='color:#d8c8a8'>${esc(def.desc)}</span>" style="width:${size}px;height:${size}px"><img src="${A('relics/' + id + '.png')}" alt=""></span>`
+  return `<span class="relic${flash ? ' has-burst' : ''}" data-tip="<b>${esc(def.name)}</b><br><span style='color:#d8c8a8'>${esc(def.desc)}</span>" style="width:${size}px;height:${size}px;position:relative">
+    <img src="${A('relics/' + id + '.png')}" alt="">
+    ${flash ? [0, 1, 2].map(k => `<img class="relic-burst" src="${A('relics/' + id + '.png')}" alt="" style="animation-delay:${k * 0.2}s">`).join('') : ''}
+  </span>`
 }
 
 function potionHtml(pid: string | null, idx: number, combat: boolean): string {
@@ -494,7 +500,14 @@ function updateHud(run: RunState, combat: boolean) {
   }
   setText(document.getElementById('hud-gold'), mp ? `💰 ${me.gold}（队友 ${run.players[1 - myIdx]?.gold ?? '-'}）` : `💰 ${me.gold}`)
   setHtml(document.getElementById('hud-potions'), me.potions.map((p, i) => potionHtml(p, i, combat)).join(''))
-  setHtml(document.getElementById('hud-relics'), me.relics.map(id => relicIcon(id)).join(''))
+  // 新获遗物闪光（原版三副本叠加爆发；用时间窗而非一次性 diff，避免后续任何状态更新立即移除闪光）
+  const relics = me.relics as string[]
+  const nowMs = Date.now()
+  for (const id of relics) {
+    if (!seenRelics.has(id) && seenRelics.size > 0) relicFlashUntil[id] = nowMs + 1900
+  }
+  setHtml(document.getElementById('hud-relics'), relics.map(id => relicIcon(id, 34, (relicFlashUntil[id] || 0) > nowMs)).join(''))
+  seenRelics = new Set(relics)
   // 联机：队友血量（78/80 样式小字，右上角）
   const mini = document.getElementById('hud-mp-hp')
   if (mini) {
@@ -1592,12 +1605,15 @@ function rRest(run: RunState): string {
     ${run.players.map((rp, i) => ` <span style="margin-left:10px;color:${run.mpRest?.[i] ? '#8fe89a' : '#a89070'}">${i === myIdx ? '你' : esc(rp.name)}：${run.mpRest?.[i] === 'rest' ? '休息✔' : run.mpRest?.[i] === 'smith' ? '锻造✔' : '待选…'}</span>`).join('')}</div>` : ''
   const dim = (v: boolean) => v ? '' : 'opacity:.5;cursor:not-allowed;'
   return `<div class="screen rest-bg center-col">
-  <img src="${A('mapicons/rest.png')}" width="140" height="140" style="filter:drop-shadow(0 0 30px rgba(255,150,40,.7))">
+  <div style="position:relative">
+    <img src="${A('mapicons/rest.png')}" width="140" height="140" style="filter:drop-shadow(0 0 30px rgba(255,150,40,.7))">
+    <div class="smoke-slot" style="display:none"></div>
+  </div>
   <div class="big-title sts-title">篝火</div>
   ${mpStatus}
   <div class="row-cards">
     <button class="sts-panel choice-card ${canRest && !myChoice ? '' : 'dis'}" data-act="rest" data-r="rest" style="${dim(canRest && !myChoice)}">
-      <span style="font-size:44px">🛏️</span><div class="sts-title" style="font-size:22px;color:#ffd980">休息</div>
+      <span style="font-size:44px">🛏️</span><div class="sts-title rest-label" style="font-size:22px;color:#ffd980">休息</div>
       <div class="sts-body">回复 ${Math.floor(me.maxHp * 0.3)} 点生命值（上限的 30%）<br><span style="color:#8fe89a">当前可回复 ${heal} 点</span></div>
     </button>
     <button class="sts-panel choice-card ${!myChoice ? '' : 'dis'}" data-act="rest" data-r="smith" style="${dim(!myChoice)}">
@@ -1654,6 +1670,10 @@ function rGameOver(run: RunState): string {
 // ============ 遮罩层（牌堆查看 / 选牌 / 预见） ============
 let scryMarked: Set<string> = new Set()
 
+// ============ 选牌遮罩 / 溢出层 ============
+// 战斗内升级预览选中的卡 uid（原版 NUpgradePreview；空 = 未预览）
+let armPreviewUid: string | null = null
+
 function overlayHtml(st: ReturnType<typeof g>): { html: string; sig: string } {
   const run = st.run
   if (!run) return { html: '', sig: '' }
@@ -1706,13 +1726,37 @@ function overlayHtml(st: ReturnType<typeof g>): { html: string; sig: string } {
           : (run.combat ? AP(run.combat).discardPile : [])
     const cards = ordered.filter(c => sel.cardUids.includes(c.uid))
     const cancellable = ['eventUpgrade', 'eventRemove', 'sacrifice', 'restSmith', 'shopRemove'].includes(sel.kind)
-    const sig = `select:${sel.kind}:${sel.title}:${cards.length}`
+    // 战斗内升级（武装等）：点击先出升级预览（原版 NUpgradePreview：原卡 → 三箭头 → 升级后卡）
+    const isArm = sel.kind === 'armaments'
+    const findC = (uid: string) => cards.find(c => c.uid === uid)
+    const pvCard = isArm && armPreviewUid ? findC(armPreviewUid) : null
+    const sig = `select:${sel.kind}:${sel.title}:${cards.length}:${isArm ? (armPreviewUid || '') : ''}`
+    if (isArm && pvCard) {
+      const arrows = [0, 1, 2].map(k => `<span class="arrow-nudge" style="animation-delay:${k * 0.15}s">➤</span>`).join('')
+      return {
+        sig,
+        html: `<div class="overlay" style="display:flex;align-items:center;justify-content:center">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:24px">
+            <div class="sts-title" style="font-size:26px;color:#ffd980;text-shadow:2px 2px 0 #000">升级预览</div>
+            <div style="display:flex;align-items:center;gap:34px">
+              <div class="up-preview-card" data-act="armPreview" data-uid="" title="点击返回选择">${cardHtml(pvCard, 170)}</div>
+              <div style="display:flex;flex-direction:column;gap:2px;font-size:34px;color:#ffd34d;text-shadow:0 0 10px rgba(255,200,80,.8)">${arrows}</div>
+              <div class="up-preview-card">${cardHtml({ ...pvCard, upgraded: Math.max(1, pvCard.upgraded) }, 170)}</div>
+            </div>
+            <div style="display:flex;gap:16px">
+              <button class="sts-btn sts-title" style="font-size:20px;padding:8px 40px" data-act="resolveSelect" data-uid="${pvCard.uid}">确认升级</button>
+              <button class="sts-btn" data-act="armPreview" data-uid="">重选</button>
+            </div>
+          </div>
+        </div>`
+      }
+    }
     return {
       sig,
       html: `<div class="overlay" style="display:flex;align-items:center;justify-content:center">
         <div style="display:flex;flex-direction:column;align-items:center;gap:18px;max-width:1480px">
           <div class="sts-title" style="font-size:26px;color:#ffd980;text-shadow:2px 2px 0 #000">${esc(sel.title)}</div>
-          <div class="sel-cards" style="max-height:640px">${cards.map((c, i) => `<div class="card-in" style="animation-delay:${Math.min(i, 8) * 0.05}s" data-act="resolveSelect" data-uid="${c.uid}">${cardHtml(c, 136, 'playable')}</div>`).join('') || '<div class="sts-body">没有可选择的卡牌</div>'}</div>
+          <div class="sel-cards" style="max-height:640px">${cards.map((c, i) => `<div class="card-in card-selectable" style="animation-delay:${Math.min(i, 8) * 0.05}s" data-act="${isArm ? 'armPreview' : 'resolveSelect'}" data-uid="${c.uid}">${cardHtml(c, 136, isArm ? '' : 'playable')}</div>`).join('') || '<div class="sts-body">没有可选择的卡牌</div>'}</div>
           ${cancellable ? `<button class="sts-btn" data-act="cancelSelect">${sel.kind === 'shopRemove' ? '取消购买' : '放弃'}</button>` : ''}
         </div>
       </div>`
@@ -2066,6 +2110,7 @@ function render() {
   const st = g()
   const run = st.run
   const scr = run ? run.screen : (st.menuScreen || 'title')
+  if (!st.select) armPreviewUid = null
   updateMusic(st)
   lobbyWatchTick(scr)
   if (scr !== curScreenKey) {
@@ -2270,11 +2315,44 @@ const ACTIONS: Record<string, (el: HTMLElement) => void> = {
   buyPotion: (el) => g().buyPotion(Number(el.dataset.idx)),
   buyRemoval: () => g().buyRemoval(),
   leaveShop: () => g().leaveShop(),
-  rest: (el) => g().restAction(el.dataset.r as any),
+  rest: (el) => {
+    const act = el.dataset.r as any
+    const r = g().run
+    if (!r) return
+    // 单人休息：先播放去饱和+烟雾（原版 NDesaturateTransitionVfx + NRestSmokeVfx）再结算
+    if (act === 'rest' && r.players.length === 1) {
+      const scr = document.querySelector('.rest-bg')
+      if (scr && !scr.classList.contains('resting')) {
+        scr.classList.add('resting')
+        const slot = scr.querySelector('.smoke-slot') as HTMLElement | null
+        if (slot) {
+          slot.style.display = ''
+          for (let k = 0; k < 4; k++) {
+            const p = document.createElement('div')
+            p.className = 'smoke-puff'
+            p.style.animationDelay = (k * 0.42) + 's'
+            p.style.left = (38 + k * 8) + '%'
+            slot.appendChild(p)
+          }
+        }
+        const label = scr.querySelector('.rest-label')
+        if (label) label.textContent = '休息中…'
+        setTimeout(() => g().restAction(act), 2100)
+        return
+      }
+      if (scr?.classList.contains('resting')) return
+    }
+    g().restAction(act)
+  },
   chooseEvent: (el) => g().chooseEvent(Number(el.dataset.idx)),
   takeTreasure: () => g().takeTreasure(),
-  resolveSelect: (el) => g().resolveSelect(el.dataset.uid!),
-  cancelSelect: () => g().cancelSelect(),
+  resolveSelect: (el) => { armPreviewUid = null; g().resolveSelect(el.dataset.uid!) },
+  armPreview: (el) => {
+    armPreviewUid = el.dataset.uid || null
+    const layer = document.getElementById('overlay-layer')
+    if (layer) { (layer as any).__sig = ''; renderOverlays(g()) }
+  },
+  cancelSelect: () => { armPreviewUid = null; g().cancelSelect() },
   potion: (el) => {
     const st = g()
     const idx = Number(el.dataset.idx)
