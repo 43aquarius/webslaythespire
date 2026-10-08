@@ -299,21 +299,35 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
   )
 }
 
-// ============ 状态图标行 ============
+// ============ 状态图标行（获得新状态时图标闪光，原版 NPower PowerFlash：brightness≈2 闪现约 1s） ============
 export function StatusRow({ statuses, size = 30 }: { statuses: StatusMap; size?: number }) {
   const entries = Object.entries(statuses).filter(([_, v]) => v !== 0)
+  const prevRef = useRef<Record<string, number>>({})
+  const [flashes, setFlashes] = useState<Record<string, number>>({})
+  useEffect(() => {
+    const nf: Record<string, number> = {}
+    for (const [id, v] of Object.entries(statuses)) {
+      if (v !== 0 && (!(id in prevRef.current) || v > (prevRef.current[id] ?? 0))) nf[id] = Date.now()
+    }
+    prevRef.current = statuses
+    if (Object.keys(nf).length) {
+      setFlashes(f => ({ ...f, ...nf }))
+      setTimeout(() => setFlashes(f => { const c = { ...f }; for (const k in nf) delete c[k]; return c }), 950)
+    }
+  }, [statuses])
   if (!entries.length) return null
   return (
     <div className="flex flex-wrap gap-1 justify-center" style={{ maxWidth: 220 }}>
       {entries.map(([id, n]) => {
         const info = STATUS_INFO[id]
+        const flashTs = flashes[id]
         return (
           <Tip
-            key={id}
+            key={`${id}-${flashTs || 0}`}
             tip={<><b style={{ color: info?.buff ? '#8fe89a' : '#ff9a8a' }}>{info?.name ?? id}</b><br />{info?.desc ?? ''}</>}
           >
             <span
-              className="relative inline-block rounded"
+              className={`relative inline-block rounded${flashTs ? ' sts-power-flash' : ''}`}
               style={{
                 width: size, height: size,
                 background: 'rgba(0,0,0,0.55)',
@@ -339,22 +353,28 @@ export function StatusRow({ statuses, size = 30 }: { statuses: StatusMap; size?:
 }
 
 // ============ 血条 ============
+// 有格挡时血条整体变蓝（原版行为：填充 rgb(59,111,163)、浅蓝外框、数字深蓝描边）
 export function HpBar({ hp, maxHp, block, width = 200, label, poison = 0, poisonNext = 0 }: { hp: number; maxHp: number; block?: number; width?: number; label?: string; poison?: number; poisonNext?: number }) {
   const pct = Math.max(0, Math.min(100, hp / maxHp * 100))
   // 毒预览（原版：血条右端绿色段显示下回合毒伤；致死时数字变绿）
   const poisonPct = Math.max(0, Math.min(pct, poisonNext / maxHp * 100))
   const poisonLethal = poisonNext > 0 && poisonNext >= hp && hp > 0
+  const blocked = (block ?? 0) > 0
   return (
     <div className="relative" style={{ width }}>
-      <div className="sts-hpbar-outer relative" style={{ height: 22 }}>
+      <div className="sts-hpbar-outer relative" style={{ height: 22, boxShadow: blocked ? '0 0 0 2px rgba(178,224,255,0.85), 0 0 10px rgba(120,190,255,0.5)' : undefined }}>
         {/* 伤害滞后段（原版：受击时红条瞬间缩短，其后米白残条延迟~0.4s后经0.8s收缩） */}
         <div className="sts-hpbar-lag absolute" style={{ width: `${pct}%` }} />
-        <div className="sts-hpbar-fill absolute" style={{ width: `${pct}%` }} />
+        <div className="sts-hpbar-fill absolute" style={{
+          width: `${pct}%`,
+          background: blocked ? 'linear-gradient(to bottom, #7d9fd4 0%, #3b6fa3 55%, #2c5480 100%)' : undefined,
+          transition: 'background .3s ease',
+        }} />
         {poisonPct > 0 && !poisonLethal && (
           <div className="sts-hpbar-poison absolute" style={{ left: `${pct}%`, width: `${poisonPct}%` }} />
         )}
         <div className="absolute inset-0 flex items-center justify-center sts-num sts-body font-bold"
-          style={{ fontSize: 13, color: poisonLethal ? '#7dff8a' : '#fff', textShadow: '1px 1px 0 #000' }}>
+          style={{ fontSize: 13, color: poisonLethal ? '#7dff8a' : '#fff', textShadow: blocked ? '1px 1px 0 #1B3045' : '1px 1px 0 #000' }}>
           {hp} / {maxHp}
         </div>
         {block !== undefined && block > 0 && (

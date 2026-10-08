@@ -324,17 +324,30 @@ function cardHtml(card: CardInstance, width = 148, extra = ''): string {
   return `<div class="sts-card ${extra}" style="width:${W}px;height:${H}px">${cardInner(card, width)}</div>`
 }
 
-// ============ 状态图标行 ============
-function statusRow(statuses: Record<string, number>, size = 26): string {
+// ============ 状态图标行（flashIds：本次新获得/层数增加的状态 → 图标闪光，原版 NPower PowerFlash） ============
+function statusRow(statuses: Record<string, number>, size = 26, flashIds?: Set<string>): string {
   const entries = Object.entries(statuses).filter(([, v]) => v !== 0)
   if (!entries.length) return ''
   return `<div class="status-row">${entries.map(([id, n]) => {
     const info = STATUS_INFO[id]
-    return `<span class="status-badge" data-tip="<b>${esc(info?.name ?? id)}</b><br>${esc(info?.desc ?? '')}" style="width:${size}px;height:${size}px">
+    return `<span class="status-badge${flashIds?.has(id) ? ' power-flash' : ''}" data-tip="<b>${esc(info?.name ?? id)}</b><br>${esc(info?.desc ?? '')}" style="width:${size}px;height:${size}px">
       <img src="${A(statusImgKey(id))}" alt="">
       ${(n !== 1 || ['vulnerable', 'weak', 'frail', 'noDraw'].includes(id)) ? `<i style="font-size:${size * 0.42}px">${n}</i>` : ''}
     </span>`
   }).join('')}</div>`
+}
+
+// 计算相比上次快照新增/增加的状态（存于容器 dataset）
+function statusFlashIds(holder: HTMLElement | null, statuses: Record<string, number>): Set<string> | undefined {
+  if (!holder) return undefined
+  let prev: Record<string, number> = {}
+  try { prev = JSON.parse(holder.dataset.statuses || '{}') } catch { /* ignore */ }
+  const flash = new Set<string>()
+  for (const [id, v] of Object.entries(statuses)) {
+    if (v !== 0 && (!(id in prev) || v > (prev[id] ?? 0))) flash.add(id)
+  }
+  holder.dataset.statuses = JSON.stringify(statuses)
+  return flash.size ? flash : undefined
 }
 
 // ============ 血条（结构固定 + 平滑更新；含原版伤害滞后段+毒预览） ============
@@ -356,6 +369,15 @@ function updateHpBar(el: HTMLElement | null, hp: number, maxHp: number, block?: 
   if (fill) fill.style.width = pct + '%'
   const lag = el.querySelector('.hpbar-lag') as HTMLElement
   if (lag) lag.style.width = pct + '%'   // CSS transition 产生原版延迟收缩的米白残条
+  // 有格挡时血条变蓝（原版：填充蓝 rgb(59,111,163) + 浅蓝外框 + 数字深蓝描边）
+  const blocked = (block ?? 0) > 0
+  const outer = el.querySelector('.hpbar-outer') as HTMLElement
+  if (outer) outer.style.boxShadow = blocked ? '0 0 0 2px rgba(178,224,255,0.85), 0 0 10px rgba(120,190,255,0.5)' : ''
+  if (fill) fill.style.background = blocked ? 'linear-gradient(to bottom, #7d9fd4 0%, #3b6fa3 55%, #2c5480 100%)' : ''
+  // 格挡破碎：block 从 >0 变 0 时盾牌两半飞散（原版 NBlockBrokenVfx）
+  const prevB = Number(el.dataset.block || 0)
+  if (prevB > 0 && (block ?? 0) === 0 && hp > 0) spawnBlockBreak(el)
+  el.dataset.block = String(block ?? 0)
   const poisonLethal = poisonNext > 0 && poisonNext >= hp && hp > 0
   const pz = el.querySelector('.hpbar-poison') as HTMLElement
   if (pz) {
@@ -367,7 +389,10 @@ function updateHpBar(el: HTMLElement | null, hp: number, maxHp: number, block?: 
     } else pz.style.display = 'none'
   }
   const txt = el.querySelector('.hp-text') as HTMLElement
-  if (txt) txt.style.color = poisonLethal ? '#7dff8a' : ''
+  if (txt) {
+    txt.style.color = poisonLethal ? '#7dff8a' : ''
+    txt.style.textShadow = blocked ? '1px 1px 0 #1B3045' : ''
+  }
   setText(txt, `${hp} / ${maxHp}`)
   const bb = el.querySelector('.block-badge') as HTMLElement
   if (bb) {
@@ -513,7 +538,7 @@ function rMainMenu(): string {
       ${items.map(it => `<button class="menu-btn sts-title ${it.dis ? 'dis' : ''}" data-act="${it.act}" ${it.arg ? `data-screen="${it.arg}"` : ''} ${it.dis ? 'disabled' : ''}
         style="opacity:${it.dis ? 1 : ''}"><span style="opacity:${it.dis ? .45 : 1};display:block">${it.label}</span></button>`).join('')}
     </div>
-    <div class="sts-body" style="color:#8a7458;font-size:12px;position:absolute;left:16px;bottom:12px">Web 复刻版 v1.10</div>
+    <div class="sts-body" style="color:#8a7458;font-size:12px;position:absolute;left:16px;bottom:12px">Web 复刻版 v1.11</div>
   </div>
   <a class="github-btn" href="https://github.com/43aquarius/webslaythespire" target="_blank" rel="noreferrer" title="GitHub 仓库">${GITHUB_SVG}<span>43aquarius/webslaythespire</span></a>
 </div>`
@@ -909,7 +934,9 @@ function intentHtml(e: EnemyInstance, c: CombatState): string {
   const def = ENEMIES[e.id]
   const isAtk = it.type.startsWith('attack')
   const mvName = def.moves[e.nextMoveIdx]?.name || ''
-  return `<div class="intent" data-tip="<b>${esc(mvName)}</b>">
+  // 意图浮动（原版 NIntent：sin(πt+offset)·10+8px，每敌错峰）
+  const bobDelay = ((e.uid.charCodeAt(e.uid.length - 1) || 0) % 7) * 0.33
+  return `<div class="intent intent-bob" style="animation-delay:${bobDelay}s" data-tip="<b>${esc(mvName)}</b>">
     ${isAtk ? `<img src="${A('intent/' + (map[it.type] || 'unknown') + '.png')}" width="40" height="40">
       <span class="dmg-num sts-num">${dmg}${times > 1 ? `<small>x${times}</small>` : ''}</span>
       ${(it.type === 'attackDebuff' || it.type === 'attackDefend') ? `<img src="${A('intent/' + (it.type === 'attackDebuff' ? 'debuff' : 'defend') + '.png')}" width="28" height="28">` : ''}${tgtLabel}`
@@ -922,6 +949,8 @@ function updateEnemies(run: RunState) {
   if (!row || !run.combat) return
   const c = run.combat
   const hasSel = !!g().selectedCardUid || g().selectedPotionIdx !== null
+  // 战斗开始（行内尚无敌人）时状态栏延迟滑入；中途召唤的敌人立即滑入（原版 NCreatureStateDisplay fresh 判定）
+  const freshCombat = row.children.length === 0
   const seen = new Set<string>()
   let eIdx = 0
   for (const e of c.enemies) {
@@ -932,10 +961,12 @@ function updateEnemies(run: RunState) {
     if (!el) {
       el = document.createElement('div')
       el.dataset.euid = e.uid
+      // 状态栏滑入（原版 NCreatureStateDisplay：自上方 20px，战斗开始随机延迟 1.3-1.7s）
+      const stateDelay = freshCombat ? 1.3 + ((eIdx * 37 + (e.uid.charCodeAt(e.uid.length - 1) || 0)) % 41) / 100 : 0
       el.innerHTML = `
         <div class="intent-slot"></div>
         <div class="sprite"><img class="idle-bob" src="${A('enemies/' + def.sprite + '.png')}" alt="" style="width:${sw}px;height:${sw}px;animation-delay:${(eIdx % 5) * 0.45}s"></div>
-        <div class="enemy-info">
+        <div class="enemy-info" style="animation:sts-state-in .5s cubic-bezier(.2,.8,.3,1) ${stateDelay}s backwards">
           <div class="ename">${esc(def.name)}</div>
           ${hpBarShell('', def.boss ? 280 : 170)}
           <div class="estatus" style="margin-top:4px"></div>
@@ -950,10 +981,10 @@ function updateEnemies(run: RunState) {
     if (targetable) { el.dataset.act = 'clickEnemy'; el.dataset.uid = e.uid }
     else { delete el.dataset.act; delete el.dataset.uid }
     el.style.minWidth = sw * 0.8 + 'px'
-    // 意图 / 血条 / 状态（区域差异更新）
+    // 意图 / 血条 / 状态（区域差异更新；新状态图标闪光）
     setHtml(el.querySelector('.intent-slot'), intentHtml(e, c))
     updateHpBar(el.querySelector('.hpbar'), e.hp, e.maxHp, e.block, (e.statuses as any)?.poison || 0)
-    setHtml(el.querySelector('.estatus'), statusRow(e.statuses, 28))
+    setHtml(el.querySelector('.estatus'), statusRow(e.statuses, 28, statusFlashIds(el.querySelector('.estatus'), e.statuses)))
     eIdx++
   }
   row.querySelectorAll('[data-euid]').forEach(el => {
@@ -1158,7 +1189,7 @@ function updateCombatScreen(run: RunState) {
       slot.style.boxShadow = isActive ? '0 0 22px rgba(255,217,128,.28)' : 'none'
       slot.style.borderRadius = '14px'
       setHtml(document.getElementById(`player-extra-${i}`), playerExtraHtml(run, i))
-      setHtml(document.getElementById(`player-status-${i}`), statusRow(pc.statuses, 26))
+      setHtml(document.getElementById(`player-status-${i}`), statusRow(pc.statuses, 26, statusFlashIds(document.getElementById(`player-status-${i}`), pc.statuses)))
       const nm = document.getElementById(`hero-name-${i}`)
       if (nm) {
         const deadTxt = pc.dead || rp.hp <= 0 ? '（阵亡）' : ''
@@ -1173,7 +1204,7 @@ function updateCombatScreen(run: RunState) {
       ? `<div class="sts-title" style="position:absolute;top:64px;left:50%;transform:translateX(-50%);z-index:70;font-size:19px;color:#ffe9a0;text-shadow:2px 2px 0 #000;letter-spacing:3px;display:flex;align-items:center;gap:8px"><span class="wait-dot">●</span> 等待 ${esc(run.players[c.activeIdx]?.name || '队友')} 行动…</div>` : '')
   } else {
     setHtml(document.getElementById('player-extra'), playerExtraHtml(run))
-    setHtml(document.getElementById('player-status'), statusRow(AP(c).statuses, 30))
+    setHtml(document.getElementById('player-status'), statusRow(AP(c).statuses, 30, statusFlashIds(document.getElementById('player-status'), AP(c).statuses)))
   }
   updateEnemies(run)
   updateHand(run)
@@ -1849,6 +1880,78 @@ function spawnOrbFx(type: string) {
   setTimeout(() => el.remove(), 1100)
 }
 
+// ============ 浮动数字物理（原版 NDamageNumVfx / NHealNumVfx） ============
+// 伤害：红#F72B14→奶油#FFF6E2(0.5s)、2.5×→1×(1.2s QuadOut)、重力1000px/s²弧线、vy=-(700±100)、±5°旋转、2s
+// 治疗/格挡：减速上浮(2000px/s²)、2.2×→1×(0.5s)、1s后快速淡出、1.3s
+function playFloatAnim(el: HTMLElement, kind: string) {
+  if (!el.animate) return
+  const inner = el.firstElementChild as HTMLElement | null
+  if (kind === 'dmg') {
+    const vx = (Math.random() * 2 - 1) * 100, vy = -(700 + Math.random() * 100)
+    const frames: Keyframe[] = []
+    for (let i = 0; i <= 20; i++) {
+      const t = (i / 20) * 2
+      const x = vx * t, y = vy * t + 1000 * t * t
+      const sc = t < 1.2 ? 2.5 - 1.5 * (1 - (1 - t / 1.2) ** 2) : 1
+      const op = 1 - (t / 2) ** 2
+      frames.push({ offset: i / 20, transform: `translate(calc(-50% + ${x}px), ${y}px) scale(${sc})`, opacity: Math.max(0, op) })
+    }
+    el.animate(frames, { duration: 2000, easing: 'linear', fill: 'forwards' })
+    inner?.animate?.([{ color: 'rgb(247,43,20)' }, { color: '#FFF6E2' }], { duration: 500, easing: 'cubic-bezier(.33,1,.68,1)', fill: 'forwards' })
+  } else if (kind === 'heal' || kind === 'block') {
+    const vx = (Math.random() * 2 - 1) * 60, vy = -(300 + Math.random() * 300)
+    const frames: Keyframe[] = []
+    for (let i = 0; i <= 20; i++) {
+      const t = (i / 20) * 1.3
+      const sp = Math.hypot(vx, vy), stop = sp / 2000, tt = Math.min(t, stop)
+      const d = sp * tt - 1000 * tt * tt
+      const x = (vx / sp) * d, y = (vy / sp) * d
+      const sc = t < 0.5 ? 2.2 - 1.2 * (1 - (1 - t / 0.5) ** 2) : 1
+      const op = t < 1 ? 1 : Math.max(0, 1 - ((t - 1) / 0.3) ** 2)
+      frames.push({ offset: i / 20, transform: `translate(calc(-50% + ${x}px), ${y}px) scale(${sc})`, opacity: Math.max(0, op) })
+    }
+    el.animate(frames, { duration: 1300, easing: 'linear', fill: 'forwards' })
+  } else {
+    el.animate([
+      { transform: 'translate(-50%, 6px) scale(.9)', opacity: 0 },
+      { transform: 'translate(-50%, -14px) scale(1)', opacity: 1, offset: 0.25 },
+      { transform: 'translate(-50%, -46px) scale(1)', opacity: 0 },
+    ], { duration: 1300, easing: 'cubic-bezier(.25,.6,.4,1)', fill: 'forwards' })
+  }
+}
+
+// 意图执行爆发（原版 NIntent.PlayPerform：四份叠加副本 α0.27、间隔0.25s、1s 内 0.5→1.49）
+const INTENT_ICON_MAP: Record<string, string> = {
+  attack: 'attack3', attackDebuff: 'attack5', attackDefend: 'attack4',
+  defend: 'defend', buff: 'buff', debuff: 'debuff', strongDebuff: 'debuffStrong',
+  sleep: 'sleep', unknown: 'unknown',
+}
+function spawnIntentBurst(uid: string, type: string) {
+  const enemyEl = document.querySelector(`.enemy[data-euid="${uid}"] .intent-slot`) as HTMLElement | null
+  const holder = enemyEl || fxLayer
+  const icon = A('intent/' + (INTENT_ICON_MAP[type] || 'unknown') + '.png')
+  const wrap = document.createElement('div')
+  wrap.className = 'intent-burst-wrap'
+  for (let k = 0; k < 4; k++) {
+    const b = document.createElement('div')
+    b.className = 'intent-burst'
+    b.style.animationDelay = (k * 0.25) + 's'
+    b.innerHTML = `<img src="${icon}" width="44" height="44">`
+    wrap.appendChild(b)
+  }
+  holder.appendChild(wrap)
+  setTimeout(() => wrap.remove(), 1900)
+}
+
+// 格挡破碎（原版 NBlockBrokenVfx：盾牌左右两半 0.4s 分离 + 0.6s 淡出）
+function spawnBlockBreak(hpbarEl: HTMLElement) {
+  const el = document.createElement('div')
+  el.className = 'bb-break'
+  el.innerHTML = `<img class="bb-l" src="${A('status/block.png')}" alt=""><img class="bb-r" src="${A('status/block.png')}" alt="">`
+  hpbarEl.appendChild(el)
+  setTimeout(() => el.remove(), 1050)
+}
+
 function renderNewFx() {
   const st = g()
   if (st.fxList.length === 0 && renderedFx.size > 0) renderedFx.clear()
@@ -1866,21 +1969,26 @@ function renderNewFx() {
     if (f.kind === 'cardPlay' && f.text) cardPlayFx(f.text)
     if (f.kind === 'slash') spawnSlash(f.target)
     if (f.kind === 'orb') spawnOrbFx(f.text || '')
+    if (f.kind === 'intentBurst') { spawnIntentBurst(f.target, f.text || ''); st.removeFx(f.id); continue }
     const pos = fxPositions[f.target]
     if (!pos) { st.removeFx(f.id); continue }
     const el = document.createElement('div')
     el.className = 'fx-float'
     let color = '#fff', content = '', size = 24
-    if (f.kind === 'dmg') { color = '#ff5a4a'; content = String(f.value); size = 38 }
-    else if (f.kind === 'heal') { color = '#7fe08a'; content = '+' + f.value }
-    else if (f.kind === 'block') { color = '#9ac8f0'; content = '+' + f.value }
+    if (f.kind === 'dmg') { color = '#F72B14'; content = String(f.value); size = 40 }
+    else if (f.kind === 'heal') { color = 'rgb(35,247,20)'; content = '+' + f.value; size = 30 }
+    else if (f.kind === 'block') { color = '#9ac8f0'; content = '+' + f.value; size = 26 }
     else if (f.kind === 'status') {
       content = `<img src="${A(statusImgKey(f.text || ''))}" width="26" height="26"><span style="color:${(f.value || 0) > 0 ? '#7fe08a' : '#ff8a7a'}">${(f.value || 0) > 0 ? '+' : ''}${f.value}</span>`
-    } else if (f.kind === 'text') { color = '#ffe9a0'; content = String(f.text) }
-    el.style.cssText = `left:${pos.x}px;top:${pos.y}px;color:${color};font-size:${size}px`
-    el.innerHTML = content
+    } else if (f.kind === 'text' || f.kind === 'buff') { color = '#ffe9a0'; content = String(f.text); size = 20 }
+    el.style.cssText = `left:${pos.x}px;top:${pos.y}px;color:${color};font-size:${size}px;white-space:nowrap;transform:translate(-50%,0);text-shadow:${f.kind === 'dmg' ? '2px 2px 0 #4a0a04,0 0 10px rgba(0,0,0,.6)' : '1px 1px 0 #000'}`
+    // 随机旋转（±5°伤害 / ±3°治疗）内层
+    const rot = f.kind === 'dmg' ? (Math.random() * 2 - 1) * 5 : f.kind === 'heal' || f.kind === 'block' ? (Math.random() * 2 - 1) * 3 : 0
+    el.innerHTML = `<span style="display:inline-block;transform:rotate(${rot}deg)">${content}</span>`
     fxLayer.appendChild(el)
-    setTimeout(() => { el.remove(); st.removeFx(f.id) }, 1150)
+    playFloatAnim(el, f.kind)
+    const ms = f.kind === 'dmg' ? 2000 : 1300
+    setTimeout(() => { el.remove(); st.removeFx(f.id) }, ms)
   }
 }
 
@@ -1936,6 +2044,24 @@ function updateScreen(scr: string, run: RunState | null) {
   else if (scr === 'gameover' || scr === 'victory') sigScreen('gameover', () => rGameOver(run))
 }
 
+// ============ 锻造升级卡牌特效（原版 NCardUpgradeVfx） ============
+// 升级卡 scale 0→1（0.25s CubicOut）+ 星光出现在屏幕中央，停 1.75s 后飞向牌组（缩小+旋转+淡出）
+let upgradeFxShown = 0
+function watchUpgradeFx() {
+  const st = g()
+  const fx = st.upgradeFx
+  if (!fx || fx.ts === upgradeFxShown) return
+  upgradeFxShown = fx.ts
+  if (!CARDS[fx.id]) return
+  const holder = document.getElementById('card-play-fx') || fxLayer
+  const el = document.createElement('div')
+  el.className = 'upgrade-vfx'
+  el.innerHTML = `<div class="up-card">${cardHtml({ uid: fx.uid, id: fx.id, upgraded: 1 }, 230)}<div class="up-star"></div></div>`
+  holder.appendChild(el)
+  setTimeout(() => el.classList.add('flying'), 2000)
+  setTimeout(() => { el.remove(); st.clearUpgradeFx() }, 2900)
+}
+
 function render() {
   const st = g()
   const run = st.run
@@ -1950,6 +2076,7 @@ function render() {
   updateScreen(scr, run)
   computeFxPositions()
   renderNewFx()
+  watchUpgradeFx()
   renderOverlays(st)
   renderMenuOverlay(st)
 }
@@ -2353,7 +2480,7 @@ net.onRooms(list => {
 })
 useGame.subscribe(render)
 render()
-console.log('[STS standalone] 游戏就绪 v1.10（单人 + 联机合作 · 服务器中转/P2P双通道 + 房间大厅）')
+console.log('[STS standalone] 游戏就绪 v1.11（单人 + 联机合作 · 服务器中转/P2P双通道 + 房间大厅）')
 
 
 

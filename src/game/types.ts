@@ -306,7 +306,7 @@ export interface CombatState {
 }
 
 export interface FxEvent {
-  kind: 'dmg' | 'block' | 'heal' | 'status' | 'shake' | 'buff' | 'text' | 'slash' | 'lunge' | 'cardPlay' | 'orb'
+  kind: 'dmg' | 'block' | 'heal' | 'status' | 'shake' | 'buff' | 'text' | 'slash' | 'lunge' | 'cardPlay' | 'orb' | 'intentBurst'
   target: 'player' | string
   value?: number
   text?: string

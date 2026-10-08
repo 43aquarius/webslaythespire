@@ -38,6 +38,7 @@
   ],
   "exclude": [
     "node_modules",
-    "sts2-web-study"
+    "sts2-web-study",
+    "sts2-web"
   ]
 }

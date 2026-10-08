@@ -962,6 +962,8 @@ export function enemyStep(combat: CombatState, run: RunState): boolean {
 
   // 行动前记录意图目标（联机：攻击指向哪位玩家）；随后清除意图显示（原版行为）
   const intentTarget = actor.intent?.targetIdx ?? 0
+  // 意图执行爆发特效（原版 NIntent.PlayPerform：四份叠加副本 α0.27 依次 0.25s 间隔放大 0.5→1.49）
+  if (actor.intent) fx(combat, 'intentBurst', actor.uid, undefined, actor.intent.type)
   actor.intent = null
 
   const def = ENEMIES[actor.id]

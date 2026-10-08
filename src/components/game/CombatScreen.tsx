@@ -92,7 +92,8 @@ function IntentView({ enemy, targetable }: { enemy: EnemyInstance; targetable: b
 
   return (
     <Tip tip={<b>{mvName}</b>}>
-      <div className="sts-intent flex items-center gap-1" style={{ filter: 'drop-shadow(0 2px 4px #000)' }}>
+      <div className="sts-intent sts-intent-bob flex items-center gap-1"
+        style={{ filter: 'drop-shadow(0 2px 4px #000)', animationDelay: `${((enemy.uid.charCodeAt(enemy.uid.length - 1) || 0) % 7) * 0.33}s` }}>
         {isAttack && <img src={icon} alt="" width={40} height={40} draggable={false} />}
         {isAttack && (
           <span className="sts-num sts-body font-black" style={{ fontSize: 26, color: '#ffdf9a', textShadow: '1px 1px 0 #000, 0 0 8px #300' }}>
@@ -115,7 +116,99 @@ function IntentView({ enemy, targetable }: { enemy: EnemyInstance; targetable: b
   )
 }
 
-// ============ 浮动数字 ============
+// ============ 意图执行爆发（原版 NIntent.PlayPerform） ============
+// 四份叠加意图图标副本（α 0.27），各延迟 0.25s，1s 内从 0.5 → 1.49 放大淡出
+function IntentBurst({ items, removeFx }: { items: FxItem[]; removeFx: (id: number) => void }) {
+  const timedRef = useRef<Set<number>>(new Set())
+  useEffect(() => {
+    let timers: ReturnType<typeof setTimeout>[] = []
+    for (const it of items) {
+      if (timedRef.current.has(it.id)) continue
+      timedRef.current.add(it.id)
+      timers.push(setTimeout(() => removeFx(it.id), 1900))
+    }
+    return () => timers.forEach(clearTimeout)
+  }, [items, removeFx])
+  if (!items.length) return null
+  const map: Record<string, string> = {
+    attack: 'attack3', attackDebuff: 'attack5', attackDefend: 'attack4',
+    defend: 'defend', buff: 'buff', debuff: 'debuff', strongDebuff: 'debuffStrong',
+    sleep: 'sleep', unknown: 'unknown',
+  }
+  return (
+    <>
+      {items.map(it => (
+        <div key={it.id} className="absolute inset-0 flex items-start justify-center pointer-events-none" style={{ zIndex: 56 }}>
+          {[0, 1, 2, 3].map(k => (
+            <div key={k} className="sts-intent-burst absolute" style={{ top: 4, left: '50%', animationDelay: `${k * 0.25}s` }}>
+              <img src={`${A}/intent/${map[it.text || ''] || 'unknown'}.png`} alt="" width={44} height={44} draggable={false} />
+            </div>
+          ))}
+        </div>
+      ))}
+    </>
+  )
+}
+
+// ============ 浮动数字（原版 NDamageNumVfx / NHealNumVfx 物理还原） ============
+// 伤害数字：红 #F72B14 → 奶油 #FFF6E2（0.5s）、2.5×→1× 缩放（1.2s QuadOut）、
+//   重力 1000px/s² 抛物弧线、初速 vy=-(700±100) vx=±100、随机旋转 ±5°、透明度 1-(t/2)²、共 2s
+// 治疗/格挡：绿色/蓝色，2000px/s² 减速上浮、2.5×→1×（0.5s）、1s 后快速淡出、共 1.3s
+// 状态/文字：温和上浮 36px 渐隐 1.3s
+type FloatRoll = { rot: number; sc: number; vx: number; vy: number }
+const floatRolls = new Map<number, FloatRoll>()
+function rollFor(it: FxItem): FloatRoll {
+  let r = floatRolls.get(it.id)
+  if (!r) {
+    const kind0 = it.kind
+    r = kind0 === 'dmg'
+      ? { rot: (Math.random() * 2 - 1) * 5, sc: 1.2 + Math.random() * 0.1, vx: (Math.random() * 2 - 1) * 100, vy: -(700 + Math.random() * 100) }
+      : kind0 === 'heal' || kind0 === 'block'
+        ? { rot: (Math.random() * 2 - 1) * 3, sc: 1.15 + Math.random() * 0.08, vx: (Math.random() * 2 - 1) * 60, vy: -(300 + Math.random() * 300) }
+        : { rot: (Math.random() * 2 - 1) * 2, sc: 1, vx: (Math.random() * 2 - 1) * 30, vy: -120 }
+    floatRolls.set(it.id, r)
+  }
+  return r
+}
+function playFloatAnim(el: HTMLDivElement, it: FxItem) {
+  const inner = el.firstElementChild as HTMLElement | null
+  if (!inner) return
+  if (it.kind === 'dmg') {
+    const { vx, vy } = rollFor(it)
+    const frames: Keyframe[] = []
+    for (let i = 0; i <= 20; i++) {
+      const t = (i / 20) * 2
+      const x = vx * t, y = vy * t + 1000 * t * t
+      const sc = t < 1.2 ? 2.5 - 1.5 * (1 - (1 - t / 1.2) ** 2) : 1
+      const op = 1 - (t / 2) ** 2
+      frames.push({ offset: i / 20, transform: `translate(calc(-50% + ${x}px), ${y}px) scale(${sc})`, opacity: Math.max(0, op) })
+    }
+    el.animate(frames, { duration: 2000, easing: 'linear', fill: 'forwards' })
+    inner.animate([{ color: 'rgb(247,43,20)' }, { color: '#FFF6E2' }], { duration: 500, easing: 'cubic-bezier(.33,1,.68,1)', fill: 'forwards' })
+  } else if (it.kind === 'heal' || it.kind === 'block') {
+    const { vx, vy } = rollFor(it)
+    const frames: Keyframe[] = []
+    for (let i = 0; i <= 20; i++) {
+      const t = (i / 20) * 1.3
+      const sp = Math.hypot(vx, vy), stop = sp / 2000, tt = Math.min(t, stop)
+      const d = sp * tt - 1000 * tt * tt
+      const x = (vx / sp) * d, y = (vy / sp) * d
+      const sc = t < 0.5 ? 2.2 - 1.2 * (1 - (1 - t / 0.5) ** 2) : 1
+      const op = t < 1 ? 1 : Math.max(0, 1 - ((t - 1) / 0.3) ** 2)
+      frames.push({ offset: i / 20, transform: `translate(calc(-50% + ${x}px), ${y}px) scale(${sc})`, opacity: Math.max(0, op) })
+    }
+    el.animate(frames, { duration: 1300, easing: 'linear', fill: 'forwards' })
+  } else {
+    el.animate(
+      [
+        { transform: 'translate(-50%, 6px) scale(.9)', opacity: 0 },
+        { transform: 'translate(-50%, -14px) scale(1)', opacity: 1, offset: 0.25 },
+        { transform: 'translate(-50%, -46px) scale(1)', opacity: 0 },
+      ],
+      { duration: 1300, easing: 'cubic-bezier(.25,.6,.4,1)', fill: 'forwards' }
+    )
+  }
+}
 function FloatFx({ items, removeFx }: { items: FxItem[]; removeFx: (id: number) => void }) {
   const timedRef = useRef<Set<number>>(new Set())
   useEffect(() => {
@@ -123,7 +216,8 @@ function FloatFx({ items, removeFx }: { items: FxItem[]; removeFx: (id: number) 
     for (const it of items) {
       if (timedRef.current.has(it.id)) continue
       timedRef.current.add(it.id)
-      timers.push(setTimeout(() => removeFx(it.id), 1150))
+      const ms = it.kind === 'dmg' ? 2000 : 1300
+      timers.push(setTimeout(() => { floatRolls.delete(it.id); removeFx(it.id) }, ms))
     }
     return () => timers.forEach(clearTimeout)
   }, [items, removeFx])
@@ -133,9 +227,10 @@ function FloatFx({ items, removeFx }: { items: FxItem[]; removeFx: (id: number) 
       {items.map((it, i) => {
         let content: React.ReactNode = null
         let color = '#fff'
-        if (it.kind === 'dmg') { content = it.value; color = '#ff5a4a' }
-        else if (it.kind === 'heal') { content = `+${it.value}`; color = '#7fe08a' }
-        else if (it.kind === 'block') { content = `+${it.value}`; color = '#9ac8f0' }
+        let fontSize = 24
+        if (it.kind === 'dmg') { content = it.value; color = '#F72B14'; fontSize = 40 }
+        else if (it.kind === 'heal') { content = `+${it.value}`; color = 'rgb(35,247,20)'; fontSize = 30 }
+        else if (it.kind === 'block') { content = `+${it.value}`; color = '#9ac8f0'; fontSize = 26 }
         else if (it.kind === 'status') {
           const info = STATUS_INFO[it.text || '']
           content = (
@@ -144,18 +239,21 @@ function FloatFx({ items, removeFx }: { items: FxItem[]; removeFx: (id: number) 
               <span style={{ color: (it.value || 0) > 0 ? '#7fe08a' : '#ff8a7a' }}>{(it.value || 0) > 0 ? '+' : ''}{it.value}</span>
             </span>
           )
-        } else if (it.kind === 'text') { content = it.text; color = '#ffe9a0' }
+        } else if (it.kind === 'text' || it.kind === 'buff') { content = it.text; color = '#ffe9a0'; fontSize = 20 }
         else return null
+        const roll = rollFor(it)
         return (
           <div
             key={it.id}
             className="sts-float absolute sts-num font-black sts-body"
+            ref={el => { if (el && !el.dataset.go) { el.dataset.go = '1'; playFloatAnim(el, it) } }}
             style={{
-              left: '50%', top: -14 - i * 10, transform: 'translateX(-50%)',
-              fontSize: it.kind === 'dmg' ? 38 : 24, color, whiteSpace: 'nowrap',
+              left: '50%', top: -14 - i * 6,
+              fontSize, color, whiteSpace: 'nowrap', zIndex: 60,
+              textShadow: it.kind === 'dmg' ? '2px 2px 0 #4a0a04, 0 0 10px rgba(0,0,0,.6)' : '1px 1px 0 #000',
             }}
           >
-            {content}
+            <div style={{ transform: `rotate(${roll.rot}deg) scale(${roll.sc})` }}>{content}</div>
           </div>
         )
       })}
@@ -235,6 +333,8 @@ function EnemyView({ enemy, idx }: { enemy: EnemyInstance; idx: number }) {
 
   // 格挡获得蓝色光环（原版动画还原）
   const lastBlockRef = useRef(enemy.block)
+  // 格挡破碎：block 从 >0 变 0 时，盾牌左右两半分离飞散（原版 NBlockBrokenVfx：分离0.4s+淡出0.6s）
+  const [blockBreaks, setBlockBreaks] = useState<number[]>([])
   useEffect(() => {
     if (enemy.block > lastBlockRef.current && spriteRef.current) {
       spriteRef.current.animate(
@@ -245,6 +345,10 @@ function EnemyView({ enemy, idx }: { enemy: EnemyInstance; idx: number }) {
         ],
         { duration: 550, easing: 'ease-out' }
       )
+    } else if (lastBlockRef.current > 0 && enemy.block === 0 && !enemy.dying) {
+      const at = Date.now()
+      setBlockBreaks(bs => [...bs, at])
+      setTimeout(() => setBlockBreaks(bs => bs.filter(x => x !== at)), 1000)
     }
     lastBlockRef.current = enemy.block
   }, [enemy.block])
@@ -264,8 +368,10 @@ function EnemyView({ enemy, idx }: { enemy: EnemyInstance; idx: number }) {
       onClick={() => targetable && clickEnemy(enemy.uid)}
     >
       {/* 意图 */}
-      <div className="mb-1" style={{ height: 50 }}>
+      <div className="mb-1 relative" style={{ height: 50 }}>
         <IntentView enemy={enemy} targetable={targetable} />
+        {/* 意图执行爆发（原版 NIntent.PlayPerform：四份叠加副本 α0.27，各 0.25s 间隔，1s 内 0.5→1.49） */}
+        <IntentBurst items={fxList.filter(f => f.kind === 'intentBurst' && f.target === enemy.uid)} removeFx={removeFx} />
       </div>
       {/* 浮动特效 */}
       <div className="absolute" style={{ top: 100, left: '50%', marginLeft: -60, width: 120, height: 40, zIndex: 60 }}>
@@ -288,12 +394,32 @@ function EnemyView({ enemy, idx }: { enemy: EnemyInstance; idx: number }) {
           }}
         />
       </div>
-      {/* 名字 + 血条 + 状态 */}
-      <div className="flex flex-col items-center gap-1" style={{ marginTop: -28 }}>
+      {/* 名字 + 血条 + 状态（战斗开始自上方 20px 滑入，每敌随机延迟 1.3-1.7s，原版 NCreatureStateDisplay；中途召唤的敌人立即滑入） */}
+      <div className="flex flex-col items-center gap-1 relative"
+        ref={el => {
+          if (el && !el.dataset.stated) {
+            el.dataset.stated = '1'
+            const fresh = combat.turn <= 1 && combat.phase === 'player'
+            const delay = fresh ? 1.3 + ((idx * 37 + (enemy.uid.charCodeAt(enemy.uid.length - 1) || 0)) % 41) / 100 : 0
+            el.style.animation = `sts-state-in .5s cubic-bezier(.2,.8,.3,1) ${delay}s backwards`
+          }
+        }}
+        style={{ marginTop: -28 }}>
         <div className="sts-body font-bold" style={{ fontSize: 15, color: '#f5e5c8', textShadow: '1px 1px 0 #000' }}>
           {def.name}
         </div>
-        <HpBar hp={enemy.hp} maxHp={enemy.maxHp} block={enemy.block} width={def.boss ? 280 : def.small ? 120 : 170} poisonNext={(enemy.statuses as any)?.poison || 0} />
+        <div className="relative">
+          <HpBar hp={enemy.hp} maxHp={enemy.maxHp} block={enemy.block} width={def.boss ? 280 : def.small ? 120 : 170} poisonNext={(enemy.statuses as any)?.poison || 0} />
+          {/* 格挡破碎：盾牌左右两半飞散（0.4s 分离 + 0.6s 淡出） */}
+          {blockBreaks.map(at => (
+            <div key={at} className="absolute pointer-events-none" style={{ left: -26, top: -2, width: 26, height: 26, zIndex: 52 }}>
+              <img src={`${A}/status/block.png`} alt="" className="sts-bb-left" draggable={false}
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }} />
+              <img src={`${A}/status/block.png`} alt="" className="sts-bb-right" draggable={false}
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }} />
+            </div>
+          ))}
+        </div>
         <StatusRow statuses={enemy.statuses} size={28} />
       </div>
     </div>

@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "**否**\n\n**描述：**\n在您提供的这张《杀戮尖塔》网页版战斗截图中，敌人头顶的意图图标（红虱子上方的“攻击”图标和绿虱子上方的“增益/防御”图标）均为**标准的静态图标**。\n\n它们没有显示任何放大、发光的副本或重影效果，也没有出现多个半透明叠加的影像或能量波纹扩散的视觉特效。这些意图图标看起来与游戏原版的默认显示状态一致，是清晰、单一的图像。",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1791425942,
+  "id": "20261008101834d13a5334b2bc4cc6",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261008101834d13a5334b2bc4cc6",
+  "usage": {
+    "completion_tokens": 109,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 937,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1046
+  }
+}

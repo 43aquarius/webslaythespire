@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "根据您提供的4张网页版《杀戮尖塔》截图，分析结果如下：\n\n**图1 (combat_full)：**\n*   **敌人意图图标：是**。敌人头顶显示有蓝色的“格挡/防御”意图图标。\n*   **敌人血条状态：是**。血条为红色，清晰显示当前血量（53）和最大血量（53），且带有白色文字。\n*   **手牌扇形布局：是**。底部手牌呈正常的扇形展开，卡牌之间有重叠和层级感。\n\n**图2 (bluebar_damage)：**\n*   **蓝色血条：是**。敌人的血条已从红色变为蓝色（表示当前处于格挡状态）。\n*   **浮动伤害数字：是**。屏幕上有一个巨大的红色数字“7”正在浮动上升，表示造成的伤害数值。\n\n**图3 (intent_burst)：**\n*   **意图爆发效果：否**。截图中的敌人头顶仅显示了静态的普通意图图标，没有观察到明显的发光、放大或残影等动态爆发特效（该图与图1基本一致，未捕捉到动画帧）。\n\n**图4 (upgrade_fx)：**\n*   **锻造升级动画：是**。屏幕中央有一张放大的卡牌（打击），卡牌周围带有明显的金色边框光效和背景高亮，符合升级时的视觉反馈特征。",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1791425799,
+  "id": "20261008101633cca0ba0c7d414c14",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261008101633cca0ba0c7d414c14",
+  "usage": {
+    "completion_tokens": 293,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 3670,
+    "prompt_tokens_details": {
+      "cached_tokens": 3
+    },
+    "total_tokens": 3963
+  }
+}

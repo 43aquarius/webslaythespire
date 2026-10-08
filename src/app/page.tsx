@@ -11,7 +11,7 @@ import { CombatScreen } from '@/components/game/CombatScreen'
 import { RewardScreen, BossRelicScreen, RestScreen, TreasureScreen, GameOverScreen } from '@/components/game/RewardScreen'
 import { ShopScreen, EventScreen } from '@/components/game/ShopScreen'
 import { NeowScreen } from '@/components/game/NeowScreen'
-import { PileViewOverlay, CardSelectOverlay, ToastView } from '@/components/game/Overlays'
+import { PileViewOverlay, CardSelectOverlay, ToastView, UpgradeVfxOverlay } from '@/components/game/Overlays'
 import { MusicPlayer } from '@/components/game/MusicPlayer'
 import { InGameMenu } from '@/components/game/InGameMenu'
 import { ActTransition } from '@/components/game/RewardScreen'
@@ -96,6 +96,7 @@ export default function Home() {
         {/* 遮罩层 */}
         {run && <PileViewOverlay />}
         {run && <CardSelectOverlay />}
+        <UpgradeVfxOverlay />
         <ToastView />
         {/* BGM 控制（舞台内右上角） */}
         <MusicPlayer />

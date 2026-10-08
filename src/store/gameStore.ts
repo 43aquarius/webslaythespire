@@ -57,9 +57,11 @@ interface GameStore {
   selectedCharacter: CharacterId
   net: NetState
   mpSmithQueue: number[]       // 联机篝火：待锻造玩家队列
+  upgradeFx: { uid: string; id: string; ts: number } | null   // 锻造升级特效（原版 NCardUpgradeVfx）
 
   selectCharacter: (c: CharacterId) => void
   startRun: (c?: CharacterId) => void
+  clearUpgradeFx: () => void
   gotoMenuScreen: (s: MenuScreen) => void
   toggleMenu: (open?: boolean) => void
   continueRun: () => void
@@ -406,10 +408,13 @@ export const useGame = create<GameStore>((set, get) => {
     selectedCharacter: 'ironclad',
     net: { ...EMPTY_NET },
     mpSmithQueue: [],
+    upgradeFx: null,
 
     selectCharacter: (c) => set({ selectedCharacter: c }),
 
     gotoMenuScreen: (s) => set({ menuScreen: s, menuOpen: false }),
+
+    clearUpgradeFx: () => set({ upgradeFx: null }),
 
     toggleMenu: (open) => set(s => ({ menuOpen: open !== undefined ? open : !s.menuOpen })),
 
@@ -419,7 +424,7 @@ export const useGame = create<GameStore>((set, get) => {
       set({
         run: newRun(character), menuScreen: 'title', menuOpen: false, busy: false, fxList: [], select: null, pileView: null,
         selectedCardUid: null, selectedPotionIdx: null, eventMsg: null, bossOptions: [], toast: null, endBanner: null,
-        selectedCharacter: character, mpSmithQueue: [],
+        selectedCharacter: character, mpSmithQueue: [], upgradeFx: null,
       })
     },
 
@@ -1128,7 +1133,9 @@ export const useGame = create<GameStore>((set, get) => {
         const c = r.deck.find(x => x.uid === cardUid)
         if (c) c.upgraded = Math.max(1, c.upgraded)
         r.players[owner].deck = r.deck
-        if (select.kind === 'restSmith') {
+        if (select.kind === 'restSmith' && c) {
+          // 锻造升级特效（原版 NCardUpgradeVfx：0.25s 放大入场 + 星光，1.75s 后飞向牌组）
+          const fxData = { uid: c.uid, id: c.id, ts: Date.now() }
           // 联机：链式锻造下一位玩家
           const q = [...get().mpSmithQueue]
           if (q.length > 0) {
@@ -1138,16 +1145,17 @@ export const useGame = create<GameStore>((set, get) => {
                 kind: 'restSmith', title: `锻造：${r.players[nextP].name} 升级一张牌`,
                 cardUids: r.players[nextP].deck.map(c => c.uid), source: 'deck', owner: nextP,
               },
-              mpSmithQueue: q, toast: '锻造完成！',
+              mpSmithQueue: q, toast: '锻造完成！', upgradeFx: fxData,
             })
             setTimeout(() => { if (get().toast === '锻造完成！') set({ toast: null }) }, 1500)
             return
           }
           r.screen = 'map'
-          set({ run: r, select: null, mpSmithQueue: [], toast: '锻造完成！卡牌已升级' })
+          set({ run: r, select: null, mpSmithQueue: [], toast: '锻造完成！卡牌已升级', upgradeFx: fxData })
           setTimeout(() => { if (get().toast === '锻造完成！卡牌已升级') set({ toast: null }) }, 2200)
           return
         }
+        if (c) set({ upgradeFx: { uid: c.uid, id: c.id, ts: Date.now() } })
       }
       set({ run: r, select: null })
     }),

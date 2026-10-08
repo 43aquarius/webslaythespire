@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "**否**\n\n**描述：**\n在敌人头顶的意图图标区域（红虱子上方的火焰/攻击图标，绿虱子上方的防御/格挡图标），图标显示为**单一、清晰、实体的图像**，没有看到任何放大、发光的副本或重影效果，也没有多个半透明图标叠加形成的波纹扩散动画。这些意图图标看起来是静态且边缘锐利的。",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1791425830,
+  "id": "202610081017081c6048e6f7d94f1c",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "202610081017081c6048e6f7d94f1c",
+  "usage": {
+    "completion_tokens": 86,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 939,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1025
+  }
+}

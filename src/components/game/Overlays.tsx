@@ -1,6 +1,6 @@
 'use client'
 // ============ 遮罩层：牌堆查看 / 卡牌选择 / 预见 ============
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useGame } from '@/store/gameStore'
 import { CardInstance } from '@/game/types'
 import { AP } from '@/game/engine'
@@ -178,6 +178,45 @@ export function ToastView() {
     <div className="sts-toast">
       <div className="sts-panel px-6 py-3 sts-body" style={{ fontSize: 16, color: '#ffe9c0' }}>
         {toast}
+      </div>
+    </div>
+  )
+}
+
+// ============ 锻造升级卡牌特效（原版 NCardUpgradeVfx） ============
+// 卡牌以 scale 0→1（0.25s CubicOut）+ 星光出现在屏幕中央，停留 1.75s 后飞向牌组按钮（缩小+旋转+淡出）
+export function UpgradeVfxOverlay() {
+  const upgradeFx = useGame(s => s.upgradeFx)
+  const clearUpgradeFx = useGame(s => s.clearUpgradeFx)
+  const [shown, setShown] = useState<{ uid: string; id: string; ts: number } | null>(null)
+  const [flying, setFlying] = useState(false)
+
+  useEffect(() => {
+    if (!upgradeFx) return
+    setShown(upgradeFx)
+    setFlying(false)
+    const t1 = setTimeout(() => setFlying(true), 2000)
+    const t2 = setTimeout(() => { setShown(null); clearUpgradeFx() }, 2900)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+  }, [upgradeFx?.ts])
+
+  if (!shown) return null
+  return (
+    <div key={shown.ts} className="upgrade-vfx-overlay absolute inset-0 pointer-events-none" style={{ zIndex: 340 }}>
+      <div
+        className="up-card absolute"
+        style={{
+          left: '50%', top: '44%',
+          animation: flying
+            ? 'sts-upgrade-fly .9s cubic-bezier(.5,0,.8,.4) forwards'
+            : 'sts-upgrade-in .25s cubic-bezier(.2,.9,.3,1) both',
+          filter: 'drop-shadow(0 0 30px rgba(255, 210, 90, 0.55))',
+        }}
+      >
+        <div className="relative">
+          <CardView card={{ uid: shown.uid, id: shown.id, upgraded: 1 }} width={230} />
+          {!flying && <div className="sts-upgrade-star" style={{ width: 320, height: 320 }} />}
+        </div>
       </div>
     </div>
   )

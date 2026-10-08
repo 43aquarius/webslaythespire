@@ -282,3 +282,27 @@ Work Log:
 Stage Summary:
 - sts2-web第二批研究成果全部落地:7大项(红晕/震屏/配色/横幅/能量/发光/拱弧)×2版本同步,29+19项E2E全绿,VLM视觉确认
 - 本批后游戏打击感与原版还原度显著提升:受击有红晕+分级震屏(只震战场),手牌有原版配色语义(红费/绿名/动态数值),回合切换/能量/奖励/宝球均为原版视觉规范
+---
+Task ID: 14
+Agent: main
+Task: sts2-web 研究第三批落地：浮动伤害数字物理/意图浮动+执行爆发/格挡变蓝+破碎/状态闪光/状态栏滑入/锻造升级特效（两版本同步）
+
+Work Log:
+- 【研究新模块】重新克隆 sts2-web（旧克隆已丢失），深入研究前两批未覆盖模块：particles.ts(Godot粒子CPU模拟)、vfx-cards.ts(NCardUpgradeVfx升级特效/NRelicFlashVfx精确参数)、vfx-misc.ts(NPowerUpVfx/NBlockBrokenVfx)、transition.tsx(房间切换渐变黑幕)、rest.tsx(篝火去饱和+烟雾+按钮hover参数)、inspect.tsx(牌组检视屏)、hand-select.tsx(战斗内升级预览)、highlight.ts(SDF涟漪卡牌高亮)、creature-ui.tsx 深挖(浮动数字物理/意图bob+爆发/格挡破碎/血条格挡变蓝/状态栏滑入/PowerFlash)
+- 【落地①浮动伤害数字物理重做】原版 NDamageNumVfx/NHealNumVfx：伤害数字 红#F72B14→奶油#FFF6E2(500ms变色)+2.5×→1×缩放(1.2s QuadOut)+重力1000px/s²抛物弧线(vy=-(700±100)px/s vx=±100)+随机旋转±5°/缩放1.2±0.1+透明度1-(t/2)²+共2s；治疗/格挡 2000px/s²减速上浮+2.2×→1×(0.5s)+1s后快速淡出共1.3s；状态/文字温和上浮36px渐隐。WAAPI 21关键帧采样（同 sts2-web 实现方式）；删除两版本旧 CSS 上飘动画（1.1s 与 WAAPI 冲突）
+- 【落地②意图图标浮动】原版 NIntent：sin(πt+offset)·10+8px 向上浮动，每敌错峰(按uid末字符0.33s步进)；两版本
+- 【落地③敌人执行时意图四重爆发】原版 NIntent.PlayPerform：四份叠加副本(α0.27、plus-lighter混合、间隔0.25s、1s内0.5→1.49放大淡出)；引擎 enemyStep 在 actor.intent=null 前推送新 fx 事件 intentBurst(携带意图类型)；FxEvent kind 联合类型扩展；两版本
+- 【落地④格挡变蓝】原版行为：敌人有格挡时血条填充红→蓝 rgb(59,111,163)渐变+浅蓝外框 rgba(178,224,255)+数字描边深蓝#1B3045；两版本
+- 【落地⑤格挡破碎】原版 NBlockBrokenVfx：block 从>0变0时盾牌图标左右两半(clip-path 分割)分离0.4s+淡出0.6s飞散；两版本
+- 【落地⑥状态图标获得闪光】原版 NPower PowerFlash：新状态或层数增加时图标 brightness2.6 闪光+scale1.4→1 约0.95s；两版本（Next.js useRef快照对比 / 单文件版 dataset JSON 快照）
+- 【落地⑦战斗开始状态栏滑入】原版 NCreatureStateDisplay：敌人名字+血条+状态自上方20px滑入0.5s，战斗开始随机延迟1.3-1.7s错峰、中途召唤立即滑入(fresh判定)；两版本
+- 【落地⑧锻造升级卡牌特效】原版 NCardUpgradeVfx：升级卡 scale 0→1(0.25s)+星光爆发出现在屏幕中央(230px大卡)→停1.75s→飞向牌组按钮(缩小+旋转+淡出)；store 新增 upgradeFx 状态+clearUpgradeFx，restSmith/eventUpgrade 确认时触发；Next.js UpgradeVfxOverlay 全局组件 / 单文件版 watchUpgradeFx；两版本
+- 【修复】意图爆发副本被 Tailwind preflight img{max-width:100%} 钳制为21px(shrink-wrap循环依赖)→显式44px+max-width:none；tsconfig 排除新克隆的 sts2-web 目录
+- 【测试】test_batch13(Next.js 25/25)：滑入动画+延迟区间/意图浮动类/伤害数字WAAPI 2000ms+21关键帧+红→奶油内层变色/状态闪光≈0.95s/格挡蓝填充+浅蓝外框/破碎两半+动画名/爆发四副本44px+播放+引擎真实推送(注入fx法+endTurn验证)/升级特效五项；test_batch13_standalone(25/25)同套；regression 16/16；regression5 412/412；mptest 23/23；tsc 零错误；生产构建+单文件18.86MB重建；VLM核验4张截图(蓝色血条✓伤害数字✓升级特效✓)+像素级验证意图爆发(6.2%像素差异>30,最大差319,差异框覆盖意图图标——α0.27为原版参数,动效中可感知)
+- 【重要调试经验】agent-browser eval 裸调返回 Promise 的 async action 会阻塞至其完成(敌人回合跑完爆发副本已移除)→必须包 IIFE 返回字符串；dev服务器会被会话回收,须 double-fork(detached+unref) 启动
+- 【版本】v1.10→v1.11(两版本)
+
+Stage Summary:
+- sts2-web 第三批研究落地：8大项战斗表现还原(浮动数字物理/意图浮动/意图执行爆发/格挡变蓝/格挡破碎/状态闪光/状态栏滑入/锻造升级特效)×2版本，25+25项E2E全绿
+- 打击感与原版还原度再上台阶：伤害数字有原版抛物物理与变色、敌人行动有意图爆发预告、格挡有蓝条+破碎反馈、状态获得有闪光、锻造有原版卡牌特效
+- 尚未落地的研究收获(后续批次候选)：房间切换渐变过渡、篝火去饱和+烟雾、检视屏(牌组大图浏览+升级预览勾选)、战斗内升级预览(Armaments 选卡时)、SDF涟漪卡牌可选高亮、遗物闪光精确参数(3副本0.75→1.25/0.2s间隔)
