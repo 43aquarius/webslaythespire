@@ -12,9 +12,13 @@ import { CHARACTER_INFO } from '@/game/run'
 import { STATUS_INFO, STATUS_IMG_FIX, statusImgPath } from '@/game/statusInfo'
 import { hasSave, loadStats, loadSettings, savePlayerName } from '@/game/persist'
 import { net, getServerUrl, setServerUrl, netMode, setNetMode, OFFICIAL_SERVER } from '@/game/net'
+import { sfx } from '@/game/sfx'
 import type { RoomInfo } from '@/game/net'
 import type { CharacterId } from '@/game/types'
 import type { RunState, CombatState, CardInstance, EnemyInstance } from '@/game/types'
+
+// 单文件版 SFX 解析：ASSETS['audio/sfx/{name}.ogg']（make_assets 递归内联）
+sfx.resolver = (name: string) => ASSETS[`audio/sfx/${name}.ogg`] || ''
 
 declare const ASSETS: Record<string, string>
 const A = (k: string) => ASSETS[k] || ''
@@ -81,7 +85,7 @@ function setupStage() {
   })
   if (window.visualViewport) window.visualViewport.addEventListener('resize', fitStage)
   // 预加载关键背景，避免首次切屏白闪
-  for (const k of ['bg/combat.jpg', 'bg/map.jpg', 'bg/menu.jpg']) { const img = new Image(); img.src = A(k) }
+  for (const k of ['bg/combat1.jpg', 'bg/combat2.jpg', 'bg/combat3.jpg', 'bg/combat4.jpg', 'bg/map.jpg', 'bg/menubg.jpg', 'bg/campfire1.jpg', 'bg/event1.jpg']) { const img = new Image(); img.src = A(k) }
 }
 
 // 尝试切换到指定方向（全屏 + orientation.lock；iOS 不支持时静默失败）
@@ -94,13 +98,19 @@ async function tryOrient(lock: 'landscape' | 'portrait') {
   } catch { /* iOS 不支持，静默 */ }
 }
 
-// ============ BGM 引擎（曲目映射自原版反编译源码） ============
-type TrackKey = 'menu' | 'level' | 'elite' | 'boss' | 'merchant' | 'shrine' | 'credits' | 'victory' | 'death'
+// ============ BGM 引擎（曲目映射自原版反编译源码 MainMusic/TempMusic：各幕专属曲） ============
+type TrackKey = 'menu' | 'level' | 'level2' | 'level3' | 'act4' | 'elite' | 'boss' | 'boss2' | 'boss3' | 'boss4' | 'merchant' | 'shrine' | 'credits' | 'victory' | 'death'
 const MUSIC_SRC: Record<TrackKey, string> = {
   menu: A('audio/menu.ogg'),
   level: A('audio/level.ogg'),
+  level2: A('audio/level2.ogg'),
+  level3: A('audio/level3.ogg'),
+  act4: A('audio/act4.ogg'),
   elite: A('audio/elite.ogg'),
   boss: A('audio/boss.ogg'),
+  boss2: A('audio/boss2.ogg'),
+  boss3: A('audio/boss3.ogg'),
+  boss4: A('audio/boss4.ogg'),
   merchant: A('audio/merchant.ogg'),
   shrine: A('audio/shrine.ogg'),
   credits: A('audio/credits.ogg'),
@@ -231,17 +241,26 @@ function updateMusic(st: ReturnType<typeof g>) {
     return
   }
   musicLastStinger = null
-  let key: TrackKey = 'level'
+  // 原版 MainMusic：按幕选 Level 曲；TempMusic：按幕选 Boss 曲
+  const act = run.act || 1
+  const levelKey: TrackKey = act >= 4 ? 'act4' : act === 3 ? 'level3' : act === 2 ? 'level2' : 'level'
+  const bossKey: TrackKey = act >= 4 ? 'boss4' : act === 3 ? 'boss3' : act === 2 ? 'boss2' : 'boss'
+  let key: TrackKey = levelKey
   if (scr === 'neow') key = 'shrine'
   else if (scr === 'shop') key = 'merchant'
   else if (scr === 'event') key = 'shrine'
   else if (scr === 'bossRelic') key = 'credits'
   else if (scr === 'combat') {
     const c = run.combat
-    key = c?.isBoss ? 'boss' : c?.isElite ? 'elite' : 'level'
+    key = c?.isBoss ? bossKey : c?.isElite ? 'elite' : levelKey
   }
   music.play(key)
+  // 进入地图/商店：原版 MapOpen / 离开商店 RugClose
+  if (scr === 'map' && lastScreenForSfx !== 'map') sfx.play('mapOpen')
+  if (lastScreenForSfx === 'shop' && scr !== 'shop') sfx.play('shopClose')
+  lastScreenForSfx = scr
 }
+let lastScreenForSfx = ''
 
 // ============ 卡牌 HTML（四色卡框/宝球/类型图标） ============
 function raritySuffix(rarity: string): string {
@@ -643,7 +662,10 @@ function rMainMenu(): string {
     { label: '制 作 名 单', act: 'gotoMenu', arg: 'credits', dis: false },
   ]
   return `<div class="screen">
-  <div class="main-menu-bg" style="background-image:url('${A('bg/menu.jpg')}')"></div>
+  <div class="main-menu-bg" style="background-image:url('${A('bg/menubg.jpg')}')"></div>
+  <img class="sts-cloud sts-cloud-far" src="${A('title/midCloud13.png')}" draggable="false" alt="">
+  <img class="sts-cloud sts-cloud-mid" src="${A('title/topCloud2.png')}" draggable="false" alt="">
+  <img class="sts-cloud sts-cloud-near" src="${A('title/mg2.png')}" draggable="false" alt="">
   <div class="main-menu-fog"></div>
   <div class="center-col" style="padding-top:0;gap:14px">
     <img class="menu-logo" src="${A('bg/logo.png')}" alt="Slay the Spire" draggable="false" style="width:286px">
@@ -666,7 +688,7 @@ function rCharSelect(): string {
       <div class="sts-title" style="font-size:19px;margin-top:2px;letter-spacing:3px;color:${sel ? '#ffd980' : '#a89070'};text-shadow:2px 2px 0 #000">${CHARACTER_INFO[c].name}</div>
     </div>`
   }).join('')
-  return `<div class="screen bg-cover" style="background-image:url('${A('bg/menu.jpg')}')">
+  return `<div class="screen bg-cover" style="background-image:url('${A('bg/menubg.jpg')}')">
   <div class="shade" style="background:rgba(6,3,2,.5)"></div>
   <div class="center-col" style="padding-top:0;gap:16px">
     <div class="sts-title" style="font-size:36px;color:#ffd980;text-shadow:3px 3px 0 #000;letter-spacing:8px">选 择 你 的 角 色</div>
@@ -695,6 +717,9 @@ function rSettings(): string {
       <div class="row" style="gap:12px"><span class="sts-body" style="color:#c8b090;width:100px;font-size:15px">音乐音量</span>
         <input type="range" data-input="musicVol" min="0" max="1" step="0.05" value="${music.volume}" style="flex:1;accent-color:#c8a060">
         <span class="sts-body" style="color:#d8c8a8;width:36px;font-size:14px" id="vol-label">${music.muted ? 0 : Math.round(music.volume * 100)}</span></div>
+      <div class="row" style="gap:12px"><span class="sts-body" style="color:#c8b090;width:100px;font-size:15px">音效音量</span>
+        <input type="range" data-input="sfxVol" min="0" max="1" step="0.05" value="${sfx.volume}" style="flex:1;accent-color:#c8a060">
+        <span class="sts-body" style="color:#d8c8a8;width:36px;font-size:14px" id="sfxvol-label">${Math.round(sfx.volume * 100)}</span></div>
       <div class="row" style="gap:12px"><span class="sts-body" style="color:#c8b090;width:100px;font-size:15px">全屏</span>
         <button class="sts-btn sts-body" data-act="fullscreen" style="font-size:14px;padding:6px 20px">切换全屏（手机自动横屏）</button></div>
     </div>
@@ -962,7 +987,13 @@ function rNeow(run: RunState): string {
   return `<div class="screen bg-cover" style="background-image:url('${A('bg/map.jpg')}')">
   <div class="shade" style="background:linear-gradient(180deg,rgba(4,4,10,.85),rgba(8,6,14,.6),rgba(4,4,10,.88))"></div>
   <div class="center-col" style="padding-top:8px">
-    <img src="${A('neow/neow.png')}" alt="涅奥" draggable="false" style="width:400px;max-width:46vw;object-fit:contain;filter:drop-shadow(0 20px 36px rgba(0,0,0,.9)) drop-shadow(0 0 50px rgba(90,140,255,.25));animation:neowFloat 4s ease-in-out infinite">
+  <div style="position:relative;display:inline-block">
+    <img src="${A('neow/neow.png')}" alt="涅奥" draggable="false" style="width:400px;max-width:46vw;object-fit:contain;display:block;filter:drop-shadow(0 20px 36px rgba(0,0,0,.9)) drop-shadow(0 0 50px rgba(90,140,255,.25));animation:neowFloat 4s ease-in-out infinite">
+    <div style="position:absolute;left:17%;top:18%;transform:translate(-50%,-50%);width:13%;aspect-ratio:1;pointer-events:none">
+      <img src="${A('neow/eye.png')}" draggable="false" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain">
+      <img id="neow-lid" src="${A('neow/lid1.png')}" draggable="false" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain">
+    </div>
+  </div>
     <div class="sts-title" style="font-size:38px;color:#b8d0ff;text-shadow:3px 3px 0 #000,0 0 44px rgba(80,120,255,.5);letter-spacing:8px">涅奥</div>
     <div class="sts-body" style="color:#a8b8d8;font-size:15px;line-height:1.8;max-width:620px;margin:4px 0 14px">巨鲸涅奥在尖塔脚下苏醒。<br>${greeting}</div>
     ${waitBanner}
@@ -984,7 +1015,7 @@ function combatBgKey(act: number): string {
   if (act >= 4) return 'bg/combat4.jpg'
   if (act === 3) return 'bg/combat3.jpg'
   if (act === 2) return 'bg/combat2.jpg'
-  return 'bg/combat.jpg'
+  return 'bg/combat1.jpg'
 }
 
 function buildCombatScreen(run: RunState): string {
@@ -1242,11 +1273,29 @@ function playerExtraHtml(run: RunState, pidx?: number): string {
 // 玩家回合：主文字上浮50px进入 + 「回合 N」天蓝#87ceeb 下落50px，停留0.4s后0.3s淡出
 // 敌方回合：2×缩入 + 1.3s淡入，随后金#efc851→红#ff5555渐变1s并淡出
 let lastPhase = ''
+
+// 涅奥眨眼驱动（原版 NeowEye.java：lid1停5s→lid2-6闭眼每帧0.04s→全闭0.25s→开眼每帧0.06s）
+const NEOW_LID_SEQ = ['lid1', 'lid2', 'lid3', 'lid4', 'lid5', 'lid6', 'lid5', 'lid4', 'lid3', 'lid2']
+const NEOW_FRAME_MS = [5000, 40, 40, 40, 40, 250, 60, 60, 60, 60]
+let neowFrame = 0
+let neowNextAt = 0
+setInterval(() => {
+  const lid = document.getElementById('neow-lid') as HTMLImageElement | null
+  if (!lid) return
+  const now = performance.now()
+  if (now < neowNextAt) return
+  neowFrame = (neowFrame + 1) % 10
+  neowNextAt = now + NEOW_FRAME_MS[neowFrame]
+  lid.src = A('neow/' + NEOW_LID_SEQ[neowFrame] + '.png')
+}, 50)
+
 function turnBanner(phase: string, turn = 1) {
   if (phase === lastPhase) return
   const first = lastPhase === ''
   lastPhase = phase
   if (first || (phase !== 'player' && phase !== 'enemy')) return
+  // 原版音效：敌方回合/玩家回合切换
+  sfx.play(phase === 'enemy' ? 'enemyTurn' : 'turnEffect')
   const holder = document.getElementById('turn-banner-holder')
   if (!holder) return
   const EXPO = 'cubic-bezier(0.16, 1, 0.3, 1)'
@@ -1767,20 +1816,22 @@ function rRest(run: RunState): string {
   const mpStatus = mp ? `<div class="sts-body" style="color:#c8b090;font-size:14px;margin-bottom:10px">联机模式：各自选择，全员选好后结算
     ${run.players.map((rp, i) => ` <span style="margin-left:10px;color:${run.mpRest?.[i] ? '#8fe89a' : '#a89070'}">${i === myIdx ? '你' : esc(rp.name)}：${run.mpRest?.[i] === 'rest' ? '休息✔' : run.mpRest?.[i] === 'smith' ? '锻造✔' : '待选…'}</span>`).join('')}</div>` : ''
   const dim = (v: boolean) => v ? '' : 'opacity:.5;cursor:not-allowed;'
-  return `<div class="screen rest-bg center-col">
-  <div style="position:relative">
-    <img src="${A('mapicons/rest.png')}" width="140" height="140" style="filter:drop-shadow(0 0 30px rgba(255,150,40,.7))">
-    <div class="smoke-slot" style="display:none"></div>
-  </div>
+  // 各幕原版篝火房背景（图集 campfire 区域）
+  const campBg = run.act >= 4 ? 'campfire4' : run.act === 3 ? 'campfire3' : run.act === 2 ? 'campfire2' : 'campfire1'
+  return `<div class="screen rest-bg center-col" style="background-image:url('${A('bg/' + campBg + '.jpg')}');background-size:cover;background-position:center 30%">
+  <div class="shade" style="background:rgba(6,3,2,.35)"></div>
+  <div class="smoke-slot" style="display:none"></div>
   <div class="big-title sts-title">篝火</div>
   ${mpStatus}
   <div class="row-cards">
-    <button class="sts-panel choice-card ${canRest && !myChoice ? '' : 'dis'}" data-act="rest" data-r="rest" style="${dim(canRest && !myChoice)}">
-      <span style="font-size:44px">🛏️</span><div class="sts-title rest-label" style="font-size:22px;color:#ffd980">休息</div>
+    <button class="camp-btn ${canRest && !myChoice ? '' : 'dis'}" data-act="rest" data-r="rest" style="${dim(canRest && !myChoice)}">
+      <img src="${A('campfire/sleep.png')}" width="96" height="96" draggable="false" style="filter:drop-shadow(0 6px 0 rgba(0,0,0,.45))">
+      <div class="sts-title rest-label" style="font-size:22px;color:#ffd980">休息</div>
       <div class="sts-body">回复 ${Math.floor(me.maxHp * 0.3)} 点生命值（上限的 30%）<br><span style="color:#8fe89a">当前可回复 ${heal} 点</span></div>
     </button>
-    <button class="sts-panel choice-card ${!myChoice ? '' : 'dis'}" data-act="rest" data-r="smith" style="${dim(!myChoice)}">
-      <span style="font-size:44px">⚒️</span><div class="sts-title" style="font-size:22px;color:#ffd980">锻造</div>
+    <button class="camp-btn ${!myChoice ? '' : 'dis'}" data-act="rest" data-r="smith" style="${dim(!myChoice)}">
+      <img src="${A('campfire/smith.png')}" width="96" height="96" draggable="false" style="filter:drop-shadow(0 6px 0 rgba(0,0,0,.45))">
+      <div class="sts-title" style="font-size:22px;color:#ffd980">锻造</div>
       <div class="sts-body">升级牌组中的一张牌</div>
     </button>
   </div>
@@ -1840,12 +1891,26 @@ function startEvTypewriter(text: string) {
   evTypeRaf = requestAnimationFrame(tick)
 }
 
+// 原版事件插画映射（反编译 events 类的图引用）
+const EVENT_IMG: Record<string, string> = {
+  bonfireSpirits: 'events/bonfire.jpg',
+  bigFish: 'events/fishing.jpg',
+  goldenWing: 'events/goldenWing.jpg',
+  deadAdventurer: 'events/deadAdventurer.png',
+  cleric: 'events/cleric.jpg',
+  livingWorkshop: 'events/livingWall.jpg',
+}
+
 function rEvent(run: RunState, animate = true): string {
   const ev = EVENTS[run.currentEvent!]
   const msg = g().eventMsg
-  return `<div class="screen event-bg center-col hud-pad">
+  const evBg = run.act >= 4 ? 'event4' : run.act === 3 ? 'event3' : run.act === 2 ? 'event2' : 'event1'
+  const evImg = EVENT_IMG[run.currentEvent!]
+  return `<div class="screen center-col hud-pad" style="background-image:url('${A('bg/' + evBg + '.jpg')}');background-size:cover;background-position:center 30%">
+  <div class="shade" style="background:rgba(6,3,2,.42)"></div>
   ${topHudShell()}
   <div class="sts-panel event-panel">
+    ${evImg ? `<img src="${A(evImg)}" draggable="false" class="ev-title" style="width:360px;max-height:200px;object-fit:cover;border-radius:6px;border:2px solid #6b4a2e;box-shadow:0 4px 18px rgba(0,0,0,.6)">` : ''}
     <div class="sts-title ev-title" style="font-size:34px;color:#ffd980;text-shadow:2px 2px 0 #000">${esc(ev.name)}</div>
     <div class="sts-body event-desc ev-desc-wrap"><span id="ev-shown"></span><span id="ev-rest" style="opacity:0">${esc(ev.desc)}</span></div>
     ${msg ? `<div class="sts-body ev-msg" style="color:#8fe89a">${esc(msg)}</div>` : ''}
@@ -2580,6 +2645,9 @@ function renderMenuOverlay(st: ReturnType<typeof g>) {
       <div class="row" style="gap:10px"><span class="sts-body" style="color:#c8b090;width:78px;font-size:14px">音乐音量</span>
         <input type="range" data-input="musicVol" min="0" max="1" step="0.05" value="${music.volume}" style="flex:1;accent-color:#c8a060">
         <span class="sts-body" style="color:#d8c8a8;width:30px;font-size:13px" id="menu-vol-label">${music.muted ? 0 : Math.round(music.volume * 100)}</span></div>
+      <div class="row" style="gap:10px"><span class="sts-body" style="color:#c8b090;width:78px;font-size:14px">音效音量</span>
+        <input type="range" data-input="sfxVol" min="0" max="1" step="0.05" value="${sfx.volume}" style="flex:1;accent-color:#c8a060">
+        <span class="sts-body" style="color:#d8c8a8;width:30px;font-size:13px">${Math.round(sfx.volume * 100)}</span></div>
       <div class="row" style="gap:10px"><span class="sts-body" style="color:#c8b090;width:78px;font-size:14px">静音</span>
         <button class="sts-btn sts-body" data-act="menuMute" style="font-size:13px;padding:5px 18px">${music.muted ? '已静音（点击开启）' : '开启中（点击静音）'}</button></div>
       <div class="row" style="gap:10px"><span class="sts-body" style="color:#c8b090;width:78px;font-size:14px">联机昵称</span>
@@ -2929,6 +2997,31 @@ document.addEventListener('touchstart', (e) => {
 
 // ============ 控制簇（音乐 + 全屏，舞台右上角） ============
 function setupControls() {
+  // 原版交互音效（全局委托）：按钮=UIClick / 地图节点悬停=MapHover / 手牌悬停=CardSelect
+  document.addEventListener('click', (e) => {
+    const el = e.target as HTMLElement | null
+    if (!el) return
+    if (el.closest('.sts-btn, .menu-btn')) sfx.play('uiClick')
+    else if (el.closest('.pile-btn')) sfx.play('deckOpen')
+  })
+  document.addEventListener('mouseover', (e) => {
+    const el = e.target as HTMLElement | null
+    if (!el) return
+    const node = el.closest('#map-nodes [data-nid]') as HTMLElement | null
+    if (node && !node.hasAttribute('data-sfx-hov')) {
+      node.setAttribute('data-sfx-hov', '1')
+      setTimeout(() => node.removeAttribute('data-sfx-hov'), 350)
+      sfx.play('mapHover')
+      return
+    }
+    const card = el.closest('.hand-card') as HTMLElement | null
+    if (card && !card.hasAttribute('data-sfx-hov')) {
+      card.setAttribute('data-sfx-hov', '1')
+      setTimeout(() => card.removeAttribute('data-sfx-hov'), 350)
+      sfx.play('cardSelect')
+    }
+  })
+
   const wrap = document.createElement('div')
   wrap.style.cssText = 'position:absolute;top:10px;right:10px;z-index:500;display:flex;gap:6px;align-items:center'
 
@@ -3036,9 +3129,21 @@ document.addEventListener('input', (e) => {
     const lb = document.getElementById('vol-label')
     if (lb) setText(lb, String(Math.round(v * 100)))
   }
+  if (kind === 'sfxVol') {
+    const v = Number((el as HTMLInputElement).value)
+    sfx.setVolume(v)
+    const lb = document.getElementById('sfxvol-label')
+    if (lb) setText(lb, String(Math.round(v * 100)))
+  }
 })
 
 // ============ 启动 ============
+// 原版字体急切预载（Next.js 版由 next/font preload 完成；此处对齐：消除首次使用时的回退字体闪烁）
+if (typeof document !== 'undefined' && document.fonts && document.fonts.load) {
+  for (const spec of ['400 16px Kreon', '700 16px Kreon', '500 16px "Source Han Serif SC"', '700 16px "Source Han Serif SC"']) {
+    document.fonts.load(spec).catch(() => {})
+  }
+}
 setupStage()
 setupControls()
 setupKeyboard()

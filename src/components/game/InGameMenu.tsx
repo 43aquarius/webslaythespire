@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useGame } from '@/store/gameStore'
 import { music } from '@/game/music'
+import { sfx } from '@/game/sfx'
 import { loadSettings, savePlayerName } from '@/game/persist'
 
 export function InGameMenu() {
@@ -16,6 +17,7 @@ export function InGameMenu() {
   const [showSettings, setShowSettings] = useState(false)
   const [confirmAbandon, setConfirmAbandon] = useState(false)
   const [vol, setVol] = useState(music.volume)
+  const [sfxVol, setSfxVol] = useState(sfx.volume)
   const [muted, setMuted] = useState(music.muted)
   const [nick, setNick] = useState('')
 
@@ -111,6 +113,18 @@ export function InGameMenu() {
                     style={{ flex: 1, accentColor: '#c8a060' }}
                   />
                   <span className="sts-body" style={{ color: '#d8c8a8', width: 34, fontSize: 13 }}>{muted ? 0 : Math.round(vol * 100)}</span>
+                </div>
+                <div className="flex items-center gap-3" style={{ width: '100%' }}>
+                  <span className="sts-body" style={{ color: '#c8b090', width: 90, fontSize: 14 }}>音效音量</span>
+                  <input
+                    type="range" min={0} max={1} step={0.05} value={sfxVol}
+                    onChange={e => {
+                      const v = Number(e.target.value)
+                      setSfxVol(v); sfx.setVolume(v)
+                    }}
+                    style={{ flex: 1, accentColor: '#c8a060' }}
+                  />
+                  <span className="sts-body" style={{ color: '#d8c8a8', width: 34, fontSize: 13 }}>{Math.round(sfxVol * 100)}</span>
                 </div>
                 <div className="flex items-center gap-3" style={{ width: '100%' }}>
                   <span className="sts-body" style={{ color: '#c8b090', width: 90, fontSize: 14 }}>静音</span>

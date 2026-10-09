@@ -20,6 +20,21 @@ import { RELICS, bossRelicPool } from '@/game/relics'
 import { POTIONS } from '@/game/potions'
 import { net, NetState, NetMsg } from '@/game/net'
 import { saveRun, loadSave, clearSave, saveableMoment, recordRunResult } from '@/game/persist'
+import { sfx } from '@/game/sfx'
+import { cardColor } from '@/game/cards'
+
+// 特定卡牌 → 原版专属音效（SoundMaster 映射）
+const SFX_CARD_OVERRIDE: Record<string, Parameters<typeof sfx.play>[0]> = {
+  whirlwind: 'atkWhirlwind',
+  thunderclap: 'atkThunderclap',
+  piercingWail: 'atkPiercingWail',
+  flameBarrier: 'atkFlameBarrier',
+  heavyBlade: 'atkHeavy',
+  deadlyPoison: 'atkPoison',
+  noxiousFumes: 'atkPoison',
+  bouncingFlask: 'atkPoison',
+  catalyst: 'atkPoison',
+}
 
 export type SelectKind = 'armaments' | 'headbutt' | 'warcry' | 'trueGrit'
   | 'eventRemove' | 'eventUpgrade' | 'restSmith' | 'shopRemove' | 'sacrifice'
@@ -131,6 +146,37 @@ export const useGame = create<GameStore>((set, get) => {
     const items: FxItem[] = run.combat.fx.map(f => ({ ...f, ts: Date.now() }))
     run.combat.fx = []
     set(s => ({ fxList: [...s.fxList, ...items] }))
+    // 原版音效：按 fx 事件语义出声（含联机远端动作）
+    for (let i = 0; i < items.length; i++) {
+      const f = items[i]
+      if (f.kind === 'dmg') {
+        const isP = f.target === 'player' || f.target === 'p0' || f.target === 'p1'
+        if (isP) {
+          const next = items[i + 1]
+          sfx.play(next && next.kind === 'shake' ? 'bloodSwish' : 'blockAttack')
+        }
+      } else if (f.kind === 'block') {
+        sfx.play('blockGain')
+      } else if (f.kind === 'heal') {
+        if ((f.value ?? 0) > 0) sfx.play('heal')
+      } else if (f.kind === 'status') {
+        const sid = String(f.text ?? '')
+        if (sid === 'strength') sfx.play('powerStrength')
+        else if (sid === 'poison') sfx.play('powerPoison')
+        else if (sid === 'focus') sfx.play('powerFocus')
+        else if (sid === 'intangible') sfx.play('powerIntangible')
+        else if (sid === 'weak' || sid === 'vulnerable' || sid === 'frail' || sid === 'entangled' || sid === 'noDraw') sfx.play('debuff')
+        else if ((f.value ?? 0) > 0) sfx.play('buff')
+      } else if (f.kind === 'orb') {
+        const t = String(f.text ?? '')
+        const ch: Record<string, Parameters<typeof sfx.play>[0]> = {
+          frost: 'orbFrostChannel', lightning: 'orbLightningChannel', dark: 'orbDarkChannel', plasma: 'orbPlasmaChannel',
+        }
+        if (ch[t]) sfx.play(ch[t])
+      } else if (f.kind === 'shuffle') {
+        sfx.play('cardDraw')
+      }
+    }
   }
   function showToastSafe(msg: string) {
     set({ toast: msg })
@@ -163,6 +209,13 @@ export const useGame = create<GameStore>((set, get) => {
     if (state.endBanner) return
     const combat = state.run!.combat!
     const won = combat.playerWon
+    // 原版音效：Boss胜利短曲 / 心脏胜利 / 死亡短曲
+    if (won) {
+      if (combat.isBoss && state.run!.act >= 4) sfx.play('victory')
+      else if (combat.isBoss) sfx.play('bossVictoryStinger')
+    } else {
+      sfx.play('deathStinger')
+    }
     set({ endBanner: won ? 'win' : 'lose' })
     setTimeout(() => {
       set({ endBanner: null })
@@ -226,6 +279,7 @@ export const useGame = create<GameStore>((set, get) => {
     const enc = pickEncounter(run, isElite, isBoss)
     run.combat = startCombat(run, enc.name, enc.enemies, isElite, isBoss)
     run.screen = 'combat'
+    sfx.play(isBoss ? 'battleStartBoss' : 'battleStart')
   }
 
   // 战斗中的引擎 pending 选择（含新增：噩梦/全知/全息/搜寻）
@@ -730,6 +784,7 @@ export const useGame = create<GameStore>((set, get) => {
       r.shop = null
       r.currentEvent = null
       r.mpRest = null
+      sfx.play('mapSelect')
       switch (node.type) {
         case 'monster': case 'elite': case 'boss':
           beginCombatFromNode(r, node.type)
@@ -737,6 +792,7 @@ export const useGame = create<GameStore>((set, get) => {
         case 'shop':
           r.shop = makeShop(r)
           r.screen = 'shop'
+          sfx.play('shopOpen')
           break
         case 'rest':
           // 联机：初始化双人选择状态
@@ -745,6 +801,7 @@ export const useGame = create<GameStore>((set, get) => {
           break
         case 'treasure':
           r.screen = 'treasure'
+          sfx.play('chestOpen')
           break
         case 'event': {
           let pool = Object.keys(EVENTS_POOL).filter(id => !r.eventsSeen.includes(id))
@@ -770,7 +827,16 @@ export const useGame = create<GameStore>((set, get) => {
       const card = P.hand.find(c => c.uid === uid)
       if (!card) return
       const check = canPlayCard(combat, run, card)
-      if (!check.ok) { showToastSafe(check.reason || '无法打出'); return }
+      if (!check.ok) { showToastSafe(check.reason || '无法打出'); sfx.play('cardReject'); return }
+      // 原版出牌音效：专属映射 > 按颜色的攻击音 > 能力woosh
+      {
+        const def = CARDS[card.id]
+        if (card.id in SFX_CARD_OVERRIDE) sfx.play(SFX_CARD_OVERRIDE[card.id])
+        else if (def.type === 'attack') {
+          const color = cardColor(card.id) || 'red'
+          sfx.play(color === 'green' ? 'atkDagger' : (color === 'blue' || color === 'purple') ? 'atkMagic' : color === 'colorless' ? 'atkFast' : 'atkIron')
+        } else if (def.type === 'power') sfx.play('cardPowerWoosh')
+      }
       const r = clone(run)
       setCombatRunRef(r)
       engPlayCard(r.combat!, r, uid, targetUid)
@@ -797,6 +863,7 @@ export const useGame = create<GameStore>((set, get) => {
       const combat = run.combat
       if (combat.phase !== 'player' || combat.combatOver) return
       if (combat.players.length > 1 && (pendingActorIdx ?? 0) !== combat.activeIdx) return
+      sfx.play('endTurn')
       set({ busy: true, selectedCardUid: null, selectedPotionIdx: null })
 
       // try/finally 保证 busy 一定复位：任何异常都不会永久锁死战斗界面
@@ -907,6 +974,7 @@ export const useGame = create<GameStore>((set, get) => {
       setRunActive(r, actor)
       const ok = engUsePotion(r.combat!, r, idx, targetUid)
       if (!ok) { showToastSafe('无法使用该药水'); return }
+      sfx.play('potion')
       set({ run: r, selectedPotionIdx: null })
       drainFx(r)
       if (r.combat!.combatOver) finishCombat()
@@ -923,6 +991,7 @@ export const useGame = create<GameStore>((set, get) => {
       setRunActive(r, actor)
       const res = usePotionOutOfCombat(r, idx)
       if (!res.ok) { showToastSafe(res.msg || '无法使用该药水'); return }
+      sfx.play('potion')
       set({ run: r, toast: res.msg || null })
       if (res.msg) setTimeout(() => { if (get().toast === res.msg) set({ toast: null }) }, 2200)
     }),
@@ -1063,6 +1132,7 @@ export const useGame = create<GameStore>((set, get) => {
       if (select.kind === 'neowUpgrade') {
         const c = r.deck.find(x => x.uid === cardUid)
         if (c) c.upgraded = Math.max(1, c.upgraded)
+        sfx.play('cardUpgrade')
         r.players[owner].deck = r.deck
         finishNeowSelect(r, owner, '涅奥锤炼了一张牌')
         return
@@ -1110,6 +1180,7 @@ export const useGame = create<GameStore>((set, get) => {
       if (select.kind === 'armaments' && combat) {
         const c = AP(combat).hand.find(x => x.uid === cardUid)
         if (c) c.upgraded = Math.max(1, c.upgraded)
+        sfx.play('cardUpgrade')
       } else if (select.kind === 'headbutt' && combat) {
         const P = AP(combat)
         const i = P.discardPile.findIndex(x => x.uid === cardUid)
@@ -1141,6 +1212,7 @@ export const useGame = create<GameStore>((set, get) => {
       } else if (select.kind === 'eventUpgrade' || select.kind === 'restSmith') {
         const c = r.deck.find(x => x.uid === cardUid)
         if (c) c.upgraded = Math.max(1, c.upgraded)
+        sfx.play('cardUpgrade')
         r.players[owner].deck = r.deck
         if (select.kind === 'restSmith' && c) {
           // 锻造升级特效（原版 NCardUpgradeVfx：0.25s 放大入场 + 星光，1.75s 后飞向牌组）
@@ -1217,6 +1289,7 @@ export const useGame = create<GameStore>((set, get) => {
       r.players[actor].goldEarned = r.goldEarned
       r.reward!.taken.push(tag)
       set({ run: r })
+      sfx.play('goldGain')
     }),
 
     takeCard: fwd('takeCard', (cardId: string) => {
@@ -1233,6 +1306,7 @@ export const useGame = create<GameStore>((set, get) => {
         r.deck.push(makeCard(cardId))
         r.reward!.taken.push('card_' + cardId)
         set({ run: r })
+        sfx.play('cardObtain')
         return
       }
       // 联机：每人从自己的三选一中挑一张
@@ -1269,6 +1343,7 @@ export const useGame = create<GameStore>((set, get) => {
         r.players[actor].potions = r.potions
         r.reward!.taken.push('potion')
         set({ run: r })
+        sfx.play('potion')
       } else {
         showToastSafe('药水栏已满')
         set(s => ({ potionBeltFail: s.potionBeltFail + 1 }))
@@ -1286,6 +1361,7 @@ export const useGame = create<GameStore>((set, get) => {
       r.players[actor].relics = r.relics
       r.reward!.taken.push('relic')
       set({ run: r })
+      sfx.play('relicClink')
     }),
 
     proceedFromReward: fwd('proceedFromReward', () => {
@@ -1369,6 +1445,7 @@ export const useGame = create<GameStore>((set, get) => {
       r.players[actor].gold = r.gold
       r.players[actor].deck = r.deck
       set({ run: r })
+      sfx.play('shopPurchase')
     }),
 
     buyRelic: fwd('buyRelic', (idx: number) => {
@@ -1453,6 +1530,7 @@ export const useGame = create<GameStore>((set, get) => {
         const heal = Math.min(Math.floor(r.maxHp * 0.3), r.maxHp - r.hp)
         r.hp += heal
         r.screen = 'map'
+        sfx.play('restFire')
         set({ run: r, toast: `休息回复了 ${heal} 点生命` })
         setTimeout(() => { if (get().toast?.includes('休息回复')) set({ toast: null }) }, 2200)
       } else {

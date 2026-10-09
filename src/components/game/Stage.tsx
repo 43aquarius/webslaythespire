@@ -3,6 +3,7 @@
 // 所有游戏画面按 1600×900 逻辑分辨率绘制，再整体等比缩放适配任意屏幕
 // 旋转按钮：点击后整个画面旋转 180 度（适配手机倒拿/充电口朝上等场景）
 import { ReactNode, useCallback, useEffect, useState } from 'react'
+import { sfx } from '@/game/sfx'
 
 export const STAGE_W = 1600
 export const STAGE_H = 900
@@ -114,11 +115,44 @@ export function Stage({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  // 预加载关键背景图，避免首次切屏白闪
+  // 预加载关键背景图，避免首次切屏白闪（第十八批：原版各幕背景）
   useEffect(() => {
-    for (const src of ['/assets/bg/combat.jpg', '/assets/bg/map.jpg', '/assets/bg/menu.jpg']) {
+    for (const src of ['/assets/bg/combat1.jpg', '/assets/bg/combat2.jpg', '/assets/bg/combat3.jpg', '/assets/bg/combat4.jpg', '/assets/bg/map.jpg', '/assets/bg/menubg.jpg', '/assets/bg/campfire1.jpg', '/assets/bg/event1.jpg']) {
       const img = new Image()
       img.src = src
+    }
+  }, [])
+
+  // 原版交互音效（全局委托）：按钮点击=UIClick / 地图节点悬停=MapHover / 手牌悬停=CardSelect
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      const el = e.target as HTMLElement | null
+      if (!el) return
+      if (el.closest('.sts-btn, .menu-btn, .sts-panel button')) sfx.play('uiClick')
+      else if (el.closest('.pile-btn')) sfx.play('deckOpen')
+    }
+    const onDocOver = (e: MouseEvent) => {
+      const el = e.target as HTMLElement | null
+      if (!el) return
+      const node = el.closest('.sts-map-node')
+      if (node && !node.hasAttribute('data-sfx-hov')) {
+        node.setAttribute('data-sfx-hov', '1')
+        setTimeout(() => node.removeAttribute('data-sfx-hov'), 350)
+        sfx.play('mapHover')
+        return
+      }
+      const card = el.closest('.sts-hand-card')
+      if (card && !card.hasAttribute('data-sfx-hov')) {
+        card.setAttribute('data-sfx-hov', '1')
+        setTimeout(() => card.removeAttribute('data-sfx-hov'), 350)
+        sfx.play('cardSelect')
+      }
+    }
+    document.addEventListener('click', onDocClick)
+    document.addEventListener('mouseover', onDocOver)
+    return () => {
+      document.removeEventListener('click', onDocClick)
+      document.removeEventListener('mouseover', onDocOver)
     }
   }, [])
 

@@ -31,6 +31,19 @@ async function main() {
   // 3. CSS
   const css = readFileSync(`${SA}/style.css`, 'utf-8')
 
+  // 3.5 字体：从 assets manifest 提取 woff2 → @font-face 注入（原版 Kreon + SourceHanSerifSC）
+  const assetsObj = JSON.parse(assets) as Record<string, string>
+  const fontFaces = Object.entries(assetsObj)
+    .filter(([k]) => k.startsWith('fonts/') && k.endsWith('.woff2'))
+    .map(([k, url]) => {
+      const fam = k.endsWith('SourceHanSerifSC-Bold.woff2') || k.endsWith('SourceHanSerifSC-Medium.woff2')
+        ? (k.includes('Bold') ? '\'SourceHan Serif SC\'' : '\'SourceHan Serif SC\'')
+        : '\'Kreon\''
+      const weight = k.includes('Medium') ? '500' : (k.includes('Bold') || k.includes('bold')) ? '700' : '400'
+      return `@font-face{font-family:${fam};font-weight:${weight};font-style:normal;src:url(${url}) format('woff2');}`
+    })
+    .join('\n')
+
   // 4. 组装 HTML
   const js = readFileSync(`${SA}/bundle.js`, 'utf-8')
   const html = `<!DOCTYPE html>
@@ -43,6 +56,7 @@ async function main() {
 <meta name="mobile-web-app-capable" content="yes">
 <title>杀戮尖塔 Web - Slay the Spire 单文件版</title>
 <style>
+${fontFaces}
 ${css}
 </style>
 </head>

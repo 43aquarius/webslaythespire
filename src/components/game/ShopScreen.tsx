@@ -205,6 +205,16 @@ function Typewriter({ text }: { text: string }) {
   )
 }
 
+// 原版事件插画映射（反编译 events 类的图引用）
+const EVENT_IMG: Record<string, string> = {
+  bonfireSpirits: 'bonfire.jpg',
+  bigFish: 'fishing.jpg',
+  goldenWing: 'goldenWing.jpg',
+  deadAdventurer: 'deadAdventurer.png',
+  cleric: 'cleric.jpg',
+  livingWorkshop: 'livingWall.jpg',
+}
+
 export function EventScreen() {
   const run = useGame(s => s.run)
   const chooseEvent = useGame(s => s.chooseEvent)
@@ -214,12 +224,22 @@ export function EventScreen() {
   const ev = EVENTS[run.currentEvent]
   const mp = run.players.length > 1
   const me = run.players[mp ? net.myIdx : 0] || run.players[0]
+  // 各幕原版事件房背景（图集 event 区域）
+  const evBg = run.act >= 4 ? 'event4' : run.act === 3 ? 'event3' : run.act === 2 ? 'event2' : 'event1'
+  const evImg = EVENT_IMG[run.currentEvent]
 
   return (
     <div className="w-full h-full relative flex items-center justify-center select-none"
-      style={{ background: 'radial-gradient(ellipse at 50% 25%, #2e2038 0%, #120a18 60%, #060306 100%)' }}>
+      style={{ backgroundImage: `url(${A}/bg/${evBg}.jpg)`, backgroundSize: 'cover', backgroundPosition: 'center 30%' }}>
+      <div className="absolute inset-0" style={{ background: 'rgba(6,3,2,0.42)' }} />
       <TopHud />
-      <div className="sts-panel flex flex-col items-center gap-5 p-10" style={{ maxWidth: 720, marginTop: 60 }}>
+      <div className="relative sts-panel flex flex-col items-center gap-4 p-8" style={{ maxWidth: 760, marginTop: 40 }}>
+        {/* 原版事件插画（反编译游戏 events 目录） */}
+        {evImg && (
+          <img key={`img-${run.currentEvent}`} src={`${A}/events/${evImg}`} alt="" draggable={false}
+            className="sts-ev-title"
+            style={{ width: 380, maxHeight: 214, objectFit: 'cover', borderRadius: 6, border: '2px solid #6b4a2e', boxShadow: '0 4px 18px rgba(0,0,0,.6)' }} />
+        )}
         {/* 标题：0.5s 后 0.5s 淡入（原版 useTitleFade） */}
         <div key={`evt-${run.currentEvent}`} className="sts-title sts-ev-title" style={{ fontSize: 36, color: '#ffd980', textShadow: '2px 2px 0 #000' }}>
           {ev.name}

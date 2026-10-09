@@ -1,18 +1,26 @@
 'use client'
 // ============ BGM 引擎（客户端单例，带淡入淡出与自动播放解锁） ============
-// 曲目映射自原版反编译源码 (MusicMaster.java / MainMusic.java)：
-//   标题=STS_MenuTheme  第一幕地图&普通战斗=STS_Level1(Exordium)
-//   精英=STS_EliteBoss  第一幕Boss=STS_Boss1  商店=STS_Merchant
+// 曲目映射自原版反编译源码 (MusicMaster.java / MainMusic.java / TempMusic.java)：
+//   标题=STS_MenuTheme  地图/普通战斗=各幕Level曲(1/2/3) 终章=STS_Act4_BGM
+//   精英=STS_EliteBoss  Boss=各幕专属(1/2/3/4)  商店=STS_Merchant
 //   事件=STS_Shrine  结算=STS_Credits  胜利/死亡短曲=Stinger
 export type TrackKey =
-  | 'menu' | 'level' | 'elite' | 'boss' | 'merchant'
+  | 'menu' | 'level' | 'level2' | 'level3' | 'act4' | 'elite'
+  | 'boss' | 'boss2' | 'boss3' | 'boss4' | 'mindbloom' | 'merchant'
   | 'shrine' | 'credits' | 'victory' | 'death'
 
 const SRC: Record<TrackKey, string> = {
   menu: '/assets/audio/menu.ogg',
   level: '/assets/audio/level.ogg',
+  level2: '/assets/audio/level2.ogg',
+  level3: '/assets/audio/level3.ogg',
+  act4: '/assets/audio/act4.ogg',
   elite: '/assets/audio/elite.ogg',
   boss: '/assets/audio/boss.ogg',
+  boss2: '/assets/audio/boss2.ogg',
+  boss3: '/assets/audio/boss3.ogg',
+  boss4: '/assets/audio/boss4.ogg',
+  mindbloom: '/assets/audio/mindbloom.ogg',
   merchant: '/assets/audio/merchant.ogg',
   shrine: '/assets/audio/shrine.ogg',
   credits: '/assets/audio/credits.ogg',
@@ -179,11 +187,13 @@ if (typeof window !== 'undefined') {
   (window as unknown as Record<string, unknown>).__music = music
 }
 
-/** 场景 → 曲目映射 */
-export function trackForScreen(screen: string, combat: { isBoss: boolean; isElite: boolean } | null): TrackKey {
+/** 场景 → 曲目映射（act: 当前幕数 1-4; 原版 MainMusic 按幕选 Level 曲, TempMusic 按幕选 Boss 曲） */
+export function trackForScreen(screen: string, combat: { isBoss: boolean; isElite: boolean } | null, act = 1): TrackKey {
+  const levelTrack: TrackKey = act >= 4 ? 'act4' : (act === 3 ? 'level3' : act === 2 ? 'level2' : 'level')
+  const bossTrack: TrackKey = act >= 4 ? 'boss4' : (act === 3 ? 'boss3' : act === 2 ? 'boss2' : 'boss')
   switch (screen) {
     case 'title': return 'menu'
-    case 'map': case 'rest': case 'treasure': case 'reward': return 'level'
+    case 'map': case 'rest': case 'treasure': case 'reward': return levelTrack
     case 'neow': return 'shrine'
     case 'shop': return 'merchant'
     case 'event': return 'shrine'
@@ -191,9 +201,9 @@ export function trackForScreen(screen: string, combat: { isBoss: boolean; isElit
     case 'victory': return 'credits'
     case 'gameover': return 'death'
     case 'combat':
-      if (combat?.isBoss) return 'boss'
+      if (combat?.isBoss) return bossTrack
       if (combat?.isElite) return 'elite'
-      return 'level'
-    default: return 'level'
+      return levelTrack
+    default: return levelTrack
   }
 }

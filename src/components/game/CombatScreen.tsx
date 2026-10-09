@@ -14,6 +14,7 @@ import { enemyDisplayDamage, AP } from '@/game/engine'
 import { CardView } from './CardView'
 import { StatusRow, HpBar, Tip, TopHud, STATUS_INFO, statusImg } from './Shared'
 import { ScryOverlay } from './Overlays'
+import { sfx } from '@/game/sfx'
 
 const A = '/assets'
 
@@ -490,6 +491,8 @@ function TurnBanner({ phase, turn }: { phase: string; turn: number }) {
     const toEnemy = phase === 'enemy' && pv.phase && pv.phase !== 'enemy'
     prev.current = { phase }
     if (!toPlayer && !toEnemy) return
+    // 原版音效：敌方回合/玩家回合切换
+    sfx.play(toEnemy ? 'enemyTurn' : 'turnEffect')
     setKind(toPlayer ? 'player' : 'enemy')
   }, [phase, turn])
   // kind 变化后 DOM 已挂载，此时再启动动画
@@ -1173,7 +1176,7 @@ function combatBg(act: number): string {
   if (act >= 4) return 'combat4'
   if (act === 3) return 'combat3'
   if (act === 2) return 'combat2'
-  return 'combat'
+  return 'combat1'
 }
 
 // ============ 牌堆按钮 ============
@@ -1182,7 +1185,7 @@ function PileButton({ label, count, style, onClick, small, shuffled }: {
 }) {
   const w = small ? 50 : 66
   return (
-    <button className="absolute flex flex-col items-center gap-0.5" style={{ ...style, zIndex: 40 }} onClick={onClick}>
+    <button className="pile-btn absolute flex flex-col items-center gap-0.5" style={{ ...style, zIndex: 40 }} onClick={onClick}>
       <div
         className="rounded-lg"
         style={{

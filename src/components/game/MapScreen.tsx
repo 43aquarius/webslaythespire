@@ -267,6 +267,7 @@ function MapNodeView({ node, isCurrent, isReachable, visited, selected, onPick }
   const icon = `${A}/mapicons/${NODE_ICON[node.type]}.png`
   return (
     <div
+      data-nid={node.id}
       data-ntype={node.type}
       className={`absolute sts-map-node ${isReachable ? 'sts-map-pulse' : ''} ${!isReachable && !visited && !isCurrent ? 'sts-node-locked' : ''} ${selected ? 'map-select' : ''}`}
       style={{

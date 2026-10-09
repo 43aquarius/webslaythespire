@@ -1,5 +1,6 @@
 'use client'
 // ============ 遮罩层：牌堆查看 / 卡牌选择 / 预见 / 检视屏 ============
+import { sfx } from '@/game/sfx'
 import { useEffect, useState } from 'react'
 import { useGame } from '@/store/gameStore'
 import { CardInstance } from '@/game/types'
@@ -129,6 +130,7 @@ export function PileViewOverlay() {
   // deck 模式（查看牌组）在地图等非战斗场景也可用
   if (!run || !pileView) return null
   if (pileView !== 'deck' && !run.combat) return null
+  const closeWithSfx = () => { sfx.play('deckClose'); closePile() }
 
   const titles: Record<string, string> = {
     draw: '抽牌堆（随机排序）',
@@ -143,7 +145,7 @@ export function PileViewOverlay() {
   else cards = run.deck
 
   return (
-    <div className="sts-overlay" onClick={closePile}>
+    <div className="sts-overlay" onClick={closeWithSfx}>
       <div className="sts-panel p-6 flex flex-col items-center gap-4 relative" style={{ maxWidth: 1440, maxHeight: 800 }}
         onClick={e => e.stopPropagation()}>
         <div className="sts-title" style={{ fontSize: 26, color: '#ffd980' }}>
@@ -165,7 +167,7 @@ export function PileViewOverlay() {
             </div>
           ))}
         </div>
-        <button className="sts-btn sts-slide-btn-r" onClick={closePile}>关闭</button>
+        <button className="sts-btn sts-slide-btn-r" onClick={closeWithSfx}>关闭</button>
       </div>
       {/* 检视屏（原版 NInspectCardScreen：黑0.9背板覆盖全屏） */}
       {inspectIdx !== null && (

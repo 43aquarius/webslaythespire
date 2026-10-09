@@ -188,6 +188,8 @@ export function RestScreen() {
   const myChoice = mp ? run.mpRest?.[myIdx] : undefined
   const canRest = !me.relics.includes('coffeeDripper')
   const heal = Math.min(Math.floor(me.maxHp * 0.3), me.maxHp - me.hp)
+  // 各幕原版篝火房背景（图集 campfire 区域）
+  const campBg = run.act >= 4 ? 'campfire4' : run.act === 3 ? 'campfire3' : run.act === 2 ? 'campfire2' : 'campfire1'
 
   // 单人：休息先播放去饱和+烟雾动画（≈2.2s）再结算；联机保持直选（全员同步结算）
   const onRest = () => {
@@ -198,16 +200,13 @@ export function RestScreen() {
   }
 
   return (
-    <div className={`w-full h-full relative flex flex-col items-center justify-center gap-8 select-none ${healing ? 'sts-rest-desat' : ''}`}
-      style={{ background: 'radial-gradient(ellipse at 50% 80%, #5a2e10 0%, #1a0e06 60%, #080402 100%)' }}>
-      <div className="relative">
-        <img src={`${A}/mapicons/rest.png`} alt="" width={140} height={140} draggable={false}
-          style={{ filter: 'drop-shadow(0 0 30px rgba(255,150,40,0.7))' }} />
-        {healing && [0, 1, 2, 3].map(k => (
-          <div key={k} className="sts-smoke-puff" style={{ animationDelay: `${k * 0.42}s`, left: `${38 + k * 8}%` }} />
-        ))}
-      </div>
-      <div className="sts-title" style={{ fontSize: 44, color: '#ffd980', textShadow: '3px 3px 0 #000' }}>
+    <div className={`w-full h-full relative flex flex-col items-center justify-center gap-6 select-none ${healing ? 'sts-rest-desat' : ''}`}
+      style={{ backgroundImage: `url(${A}/bg/${campBg}.jpg)`, backgroundSize: 'cover', backgroundPosition: 'center 30%' }}>
+      <div className="absolute inset-0" style={{ background: 'rgba(6,3,2,0.35)' }} />
+      {healing && [0, 1, 2, 3].map(k => (
+        <div key={k} className="sts-smoke-puff" style={{ animationDelay: `${k * 0.42}s`, left: `${46 + k * 2}%`, top: '46%' }} />
+      ))}
+      <div className="relative sts-title" style={{ fontSize: 44, color: '#ffd980', textShadow: '3px 3px 0 #000' }}>
         篝火
       </div>
       {mp && (
@@ -220,21 +219,21 @@ export function RestScreen() {
           ))}
         </div>
       )}
-      <div className="flex gap-8 flex-wrap justify-center">
-        <button className="sts-panel p-6 flex flex-col items-center gap-2 transition-all hover:brightness-125 hover:-translate-y-1"
-          style={{ width: 220, cursor: canRest && !myChoice ? 'pointer' : 'not-allowed', opacity: canRest && !myChoice ? 1 : 0.5 }}
+      <div className="relative flex gap-10 flex-wrap justify-center">
+        <button className="sts-camp-btn p-5 flex flex-col items-center gap-2 transition-all hover:brightness-125 hover:-translate-y-1"
+          style={{ width: 230, cursor: canRest && !myChoice ? 'pointer' : 'not-allowed', opacity: canRest && !myChoice ? 1 : 0.5 }}
           onClick={onRest}>
-          <span style={{ fontSize: 44 }}>🛏️</span>
+          <img src={`${A}/campfire/sleep.png`} alt="" width={96} height={96} draggable={false} style={{ filter: 'drop-shadow(0 6px 0 rgba(0,0,0,.45))' }} />
           <div className="sts-title" style={{ fontSize: 22, color: '#ffd980' }}>{healing ? '休息中…' : '休息'}</div>
           <div className="sts-body text-center" style={{ fontSize: 14, color: '#d8c8a8' }}>
             回复 {Math.floor(me.maxHp * 0.3)} 点生命值（上限的 30%）<br />
             <span style={{ color: '#8fe89a' }}>当前可回复 {heal} 点</span>
           </div>
         </button>
-        <button className="sts-panel p-6 flex flex-col items-center gap-2 transition-all hover:brightness-125 hover:-translate-y-1"
-          style={{ width: 220, cursor: !myChoice ? 'pointer' : 'not-allowed', opacity: !myChoice ? 1 : 0.5 }}
+        <button className="sts-camp-btn p-5 flex flex-col items-center gap-2 transition-all hover:brightness-125 hover:-translate-y-1"
+          style={{ width: 230, cursor: !myChoice ? 'pointer' : 'not-allowed', opacity: !myChoice ? 1 : 0.5 }}
           onClick={() => !myChoice && restAction('smith')}>
-          <span style={{ fontSize: 44 }}>⚒️</span>
+          <img src={`${A}/campfire/smith.png`} alt="" width={96} height={96} draggable={false} style={{ filter: 'drop-shadow(0 6px 0 rgba(0,0,0,.45))' }} />
           <div className="sts-title" style={{ fontSize: 22, color: '#ffd980' }}>锻造</div>
           <div className="sts-body text-center" style={{ fontSize: 14, color: '#d8c8a8' }}>
             升级牌组中的一张牌

@@ -1,8 +1,30 @@
 'use client'
-// ============ 涅奥祝福界面（大鲸鱼；联机：双人顺序选择） ============
+// ============ 涅奥祝福界面（大鲸鱼+原版眨眼；联机：双人顺序选择） ============
+import { useEffect, useState } from 'react'
 import { useGame } from '@/store/gameStore'
 
 const A = '/assets'
+
+// 原版 NeowEye.java 眨眼时序：睁开(lid1)停5s → 闭眼 lid2→6每帧0.04s → 全闭(lid6)停0.25s → 开眼 lid5→2每帧0.06s 循环
+const LID_SEQ = ['lid1', 'lid2', 'lid3', 'lid4', 'lid5', 'lid6', 'lid5', 'lid4', 'lid3', 'lid2'] as const
+const FRAME_MS = [5000, 40, 40, 40, 40, 250, 60, 60, 60, 60]
+
+function NeowBlinkEye() {
+  const [frame, setFrame] = useState(0)
+  useEffect(() => {
+    const t = setTimeout(() => setFrame(f => (f + 1) % 10), FRAME_MS[frame])
+    return () => clearTimeout(t)
+  }, [frame])
+  return (
+    <div style={{ position: 'absolute', left: '17%', top: '18%', transform: 'translate(-50%,-50%)', width: '13%', aspectRatio: '1', pointerEvents: 'none' }}>
+      <img src={`${A}/neow/eye.png`} alt="" draggable={false}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }} />
+      <img key={LID_SEQ[frame]} src={`${A}/neow/${LID_SEQ[frame]}.png`} alt="" draggable={false}
+        className="sts-lid-in"
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }} />
+    </div>
+  )
+}
 
 export function NeowScreen() {
   const run = useGame(s => s.run)
@@ -27,18 +49,19 @@ export function NeowScreen() {
     >
       <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(4,4,10,0.82) 0%, rgba(8,6,14,0.62) 45%, rgba(4,4,10,0.86) 100%)' }} />
 
-      {/* 大鲸鱼 */}
-      <div className="relative flex items-center justify-center" style={{ marginBottom: 8 }}>
+      {/* 大鲸鱼（原版 NeowEye 眨眼：eye + lid 序列叠在鲸眼位置） */}
+      <div className="relative inline-flex items-center justify-center" style={{ marginBottom: 8 }}>
         <img
           src={`${A}/neow/neow.png`}
           alt="涅奥"
           draggable={false}
           className="sts-neow-float"
           style={{
-            width: 620, maxWidth: '46vw', objectFit: 'contain',
+            width: 620, maxWidth: '46vw', objectFit: 'contain', display: 'block',
             filter: 'drop-shadow(0 24px 40px rgba(0,0,0,0.9)) drop-shadow(0 0 60px rgba(90,140,255,0.25))',
           }}
         />
+        <NeowBlinkEye />
       </div>
 
       <div className="relative sts-title" style={{ fontSize: 44, color: '#b8d0ff', textShadow: '3px 3px 0 #000, 0 0 50px rgba(80,120,255,0.5)', letterSpacing: 6 }}>

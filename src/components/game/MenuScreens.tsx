@@ -43,11 +43,15 @@ export function MainMenuScreen() {
       <div
         className="absolute inset-0"
         style={{
-          backgroundImage: `url(${A}/bg/menu.jpg)`,
+          backgroundImage: `url(${A}/bg/menubg.jpg)`,
           backgroundSize: 'cover',
           backgroundPosition: 'center 38%',
         }}
       />
+      {/* 原版标题屏漂云（TitleCloud.java：x += vX·dt 环绕） */}
+      <img src={`${A}/title/midCloud13.png`} alt="" draggable={false} className="sts-cloud sts-cloud-far" />
+      <img src={`${A}/title/topCloud2.png`} alt="" draggable={false} className="sts-cloud sts-cloud-mid" />
+      <img src={`${A}/title/mg2.png`} alt="" draggable={false} className="sts-cloud sts-cloud-near" />
       <div className="main-menu-fog" />
 
       {/* 官方 Logo */}
@@ -99,7 +103,7 @@ export function CharacterSelectScreen() {
     <div
       className="w-full h-full relative flex flex-col items-center justify-center gap-6 select-none overflow-hidden sts-screen-fade"
       style={{
-        backgroundImage: `url(${A}/bg/menu.jpg)`,
+        backgroundImage: `url(${A}/bg/menubg.jpg)`,
         backgroundSize: 'cover',
         backgroundPosition: 'center 30%',
       }}

@@ -3,8 +3,9 @@
 html, body { width: 100%; height: 100%; overflow: hidden; background: #050302; }
 body { font-family: "Noto Serif SC", "Source Han Serif SC", "STSong", "SimSun", serif; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
 img { -webkit-user-drag: none; }
-.sts-title { font-family: "Ma Shan Zheng", "LXGW WenKai", "KaiTi", "STKaiti", "Noto Serif SC", serif; }
-.sts-body { font-family: "Noto Serif SC", "Source Han Serif SC", "STSong", "SimSun", serif; }
+/* 字体 = 原版方案（FontHelper.java）：英文 Kreon + 简中 SourceHanSerifSC；@font-face 由 build.ts 注入 */
+.sts-title { font-family: "Source Han Serif SC", "Kreon", "Noto Serif SC", "STSong", "SimSun", serif; font-weight: 700; }
+.sts-body { font-family: "Source Han Serif SC", "Kreon", "Noto Serif SC", "STSong", "SimSun", serif; }
 
 /* ============ 舞台（1600×900 逻辑分辨率，等比缩放） ============ */
 #stage-wrap { position: fixed; inset: 0; overflow: hidden; background: #050302; }
@@ -857,3 +858,25 @@ img { -webkit-user-drag: none; }
   to { opacity: 1; filter: brightness(1); transform: translateY(0); }
 }
 .sts-go-btn { animation: sts-go-btn-in 0.5s cubic-bezier(0.25, 1, 0.5, 1) both; }
+
+/* ============ 第十八批：原版资源还原 ============ */
+/* 标题屏漂云（原版 TitleCloud.java：x += vX·dt 环绕） */
+.sts-cloud { position: absolute; left: 0; pointer-events: none; user-select: none; opacity: .85; }
+.sts-cloud-far  { top: 6%;  width: 34vw; animation: sts-cloud-drift 130s linear infinite; }
+.sts-cloud-mid  { top: 16%; width: 44vw; animation: sts-cloud-drift 95s linear infinite; animation-delay: -40s; opacity: .9; }
+.sts-cloud-near { top: 34%; width: 60vw; animation: sts-cloud-drift 70s linear infinite; animation-delay: -25s; opacity: .95; }
+@keyframes sts-cloud-drift {
+  from { transform: translateX(-70vw); }
+  to   { transform: translateX(110vw); }
+}
+/* 篝火按钮（原版 images/ui/campfire：木面板 + sleep/smith 原版图标） */
+.camp-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;
+  width: 230px; padding: 18px;
+  background: linear-gradient(180deg, rgba(66,44,26,.96), rgba(42,27,15,.96));
+  border: 2px solid #6b4a2e; border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,220,160,.18);
+  transition: transform .15s ease, filter .15s ease;
+}
+.camp-btn:not(.dis):hover { border-color: #a07848; transform: translateY(-4px); filter: brightness(1.15); box-shadow: 0 12px 28px rgba(0,0,0,.7), 0 0 18px rgba(255,180,80,.25), inset 0 1px 0 rgba(255,220,160,.22); }
+.camp-btn.dis { opacity: .5; cursor: not-allowed; }

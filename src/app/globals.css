@@ -125,9 +125,10 @@
 }
 
 /* ============ 杀戮尖塔游戏样式 ============ */
+/* 字体 = 原版游戏方案 (FontHelper.java): 英文 Kreon + 简中 SourceHanSerifSC */
 :root {
-  --sts-font-title: var(--font-title), "LXGW WenKai", "Noto Serif SC", serif;
-  --sts-font-body: var(--font-body), "Noto Serif SC", serif;
+  --sts-font-title: var(--font-zh-title), var(--font-title), "SourceHanSerifSC", "Noto Serif SC", serif;
+  --sts-font-body: var(--font-zh-body), var(--font-body), "SourceHanSerifSC", "Noto Serif SC", serif;
 }
 
 .sts-title { font-family: var(--sts-font-title); }
@@ -1079,3 +1080,26 @@
 /* 死亡界面：标题从黑淡入 */
 @keyframes sts-go-title-in { from { opacity: 0; } to { opacity: 1; } }
 .sts-go-title { animation: sts-go-title-in 1.2s ease-out both; }
+
+/* ============ 第十八批：原版资源还原样式 ============ */
+/* 标题屏漂云（原版 TitleCloud.java: x += vX·dt 环绕；三档深度不同速度） */
+.sts-cloud { position: absolute; left: 0; pointer-events: none; user-select: none; opacity: 0.85; }
+.sts-cloud-far  { top: 6%;  width: 34vw; animation: sts-cloud-drift 130s linear infinite; }
+.sts-cloud-mid  { top: 16%; width: 44vw; animation: sts-cloud-drift 95s linear infinite; animation-delay: -40s; opacity: 0.9; }
+.sts-cloud-near { top: 34%; width: 60vw; animation: sts-cloud-drift 70s linear infinite; animation-delay: -25s; opacity: 0.95; }
+@keyframes sts-cloud-drift {
+  from { transform: translateX(-70vw); }
+  to   { transform: translateX(110vw); }
+}
+
+/* 篝火按钮（原版 images/ui/campfire：wood 面板 + 原版 sleep/smith 图标） */
+.sts-camp-btn {
+  background: linear-gradient(180deg, rgba(66, 44, 26, 0.96) 0%, rgba(42, 27, 15, 0.96) 100%);
+  border: 2px solid #6b4a2e;
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 220, 160, 0.18);
+}
+.sts-camp-btn:hover { border-color: #a07848; box-shadow: 0 12px 28px rgba(0, 0, 0, 0.7), 0 0 18px rgba(255, 180, 80, 0.25), inset 0 1px 0 rgba(255, 220, 160, 0.22); }
+
+/* 涅奥眼睑帧切换（眨眼序列每帧瞬时替换） */
+.sts-lid-in { animation: none; }
