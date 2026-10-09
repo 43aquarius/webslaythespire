@@ -432,3 +432,24 @@ Stage Summary:
 - 原版素材全面落地：7类资源共375+张替换为反编译仓库原版文件(此前为wiki渲染版)，双版本同步，全套回归+VLM验收通过
 - 关键技术结论入库：该反编译仓库图集为顶部原点(非libGDX标准底部)，多页归属按文本页头段；Power图标权威映射应从loadRegion()提取而非文件名猜测
 - 后续增强候选：地图boss节点显示每boss专属图标(原版行为,需代码改动)/药水分层合成(原版glass+liquid+spots+outline)/敌人Spine骨骼动画渲染
+
+---
+Task ID: 21
+Agent: main
+Task: sts2-web研究第七批落地：原版地图boss专属图标（幕开始预决定boss+专属图标+名称提示，两版本）
+
+Work Log:
+- 承第十九批发现：原版ui/map/boss/目录有10个每boss专属图标(slime/guardian/hexaghost/automaton/collector/champ/awakened/timeeater/donu/heart)——原版行为是地图boss节点显示本幕具体boss而非通用图标
+- 数据层：RunState新增actBoss字段(幕开始预决定)；run.ts新增rollActBoss(幕池避开已见)——newRun/newMultiRun/advanceAct三处开图时预掷；pickEncounter的isBoss分支优先返回预决定(旧存档无actBoss时回退现掷,兼容)
+- 渲染层：MapScreen.tsx(Next.js) BOSS_ICON映射10个敌人ID→图标名,boss节点用专属图标+悬停提示显示boss名称(此前通用"BOSS")；standalone ui.ts 同步(bossIconOf+节点img按actBoss切换+tip名称,键控更新防闪)
+- 素材：boss图标10张从反编译仓库复制到mapicons/；standalone需重跑make_assets.py(assets.json不含新增文件的坑)
+- 排障：测试D区chooseNode(boss)不可达(boss不在startNodes可达集)→设boss父节点为当前节点再选；E区advanceAct无store暴露→经chooseBossRelic(null)真实路径触发；涅奥选项正则漏"净化"类选项→补关键词
+- test_batch20.ts(双版本各12项)：七类原版素材就位/新局即预决定/属幕池/敌人非空/专属图标/名称提示/进boss战斗遭遇=预决定/幕推进重掷属二幕池/旧档无actBoss回退仍可战 —— 12+12全绿
+- 回归：regression 16/412、fulltest全流程、batch15 31(1项墨迹时序偶发重跑过)、batch16 30、batch18 41、mptest 23、bugcheck 29+29 —— 全绿
+- VLM验收：守卫者/史莱姆/六角幽灵/通用四图标拼接对照+地图截图确认boss节点显示守卫者专属图标、地图其余正常(初次VLM误判源于截图拍在涅奥过渡期+原版图标为浅色徽章风格,复拍确认)
+- 版本：单文件37.70MB重建(含boss图标内联)
+
+Stage Summary:
+- 原版地图boss专属图标落地：开图即知本幕boss(预决定)、专属图标+名称提示、进战斗遭遇严格一致、幕推进重掷、旧档兼容 —— 两版本同步,12+12项E2E+全套回归全绿
+- sts2-web研究第七批结论：sts2-web自身剩余候选(检视屏大图/收集页)价值成本比低,本批转向原版一代反编译源挖掘(boss图标为原版独有行为,sts2-web无此数据),与用户"原版还原"目标更契合
+- 后续候选：药水分层合成(glass+liquid+spots+outline,原版渲染管线)/敌人Spine骨骼动画/结束回合按钮与顶栏原版UI素材替换

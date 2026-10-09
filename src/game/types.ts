@@ -421,6 +421,7 @@ export interface RunState {
   gameOverInfo: { victory: boolean; floor: number; monstersSlain: number; elitesSlain: number; goldEarned: number } | null
   neow?: NeowState | null
   bossesSeen: string[]   // 本局已遭遇的 boss（避免重复）
+  actBoss?: { name: string; enemies: string[] } | null  // 本幕预决定的 boss（原版行为：开图即定，地图显示专属图标）
   nextActInfo?: number | null
   // 联机篝火：每玩家的选择（未选为 null；null = 未初始化）
   mpRest?: (null | 'rest' | 'smith')[] | null

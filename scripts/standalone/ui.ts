@@ -1429,6 +1429,19 @@ function updateCombatScreen(run: RunState) {
 // 第五批：点状路径(替代SVG虚线)/节点脉冲/玩家标记/图例/选点墨迹
 const NODE_ICON: Record<string, string> = { monster: 'monster', elite: 'elite', event: 'event', shop: 'shop', treasure: 'treasure', rest: 'rest', boss: 'boss' }
 const NODE_NAME: Record<string, string> = { monster: '普通敌人', elite: '精英敌人', event: '未知事件', shop: '商店', treasure: '宝箱', rest: '篝火', boss: 'BOSS' }
+// 原版行为：地图 boss 节点显示本幕专属 boss 图标（ui/map/boss/*.png）
+const BOSS_ICON: Record<string, string> = {
+  slimeBoss: 'slime', theGuardian: 'guardian', hexaghost: 'hexaghost',
+  bronzeAutomaton: 'automaton', theCollector: 'collector', theChamp: 'champ',
+  awakenedOne: 'awakened', timeEater: 'timeeater', donu: 'donu',
+  corruptHeart: 'heart',
+}
+const bossIconOf = (run: RunState): { icon: string; name: string } | null => {
+  const ab = run.actBoss
+  if (!ab || !ab.enemies.length) return null
+  const icon = BOSS_ICON[ab.enemies[0]]
+  return icon ? { icon, name: ab.name } : null
+}
 const LEGEND_ITEMS: [string, string][] = [
   ['event', '未知'], ['shop', '商店'], ['treasure', '宝箱'],
   ['rest', '篝火'], ['monster', '敌人'], ['elite', '精英'],
@@ -1476,10 +1489,19 @@ function updateMapScreen(run: RunState) {
         el = document.createElement('div')
         el.dataset.nid = nd.id
         el.dataset.ntype = nd.type
-        el.innerHTML = `<img src="${A('mapicons/' + NODE_ICON[nd.type] + '.png')}" alt=""><span class="cur-ring" style="display:none"></span><span class="node-outline"></span>`
+        const bi0 = bossIconOf(run)
+        const iconKey0 = nd.type === 'boss' && bi0 ? bi0.icon : NODE_ICON[nd.type]
+        el.innerHTML = `<img src="${A('mapicons/' + iconKey0 + '.png')}" alt=""><span class="cur-ring" style="display:none"></span><span class="node-outline"></span>`
         holder.appendChild(el)
       }
       el.dataset.ntype = nd.type
+      const bi = nd.type === 'boss' ? bossIconOf(run) : null
+      const iconKey = bi ? bi.icon : NODE_ICON[nd.type]
+      const imgEl = el.querySelector('img') as HTMLImageElement | null
+      if (imgEl) {
+        const wantSrc = A('mapicons/' + iconKey + '.png')
+        if (imgEl.getAttribute('src') !== wantSrc) imgEl.setAttribute('src', wantSrc)
+      }
       const isCur = run.currentNodeId === nd.id
       const isReach = reach.includes(nd.id)
       const visited = run.visitedNodes.includes(nd.id)
@@ -1492,7 +1514,7 @@ function updateMapScreen(run: RunState) {
       el.style.opacity = visited && !isCur ? '0.5' : '1'
       if (isReach) { el.dataset.act = 'chooseNode'; el.dataset.id = nd.id }
       else { delete el.dataset.act }
-      el.dataset.tip = `<b>${NODE_NAME[nd.type]}</b>`
+      el.dataset.tip = `<b>${nd.type === 'boss' && bi ? bi.name : NODE_NAME[nd.type]}</b>`
       const ring = el.querySelector('.cur-ring') as HTMLElement
       if (ring) ring.style.display = isCur ? '' : 'none'
       const img = el.querySelector('img') as HTMLElement
