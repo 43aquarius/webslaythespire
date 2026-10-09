@@ -217,6 +217,11 @@ async function main() {
     window.__sts.setState({ run: { ...r } })
     return 'ok'
   })()`)
+  // 等奖励屏DOM真正挂载（房间过渡黑幕1.1s后才切屏）再等光晕1s淡入完成
+  for (let i = 0; i < 14; i++) {
+    if (Number(ev(`document.querySelectorAll('.sts-reward-glow').length`)) >= 1) break
+    await sleep(400)
+  }
   await sleep(1200)
   const glow = evJson(`(() => {
     return { rare: document.querySelectorAll('.sts-reward-glow-rare').length, unc: document.querySelectorAll('.sts-reward-glow-uncommon').length, op: (() => { const g = document.querySelector('.sts-reward-glow'); return g ? getComputedStyle(g).opacity : 'none' })() }

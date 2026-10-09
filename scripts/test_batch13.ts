@@ -64,7 +64,12 @@ async function main() {
     if (ev(`window.__sts.getState().run?.screen`) === 'combat') break
     await sleep(700)
   }
-  await sleep(800)
+  // 等战斗DOM真正挂载（第十五批房间过渡黑幕1.1s后才切屏），手牌出现为准
+  for (let i = 0; i < 14; i++) {
+    if (Number(ev(`document.querySelectorAll('.sts-hand-card').length`)) >= 5) break
+    await sleep(400)
+  }
+  await sleep(400)
   check('进入战斗', ev(`window.__sts.getState().run?.screen`) === 'combat')
 
   // ===== ⑦ 战斗开始状态栏滑入（原版 NCreatureStateDisplay：上方20px + 随机延迟1.3-1.7s） =====

@@ -275,7 +275,7 @@ async function main() {
   // ===== ⑨ 奖励界面顶栏常驻（原版行为） =====
   console.log('== ⑨ 奖励界面顶栏 ==')
   mutateRun(`r => { r.screen = 'reward'; r.reward = { gold: 25, potion: 'firePotion', taken: [] }; r.combat = { isBoss: false, players: [{ drawPile: [] }], activeIdx: 0 } }`)
-  await sleep(1000)
+  await sleep(1500) // 房间过渡黑幕1.1s后新屏才挂载（第十五批），需等>1.1s
   const rewardHud = evJson(`(() => ({ hud: !!document.querySelector('#hud-gold'), gold: (document.querySelector('#hud-gold') || {}).textContent }))()`)
   check('⑨奖励界面顶栏HUD常驻', rewardHud.hud === true, JSON.stringify(rewardHud))
 

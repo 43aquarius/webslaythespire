@@ -293,7 +293,12 @@ async function main() {
     window.__sts.setState({ run: { ...r } })
     return 'ok'
   })()`)
-  await sleep(1200)
+  // 等奖励屏DOM真正挂载（第十五批房间过渡黑幕1.1s后才切屏）
+  for (let i = 0; i < 14; i++) {
+    if (Number(ev(`document.querySelectorAll('.sts-reward-glow').length`)) >= 1) break
+    await sleep(400)
+  }
+  await sleep(1200) // 光晕1s淡入完成
   const glow = evJson(`(() => {
     const rare = document.querySelectorAll('.sts-reward-glow-rare')
     const unc = document.querySelectorAll('.sts-reward-glow-uncommon')

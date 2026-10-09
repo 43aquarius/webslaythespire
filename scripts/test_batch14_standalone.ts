@@ -107,7 +107,11 @@ async function main() {
 
   // ===== ③ 篝火休息去饱和+烟雾 =====
   ev(`(() => { const st = window.__sts.getState(); const r = JSON.parse(JSON.stringify(st.run)); r.screen = 'rest'; if (r.combat) r.combat = null; window.__sts.setState({ run: r }); return 'ok' })()`)
-  await sleep(900)
+  // 等篝火屏DOM真正挂载（房间过渡黑幕1.1s后才切屏）
+  for (let i = 0; i < 14; i++) {
+    if (ev(`[...document.querySelectorAll('button')].some(b => b.textContent.includes('休息'))`) === true) break
+    await sleep(400)
+  }
   ev(`(() => { const btn = [...document.querySelectorAll('button')].find(b => b.textContent.includes('休息')); if (btn) btn.click(); return 'ok' })()`)
   await sleep(700)
   const rest = evJson(`(() => {

@@ -383,3 +383,26 @@ Work Log:
 Stage Summary:
 - 原bug清单8项+HUD 78/80+主页文字：两版本29+29全绿确认无回退；唯一真实回归(standalone牌组按钮重合)已修复；主菜单角标文字删除完成(VLM确认干净)
 - 至此用户原始待办全部闭环：sts2-web研究(6批19+9大项)/部署失败/8项bug/HUD原版样式/联机双通道+大厅+房间码/主页文字
+
+---
+Task ID: 19
+Agent: main
+Task: 验证并收尾第十八批（平台自动提交9d4a125/a5a30cb/bfbf328均未验证未推送）+ 测试套件适配房间过渡时序 + 修复发现的问题
+
+Work Log:
+- 恢复上下文：本地领先origin多个提交——9d4a125为第十八批内容(374文件:SFX系统/原版字体/各幕背景/篝火图/事件插画/涅奥眼睑/BGM映射,两版本)，外加两个会话中途的平台自动快照
+- test_batch18.ts修复五处测试缺陷：①正则转义错(\/缺闭合/)→改includes ②篝火img选择器引号缺失 ③开始→出发导航缺过渡等待(黑幕1.1s,改轮询) ④地图节点Next版缺data-nid(给MapScreen.tsx补上,与standalone对齐) ⑤standalone资源断言用data URL前缀全等(bgAnyOk/imgOk helper)+设置屏导航返回
+- 修复standalone字体惰性加载：ui.ts启动时document.fonts.load四字重急切预载(对齐Next.js版next/font preload行为,消除首用回退闪烁)——A3 Kreon检查由false转true
+- 【重要发现】batch15房间过渡(切屏延迟1100ms)落地后,test_batch12/13/14从未重跑,5处时序断言稳定失败(非产品回归)：batch12光晕opacity在挂载+1s动画未完成时检查、batch13状态栏滑入/意图浮动在DOM挂载前检查、batch14休息按钮在挂载前点击、batch16奖励HUD在挂载前检查——全部改为"轮询等DOM挂载再检查/操作"模式,双版本同步修复
+- 【测试环境污染排障】batch15图例hover测试失败根因:浏览器卡在iPhone设备模拟(test_bugcheck手机视口测试残留,UA=iPhone+hover:none,viewport命令不清除,set device仅支持手机型号)——重启浏览器(close+sleep2s+open)恢复桌面UA;直接调用fiber onMouseEnter验证产品代码正常(lg-hot=true+36节点高亮)
+- 全套回归验证：batch10 19+13 / batch12 29+19 / batch13 25+25 / batch14 19+18 / batch15 31+28 / batch16 30+31 / batch18 41+45 / regression 16 / regression5 412 / mptest 23(首跑1项时序偶发重跑过) / bugcheck 29+29 / fulltest全流程16层到gameover —— 全绿
+- VLM视觉验收4张：主菜单(原版天空+漂云+Kreon logo✓) 战斗(原版一幕石室荒野✓) 篝火(原版石墙+炭火堆+按钮图标✓) 事件(原版事件房+大鱼钓鱼插画✓)——总结"还原度极高"
+- 排障记录：注入残缺combat状态致React客户端崩溃(fulltest gameover后突变)——截图验收改用真实流程导航(开始→出发→涅奥→点怪节点)
+- 重建单文件版37.49MB(与平台提交体积一致,含第十八批全部新素材);生产构建+服务器:3000已运行验证版
+- git整理：9d4a125(amend规范消息)+平台快照bfbf328/a5a30cb/8d1a8ef全部软重置,重组为两个清晰提交(第十八批内容+验证修复),以43aquarius名义
+
+Stage Summary:
+- 第十八批(原版资源全家桶)双版本验证通过:41+45项E2E全绿,VLM四画面确认原版还原度极高
+- 测试基建:6个批次测试文件适配房间过渡时序(等DOM挂载模式),消除batch15落地以来的隐性时序断言失效
+- 修复:Next.js地图节点补data-nid、standalone字体急切预载
+- 测试环境经验入库:agent-browser设备模拟残留需重启浏览器清除;fiber直调法可分离产品bug与事件投递问题
