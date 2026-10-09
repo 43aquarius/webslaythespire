@@ -1,0 +1,74 @@
+[
+  {
+    "url": "https://www.reddit.com/r/slaythespire/comments/1slu225/any_way_to_access_the_games_raw_art_assets_sts2",
+    "name": "Any way to access the game's raw art assets? (STS2)",
+    "snippet": "Does anyone know a way to unpack the STS2 game files to get a copy of the game's art assets? Card frames, card art, relics, sprites for…",
+    "host_name": "www.reddit.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/ptrlrd/spire-codex",
+    "name": "ptrlrd/spire-codex: A project for decompiling Slay",
+    "snippet": "Card portraits, relic/potion icons, character art, monster sprites, boss encounter icons extracted from game assets and served as static files. Game data ( ...",
+    "host_name": "github.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://steamcommunity.com/workshop/filedetails/discussion/1610173938/1743356517524750020/?ctp=5",
+    "name": "Replay the Spire :: Discussions",
+    "snippet": "[desktop-1.0.jar:?] Played the Fabricate Wheel+ card (upgraded at the campfire) during the Act 1 Hexaghost boss fight and the game immediately ...",
+    "host_name": "steamcommunity.com",
+    "rank": 2,
+    "date": "Jan 6, 2019",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=l6eEcndjYs0",
+    "name": "How I recreated my favorite Roguelike in 1 WEEK!",
+    "snippet": "Welcome to scuffed in 7. Slay the spire is a roguelike deck builder where you slay monsters, acquire cool cards, slay bigger monsters, ...",
+    "host_name": "www.youtube.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://spire-codex.com/images",
+    "name": "Images - Game Art & Assets - Slay the Spire 2 (sts2)",
+    "snippet": "Browse and download Slay the Spire 2 game assets, card portraits, relic icons, monster sprites, character art, and more.",
+    "host_name": "spire-codex.com",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.toolbuddy.io/sprite-sheet-unpacker",
+    "name": "Sprite Sheet Unpacker Online - ToolBuddy",
+    "snippet": "Sprite Sheet Unpacker is built for teams that inherit atlas exports and need the original frame images back without switching to desktop-only recovery tools.",
+    "host_name": "www.toolbuddy.io",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=r2m2aL1eEjw",
+    "name": "Slay The Spire Tutorial - How To Install Mods",
+    "snippet": "In this Slay The Spire Tutorial I show how to Install Mods and use them. This method may change over time as the modding scene is very new ...",
+    "host_name": "www.youtube.com",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://stackoverflow.com/questions/60594358/assets-not-being-loaded-libgdx",
+    "name": "Assets not being loaded (libGDX) - java",
+    "snippet": "I have no idea what this is about. But the JAR is certainly not runnable. So I try the command prompt and do \"gradle desktop:dist --stacktrace\".",
+    "host_name": "stackoverflow.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  }
+]

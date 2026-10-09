@@ -406,3 +406,29 @@ Stage Summary:
 - 测试基建:6个批次测试文件适配房间过渡时序(等DOM挂载模式),消除batch15落地以来的隐性时序断言失效
 - 修复:Next.js地图节点补data-nid、standalone字体急切预载
 - 测试环境经验入库:agent-browser设备模拟残留需重启浏览器清除;fiber直调法可分离产品bug与事件投递问题
+
+---
+Task ID: 20
+Agent: main
+Task: 用户需求"去网络上找一代原版资源"：搜索并落地原版素材全面替换（卡图/卡框/状态/遗物/意图/地图/能量球，替换wiki来源素材）
+
+Work Log:
+- 网络搜索原版资源：spire-codex(STS2反编译,非一代)/sts-exporter/slay-the-spire-api等线索 → 确认最佳源为一代反编译仓库 Li-Binghui/MySlayTheSpire（第十八批曾用/tmp副本,会话清理后重新克隆）
+- 盘点原版资源结构：cards.atlas(400区域,5页)/cardui.atlas(1024+512双分辨率卡框体系,4页)/powers.atlas(139状态)/images/relics(232张平铺)/images/potion(分层合成)/ui/intent/attack_intent_1-7/ui/map(含每boss专属图标10个)/topPanel(结束回合按钮/顶栏/能量VFX)
+- 资源来源审计：现有敌人/状态/遗物/药水/卡图/卡框来自slaythespire.wiki.gg（wiki渲染版,非原版文件）——用户"很多资源都不是原本的"判断准确
+- 构建225张卡牌ID映射(camelCase→原版路径)：snake_case直配198 + 手工27(S后缀基名/颜色后缀strike_b→blue/attack/strike/thunderclap→thunder_clap/sweepBeam→sweeping_beam/cripplingCloud→crippling_poison等)
+- 【关键排障①atlas原点】首版提取用libGDX标准底部原点→VLM对照发现内容错位；用git中旧wiki图做真值标定：bash卡图顶部原点RGB差3.0 vs 底部52.2、strength状态12.1 vs 70.8 → 该仓库图集实为顶部原点(非标准)——powers/cards/cardui三图集统一修正
+- 【关键排障②多页图集】cards.atlas分5页/cards4页/powers单页：区域归属按atlas文本页头段判定(bash→cards3.png)
+- 【关键排障③空图bug】补齐脚本crop高度为0(底部坐标少+h)+armor/closeUp等区域在错误原点下为空 → 修正后28状态+14遗物全部补齐
+- 权威状态映射：从反编译126个Power类的loadRegion()调用提取（metallicize→armor/caltrops→thorns/electro→mastery/mark→pressure_points/dexterityLoss→flex/rage→anger/curlUp→closeUp/feelNoPain→noPain/equilibrium→retain/theBomb→the_bomb/beatOfDeath→beat等35项）
+- 遗物权威文件名：marbles/vCore/snake_ring/goldenIdolRelic/redChoker/tungsten/crown(meat/insect等14项手工映射)
+- 全量替换落地：卡面艺术图225张(250x190区域→烘焙512画布WebP@131,99)/卡框体系28张(帧9+背景12+横幅3+费用宝球4)/状态图标89张(128x128画布)/遗物37张/意图13张(attack_intent_N)/地图图标6张(chest→treasure;boss无通用图,原版为每boss专属——留作后续增强)/能量球4张(1024/card_*_orb@164x164)
+- 验证：bash卡图与wiki真值RGB差1.8/strength差11.5(wiki有轻微处理差异)/无空图/内容占比合理；VLM双画面验收:卡面艺术图+边框+费用宝球完整无错位、能量球与意图正常、地图节点清晰、无破图
+- 重建单文件37.54MB；全套回归：batch18 41+45 / regression 16 / regression5 412(1项时序偶发重跑过) / bugcheck 29+29 / batch12 29 / batch13 25 / batch14 19 / batch15 31 / batch16 30+31 / mptest 23
+- 【根治测试环境污染】test_bugcheck结尾追加浏览器重启(close+open about:blank)清除iPhone设备模拟残留——此前该残留导致后续套件hover用例稳定失败(已验证:bugcheck后紧接batch15通过)
+- 产出脚本：extract_original_full.py(全量提取)/extract_fix_missing.py(权威映射补齐)
+
+Stage Summary:
+- 原版素材全面落地：7类资源共375+张替换为反编译仓库原版文件(此前为wiki渲染版)，双版本同步，全套回归+VLM验收通过
+- 关键技术结论入库：该反编译仓库图集为顶部原点(非libGDX标准底部)，多页归属按文本页头段；Power图标权威映射应从loadRegion()提取而非文件名猜测
+- 后续增强候选：地图boss节点显示每boss专属图标(原版行为,需代码改动)/药水分层合成(原版glass+liquid+spots+outline)/敌人Spine骨骼动画渲染

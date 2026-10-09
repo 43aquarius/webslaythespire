@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://github.com/ptrlrd/spire-codex",
+    "name": "ptrlrd/spire-codex: A project for decompiling Slay the  - GitHub",
+    "snippet": "Images - Card portraits, relic/potion icons, character art, monster sprites, Ancient portrait icons, and boss encounter icons extracted from game assets and ... Missing:  original  | Show results with:",
+    "host_name": "github.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/MaT1g3R/Slay-the-Spire-data",
+    "name": "Slay the Spire run history data - GitHub",
+    "snippet": "TL;DR: If you are only looking for the run history data, see Data sets. Otherwise, you can use the code provided to generate similar reports on your own run ...",
+    "host_name": "github.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.reddit.com/r/slaythespire/comments/1slu225/any_way_to_access_the_games_raw_art_assets_sts2",
+    "name": "Any way to access the game's raw art assets? (STS2) - Reddit",
+    "snippet": "Does anyone know a way to unpack the STS2 game files to get a copy of the game's art assets? Card frames, card art, relics, sprites for…",
+    "host_name": "www.reddit.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/DesirePathGames/Slay-The-Robot",
+    "name": "GitHub - DesirePathGames/Slay-The-Robot: A Godot",
+    "snippet": "Slay the Robot is a comprehensive framework for Godot 4 which enables and streamlines the creation of roguelike deckbuilders similar to Slay the Spire. Missing:  extract  original",
+    "host_name": "github.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/topics/sprite-extractor",
+    "name": "sprite-extractor · GitHub Topics",
+    "snippet": "A high-performance Python tool to extract individual sprites from AGS (Adventure Game Studio) .spr files. Perfect for game modding, asset extraction, ... Missing:  Slay  Spire  original",
+    "host_name": "github.com",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/wattostudios/GameExtractor",
+    "name": "game extractor - GitHub",
+    "snippet": "Game Extractor is a program that reads and writes files used in games. The primary focus is to open game archives and allow you to extract the files from ... Missing:  Slay  Spire  sprites",
+    "host_name": "github.com",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.watto.org/extract",
+    "name": "Game Extractor - watto studios",
+    "snippet": "Game Extractor is a powerful tool that lets you open and manipulate the archive files used in thousands of games. Most modern games have several large files ...",
+    "host_name": "www.watto.org",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/sam-k0/SpriteRipper",
+    "name": "GitHub - sam-k0/SpriteRipper: Extract sprites from .exe / .win",
+    "snippet": "A tool to extract spritesheets from GameMaker Studio 1.4 & 2 binaries. This works on .win and .exe files (aka bytecode and compiled games). Missing:  Slay  Spire  original",
+    "host_name": "github.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://steamcommunity.com/app/245390/discussions/0/4760955978893259211/?l=swedish",
+    "name": "Is there anyway to extract the audio and sprite files from the",
+    "snippet": "Is there anyway to extract the audio and sprite files from the game? I really want to have a look at the audio and sprites files for this ...",
+    "host_name": "steamcommunity.com",
+    "rank": 8,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/assetripper/assetripper",
+    "name": "AssetRipper/AssetRipper: GUI application to analyze game files",
+    "snippet": "AssetRipper is a powerful tool for analyzing Unity game files. For example, it enables game developers to: Find dependency assets that were accidentally ... Missing:  Slay  Spire  original",
+    "host_name": "github.com",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]

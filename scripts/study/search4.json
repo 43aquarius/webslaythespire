@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://github.com/ptrlrd/spire-codex",
+    "name": "ptrlrd/spire-codex: A project for decompiling Slay the  - GitHub",
+    "snippet": "Images - Card portraits, relic/potion icons, character art, monster sprites, Ancient portrait icons, and boss encounter icons extracted from game assets and ...",
+    "host_name": "github.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/topics/slay-the-spire",
+    "name": "slay-the-spire · GitHub Topics",
+    "snippet": "An advanced AI co-pilot and strategy automation engine for Slay the Spire. It utilizes out-of-core streaming pipelines and act-specialized multi-class LightGBM ...",
+    "host_name": "github.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/jhcheung/slay-the-spire-api",
+    "name": "Slay The Spire card and relic api - GitHub",
+    "snippet": "Slay The Spire Rails API. Images and gametext from Slay The Spire. Game data extracted using ModTheSpire, BaseMod, and STS Exporter. https://github.com/kiooeht ...",
+    "host_name": "github.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/twanvl/sts-exporter",
+    "name": "twanvl/sts-exporter: Card image export tool for Slay the Spire",
+    "snippet": "A simple mod for Slay the Spire that can export card images, relics, potions, and monster images. How to use it. Simply load the mod with ModTheSpire. Then ... Missing:  assets  atlas  textures  png",
+    "host_name": "github.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.reddit.com/r/slaythespireboardgame/comments/1px3h1o/print_ready_pdfs_of_all_the_slay_the_spire_board",
+    "name": "Print ready PDF's of all the Slay the Spire: Board Game assets",
+    "snippet": "I made a collection of all the cards, tokens and other assets of the board game along with print ready PDF's are intedend to be printed on ...",
+    "host_name": "www.reddit.com",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/topics/slaythespire?l=c%2B%2B&o=desc&s=updated",
+    "name": "slaythespire · GitHub Topics",
+    "snippet": "Slay the Spire 2 Cheat 2026 with God Mode, Auto Win, Card Duplication and Max Relics. Unlimited Gold, God Mode, All Cards Unlocked. Easy to use trainers. Missing:  extracted  assets  atlas  textures  png  art",
+    "host_name": "github.com",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/Alchyr/BasicMod",
+    "name": "Alchyr/BasicMod: A basic, empty Slay the Spire mod + tutorial.",
+    "snippet": "Some HD Slay the Spire art assets (courtesy of Gremious, creator of DefaultMod):. Includes: Empty Relic Template feat. empty bottle; Empty Card Template; Color- ...",
+    "host_name": "github.com",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/MirzayevFarid/Slay-The-Spire",
+    "name": "GitHub - MirzayevFarid/Slay-The-Spire: Project for CS 319",
+    "snippet": "Our aim is to create \"Slay The Spire\" game by using the principles of object-oriented programming. We are going to implement the game using Java and JavaFX ...",
+    "host_name": "github.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/MeguminBOT/TextureAtlas-to-GIF-and-Frames",
+    "name": "TextureAtlas Toolbox is an all-in-one solution for  - GitHub",
+    "snippet": "A powerful, free and open-source tool for extracting, generating, and converting Texture Atlases. TextureAtlas Toolbox is an all-in-one ... Missing:  Slay  Spire  card",
+    "host_name": "github.com",
+    "rank": 8,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.reddit.com/r/slaythespire/comments/1s2jtwg/full_art_cards",
+    "name": "Full art cards? : r/slaythespire - Reddit",
+    "snippet": "there's a github repo somewhere with all the assets ripped from game files, includes the full art versions too. can't remember exact link ... Missing:  extracted  atlas  textures  png",
+    "host_name": "www.reddit.com",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]

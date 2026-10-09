@@ -1,0 +1,29 @@
+[
+  {
+    "url": "https://github.com/Li-Binghui/MySlayTheSpire",
+    "name": "杀戮尖塔反编译 - GitHub",
+    "snippet": "使用jadx-gui与JD-Core对\"Steam\\steamapps\\common\\SlayTheSpire\"目录下的desktop-1.0.jar进行反编译，即将.class文件转回.java。 使用maven导入项目所需要的依赖，但 ... 缺少字词：  decompile  | 必须包含：",
+    "host_name": "github.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.reddit.com/r/godot/comments/1rmnvvr/decompiled_slay_the_spire_2_entire_project_and/?tl=zh-hans",
+    "name": "反编译：屠杀尖塔2 整个项目（以及如何防止它！） : r/godot",
+    "snippet": "如果你使用GitHub 的服务，它会进行训练，任何你在IDE 中使用的AI 代码工具大概率也会这样。 如果你向任何大型语言模型（LLM）询问有关你项目的问题，也是 ...",
+    "host_name": "www.reddit.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/wkzMagician/slay-the-model",
+    "name": "wkzMagician/slay-the-model - GitHub",
+    "snippet": "Slay the Model 是一个基于Python 的《杀戮尖塔》(Slay the Spire) 核心游戏框架。 与原版反编译代码不同，本项目从软件工程角度重新设计，实现了表现层与逻辑层的完全 ...",
+    "host_name": "github.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  }
+]

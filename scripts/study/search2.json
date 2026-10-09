@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://github.com/ZanahorioJose/slay-the-spire-zanahorio",
+    "name": "ZanahorioJose/slay-the-spire-zanahorio: 自研网页版《杀戮尖塔",
+    "snippet": "《杀戮尖塔DIY》是致敬《杀戮尖塔》系列的网页版卡牌构筑游戏：纯前端、无需安装、打开浏览器即可游玩。它不只是\"玩\"，更是\"造\"——卡牌、怪物、遗物、事件全部可以DIY， ... 缺少字词：  提取  原版",
+    "host_name": "github.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/wakaka6/SlaySP2Manger",
+    "name": "wakaka6/SlaySP2Manger: 一款杀戮尖塔2 多预设mod管理器",
+    "snippet": "游戏内卡面资源提取：直接从本地游戏提取卡图、边框、横幅、能量图标与标题字体，卡面表现更贴近游戏内原始资源。 本地化刷新链路：刷新资源时会从本地游戏重新 ... 缺少字词：  素材  | 必须包含：",
+    "host_name": "github.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/SinonJZH/slay-the-stella",
+    "name": "为《杀戮尖塔2》制作的《星塔旅人》同人模组。 · GitHub",
+    "snippet": "本项目源码内图片等资源属第三方素材（见下），从源码构建仅用于个人/非营利开发测试。 FMOD 音频工程. 音频走《杀戮尖塔2》同款FMOD Studio 管线：素材在FMOD 工程 ... 缺少字词：  提取  | 必须包含：",
+    "host_name": "github.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/QingTian-222/Sts2Mod_DrawAndGuessMod",
+    "name": "杀戮尖塔2mod 你画瓦猜· GitHub",
+    "snippet": "... 原版开箱条件的玩家分别绘制一个由原版宝箱逻辑生成的候选遗物；全部提交后自动开箱。关闭后才会出现“鉴宝大会”事件。 可以开启临摹参考面板，在作画界面右侧搜索卡牌 ...",
+    "host_name": "github.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/zhy0216/sangota",
+    "name": "zhy0216/sangota: 三国版本的杀戮尖塔 - GitHub",
+    "snippet": "我将genmedia CLI 提供给agent 作为工具，让它们调用fal.ai 上的生成式模型，制作和迭代角色、卡牌、敌人、地图与场景等游戏美术素材。 代码与素材在同一套agent 工作 ... 缺少字词：  提取  原版  资源",
+    "host_name": "github.com",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/ArnoldRedman/Slay-The-Spire-Copy",
+    "name": "GitHub - ArnoldRedman/Slay-The-Spire-Copy: 杀戮尖塔复刻",
+    "snippet": "杀戮尖塔复刻. Contribute to ArnoldRedman/Slay-The-Spire-Copy development by creating an account on GitHub. 缺少字词：  素材  提取  原版  资源",
+    "host_name": "github.com",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/wkzMagician/slay-the-model",
+    "name": "wkzMagician/slay-the-model - GitHub",
+    "snippet": "Slay the Model 是一个基于Python 的《杀戮尖塔》(Slay the Spire) 核心游戏框架。 与原版反编译代码不同，本项目从软件工程角度重新设计，实现了表现层与逻辑层的完全 ... 缺少字词：  素材  提取  资源",
+    "host_name": "github.com",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/FuYnAloft/MinionLib",
+    "name": "GitHub - FuYnAloft/MinionLib: 杀戮尖塔2的随从与组件卡牌库模组",
+    "snippet": "杀戮尖塔2的随从与组件卡牌库模组. Contribute to FuYnAloft/MinionLib development by creating an account on GitHub. 缺少字词：  素材  提取  原版  资源",
+    "host_name": "github.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/langvin7/toturial/blob/master/getstart_.md",
+    "name": "杀戮尖塔MOD入门教程 - GitHub",
+    "snippet": "杀戮尖塔本体是由java语言构建的，构建方式属于典型的面向对象式的。具体而言就是将众多方法分类封装，然后在程序需要的时候调用。对此，mod代码也可以仿照杀戮尖塔的本体 ...",
+    "host_name": "github.com",
+    "rank": 8,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.reddit.com/r/godot/comments/1rm7ueb/slay_the_spire_2_can_be_decompiled/?tl=zh-hant",
+    "name": "《殺戮尖塔2》可以被反編譯: r/godot - Reddit",
+    "snippet": "如果你想建立一個心智模型，可以試著反編譯Windows DLL。有反組譯器可以試著把任何機器指令反編譯成C 程式碼，而且通常效果還不錯，這取決於程式碼本身。",
+    "host_name": "www.reddit.com",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]

@@ -286,6 +286,13 @@ async function main() {
   }
   cli(['screenshot', `scripts/study/bugcheck/${MODE}_hud_mobile.png`])
 
+  // 环境恢复：清除iPhone设备模拟（set device无法清除且viewport命令不覆盖UA/hover——
+  // 残留会让后续测试套件的hover类用例失效，须重启浏览器恢复桌面环境）
+  cli(['close'])
+  await sleep(1500)
+  cli(['open', 'about:blank'])
+  await sleep(800)
+
   console.log(`\n== 结果[${MODE}]: ${pass} 通过 / ${fail} 失败 ==`)
   process.exit(fail > 0 ? 1 : 0)
 }
