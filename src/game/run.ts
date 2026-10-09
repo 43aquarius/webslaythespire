@@ -191,7 +191,7 @@ export function newRun(character: CharacterId = 'ironclad'): RunState {
     deck, relics: [info.relic], potions: [null, null, null] as (string | null)[],
     relicCounters: {}, goldEarned: 0,
   }
-  return {
+  const run: RunState = {
     hp: info.hp, maxHp: info.hp, gold: 99,
     character,
     deck,
@@ -213,8 +213,11 @@ export function newRun(character: CharacterId = 'ironclad'): RunState {
     gameOverInfo: null,
     neow: { options: makeNeowOptions(character), chosen: null },
     bossesSeen: [],
+    actBoss: null,
     nextActInfo: null,
   }
+  rollActBoss(run)
+  return run
 }
 
 // ============ 新开一局（联机双人合作，仿杀戮尖塔2） ============
@@ -248,12 +251,24 @@ export function newMultiRun(
       mpChosen: [null, null],
     },
     bossesSeen: [],
+    actBoss: null,
     nextActInfo: null,
   }
+  rollActBoss(run)
   return run
 }
 
 // ============ 幕间推进 ============
+// 预决定本幕 boss（原版行为：开图即定，地图显示专属图标与名称）
+export function rollActBoss(run: RunState): void {
+  const pool0 = run.act === 1 ? ACT1_BOSS_ENCOUNTERS : run.act === 2 ? ACT2_BOSS_ENCOUNTERS : run.act === 3 ? ACT3_BOSS_ENCOUNTERS : ACT4_BOSS_ENCOUNTERS
+  let pool = pool0.filter(e => !run.bossesSeen.includes(e.name))
+  if (pool.length === 0) pool = pool0
+  const enc = pick(pool)
+  run.actBoss = { name: enc.name, enemies: [...enc.enemies] }
+  run.bossesSeen.push(enc.name)
+}
+
 export function advanceAct(run: RunState): void {
   run.act += 1
   run.currentNodeId = null
@@ -263,6 +278,7 @@ export function advanceAct(run: RunState): void {
   run.shop = null
   run.mpRest = null
   run.potionLuck = 0.4   // 原版：药水掉率每幕重置为 40%
+  rollActBoss(run)
   run.map = run.act >= 4
     ? generateAct4Map(Math.floor(Math.random() * 1e9))
     : generateMap(Math.floor(Math.random() * 1e9))
@@ -284,6 +300,8 @@ export function pickEncounter(run: RunState, isElite: boolean, isBoss: boolean):
   const easyPool = act === 1 ? ACT1_EASY_ENCOUNTERS : act === 2 ? ACT2_EASY_ENCOUNTERS : act === 3 ? ACT3_EASY_ENCOUNTERS : ACT1_EASY_ENCOUNTERS
   const hardPool = act === 1 ? ACT1_HARD_ENCOUNTERS : act === 2 ? ACT2_HARD_ENCOUNTERS : act === 3 ? ACT3_HARD_ENCOUNTERS : ACT1_HARD_ENCOUNTERS
   if (isBoss) {
+    // 幕开始已预决定（原版行为，地图显示专属图标）；旧存档兼容：无预决定时现掷
+    if (run.actBoss && run.actBoss.name) return run.actBoss
     // 本局未见过的 boss 优先
     let pool = bossPool.filter(e => !run.bossesSeen.includes(e.name))
     if (pool.length === 0) pool = bossPool

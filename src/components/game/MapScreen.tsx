@@ -15,6 +15,14 @@ const NODE_ICON: Record<string, string> = {
   treasure: 'treasure', rest: 'rest', boss: 'boss',
 }
 
+// 原版行为：地图 boss 节点显示本幕专属 boss 图标（ui/map/boss/*.png）
+const BOSS_ICON: Record<string, string> = {
+  slimeBoss: 'slime', theGuardian: 'guardian', hexaghost: 'hexaghost',
+  bronzeAutomaton: 'automaton', theCollector: 'collector', theChamp: 'champ',
+  awakenedOne: 'awakened', timeEater: 'timeeater', donu: 'donu',
+  corruptHeart: 'heart',
+}
+
 const NODE_NAME: Record<string, string> = {
   monster: '普通敌人', elite: '精英敌人', event: '未知事件', shop: '商店',
   treasure: '宝箱', rest: '篝火', boss: 'BOSS',
@@ -195,6 +203,7 @@ export function MapScreen() {
               visited={run.visitedNodes.includes(node.id)}
               selected={inking?.to === node.id}
               onPick={() => pick(node.id)}
+              bossInfo={run.actBoss}
             />
           ))}
           {/* 玩家标记（原版 NMapMarker：当前节点上方 35px，X 轴展开 + 弹性落地） */}
@@ -260,11 +269,15 @@ function MapLegendHighlight({ type }: { type: string | null }) {
   return null
 }
 
-function MapNodeView({ node, isCurrent, isReachable, visited, selected, onPick }: {
+function MapNodeView({ node, isCurrent, isReachable, visited, selected, onPick, bossInfo }: {
   node: MapNode; isCurrent: boolean; isReachable: boolean; visited: boolean; selected: boolean; onPick: () => void
+  bossInfo?: { name: string; enemies: string[] } | null
 }) {
   const size = node.type === 'boss' ? 96 : node.type === 'elite' ? 60 : 52
-  const icon = `${A}/mapicons/${NODE_ICON[node.type]}.png`
+  // 原版：boss 节点用专属图标（预决定 boss 首个敌人映射；未知/旧存档回退通用 boss）
+  const bossIconKey = bossInfo && BOSS_ICON[bossInfo.enemies[0]] ? BOSS_ICON[bossInfo.enemies[0]] : null
+  const icon = `${A}/mapicons/${node.type === 'boss' && bossIconKey ? bossIconKey : NODE_ICON[node.type]}.png`
+  const tipName = node.type === 'boss' && bossInfo ? bossInfo.name : NODE_NAME[node.type]
   return (
     <div
       data-nid={node.id}
@@ -279,10 +292,10 @@ function MapNodeView({ node, isCurrent, isReachable, visited, selected, onPick }
       }}
       onClick={isReachable ? onPick : undefined}
     >
-      <Tip tip={<b>{NODE_NAME[node.type]}</b>} className="">
+      <Tip tip={<b>{tipName}</b>} className="">
         <img
           src={icon}
-          alt={NODE_NAME[node.type]}
+          alt={tipName}
           draggable={false}
           className="w-full h-full object-contain"
           style={{
