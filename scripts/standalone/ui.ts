@@ -1070,7 +1070,7 @@ function buildCombatScreen(run: RunState): string {
   <button class="pile-btn" id="pile-discard" data-act="openPile" data-pile="discard" style="right:26px;bottom:158px"><b>0</b><span>弃牌堆</span></button>
   <span id="exhaust-holder"></span>
   <div class="energy" id="energy-box"><img src="${A('frames/' + (ENERGY_ORB[hero] || 'redEnergy') + '.png')}" alt=""><span id="energy-num"></span></div>
-  <button class="sts-btn end-turn sts-title" data-act="endTurn" id="end-turn-btn"></button>
+  <button class="sts-endturn" data-act="endTurn" id="end-turn-btn"><img class="et-hover" src="${A('endturn/hover.png')}" alt=""><img class="et-plate" src="${A('endturn/button.png')}" alt=""><span class="et-text"></span></button>
   <div class="hand-row" id="hand-row"></div>
   <div id="turn-banner-holder"></div>
   <div id="banner-holder"></div>
@@ -1426,12 +1426,18 @@ function updateCombatScreen(run: RunState) {
   if (et) {
     const mpE = c.players.length > 1
     const myTurnE = !mpE || st.net.myIdx === c.activeIdx
-    const dis = c.phase !== 'player' || st.busy || !myTurnE
-    et.disabled = dis || c.combatOver
-    et.style.opacity = dis ? '0.5' : '1'
-    const etCls = 'sts-btn end-turn sts-title' + (!dis && !c.combatOver ? ' ready' : '')
+    // 第二十二批：原版三态复刻（EndTurnButton.render）——enemy=灰度图+奶白字，off=DISABLED色+浅灰字，glow=无可出牌发光+金字
+    const enemyPhase = c.phase !== 'player'
+    const off = !enemyPhase && (st.busy || !myTurnE || c.combatOver)
+    const me = AP(c)
+    const glowing = !enemyPhase && !off && me.hand.length > 0 && me.hand.every(h => cardCost(h) > me.energy)
+    et.disabled = enemyPhase || off
+    const etCls = 'sts-endturn' + (glowing ? ' glow' : '') + (enemyPhase ? ' enemy' : '') + (off ? ' off' : '')
     if (et.className !== etCls) et.className = etCls
-    setText(et, c.phase === 'player' ? (mpE && !myTurnE ? '队友回合…' : '结束回合') : '敌方回合…')
+    const plate = et.querySelector('.et-plate') as HTMLImageElement | null
+    const plateSrc = glowing ? A('endturn/glow.png') : A('endturn/button.png')
+    if (plate && plate.getAttribute('src') !== plateSrc) plate.src = plateSrc
+    setText(et.querySelector('.et-text'), c.phase === 'player' ? (mpE && !myTurnE ? '队友回合…' : '结束回合') : '敌方回合…')
   }
   // 回合切换横幅（原版参数动画）
   turnBanner(c.phase, c.turn)

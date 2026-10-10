@@ -1061,18 +1061,27 @@ export function CombatScreen() {
         </div>
       </div>
 
-      {/* ===== 结束回合按钮（轮到你时脉动提示） ===== */}
-      <button
-        className={`sts-btn absolute sts-title ${combat.phase === 'player' && !busy && myTurn ? 'sts-btn-ready' : ''}`}
-        style={{
-          right: 108, bottom: 116, fontSize: 24, padding: '13px 34px', zIndex: 46,
-          opacity: combat.phase !== 'player' || busy || !myTurn ? 0.5 : 1,
-        }}
-        disabled={combat.phase !== 'player' || busy || combat.combatOver || !myTurn}
-        onClick={endTurn}
-      >
-        {combat.phase === 'player' ? (waitingPeer ? '队友回合…' : '结束回合') : '敌方回合…'}
-      </button>
+      {/* ===== 结束回合按钮（第二十二批：原版素材三态，复刻 EndTurnButton.render） ===== */}
+      {/* 发光语义=原版 isGlowing：手牌无可出牌(cost>能量)时金色发光提示（原版在打出牌后判定，此处实时计算） */}
+      {(() => {
+        const enemyPhase = combat.phase !== 'player'
+        const off = !enemyPhase && (busy || !myTurn || combat.combatOver)
+        const glowing = !enemyPhase && !off && p.hand.length > 0 && p.hand.every(h => cardCost(h) > p.energy)
+        return (
+          <button
+            className={`sts-endturn absolute sts-title${glowing ? ' glow' : ''}${enemyPhase ? ' enemy' : ''}${off ? ' off' : ''}`}
+            style={{ right: 88, bottom: 104, width: 208, height: 208, zIndex: 46 }}
+            disabled={enemyPhase || off}
+            onClick={endTurn}
+          >
+            <span className="et-hover" />
+            <span className="et-plate" />
+            <span className="et-text">
+              {combat.phase === 'player' ? (waitingPeer ? '队友回合…' : '结束回合') : '敌方回合…'}
+            </span>
+          </button>
+        )
+      })()}
 
       {/* ===== 键盘快捷键提示（桌面端，原版快捷键还原） ===== */}
       {!isTouch && !waitingPeer && combat.phase === 'player' && (

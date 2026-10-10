@@ -18,6 +18,8 @@ PLANS = {
     'neow': (640, 'PNG', None),      # 涅奥鲸鱼+眨眼眼睑(第十八批)
     # 第二十一批：原版药水分层（64px mask 图层，需保真不缩放）；旧 wiki 单图已在第二十一批移除
     'potionlayers': (None, 'PNG', None),
+    # 第二十二批：结束回合按钮三态（256px 原版 topPanel 素材，保真）
+    'endturn': (None, 'PNG', None),
     'relics': (110, 'PNG', None),
     'status': (72, 'PNG', None),
     'typeicons': (None, 'PNG', None),

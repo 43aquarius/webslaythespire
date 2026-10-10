@@ -177,7 +177,25 @@ img { -webkit-user-drag: none; }
 .energy img { width: 100%; height: 100%; object-fit: contain; }
 .energy span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: 900;
   color: #fff; text-shadow: 2px 2px 0 #802000, 0 0 12px #ff5000; font-family: inherit; }
-.end-turn { position: absolute; right: 108px; bottom: 116px; font-size: 24px; padding: 13px 34px; z-index: 46; }
+/* ===== 第二十二批：结束回合按钮原版化（EndTurnButton.render 复刻） =====
+   三态：常量板 button.png / 悬停亮轮廓衬底 hover.png(img透明度切换) / 无可出牌发光 glow.png(JS切换src)
+   文字色（Settings）：CREAM #fff6e2 / GOLD #efc851 / 悬停 CYAN #00ffff / 禁用 LIGHT_GRAY #b3b3b3 */
+.sts-endturn { position: absolute; right: 88px; bottom: 104px; width: 208px; height: 208px; z-index: 46;
+  border: none; background: transparent; padding: 0; cursor: pointer; transition: transform .08s ease-out; }
+.sts-endturn.enemy, .sts-endturn.off { cursor: default; }
+.sts-endturn .et-hover, .sts-endturn .et-plate { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.sts-endturn .et-hover { opacity: 0; transition: opacity .15s ease-out; }
+.sts-endturn.enemy .et-plate { filter: grayscale(1) brightness(.8); }
+.sts-endturn.off .et-plate { filter: grayscale(.6) brightness(.72); }
+.sts-endturn .et-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 25px; color: #fff6e2; letter-spacing: 2px; text-shadow: 0 0 4px rgba(0,0,0,.9), 2px 2px 0 rgba(20,10,4,.85); pointer-events: none; }
+.sts-endturn.glow .et-text { color: #efc851; }
+.sts-endturn.off .et-text { color: #b3b3b3; }
+.sts-endturn:not(.enemy):not(.off):hover .et-hover { opacity: 1; }
+.sts-endturn:not(.enemy):not(.off):hover .et-text { color: #00ffff; }
+.sts-endturn.glow:not(.enemy):not(.off):hover .et-text { color: #00ffff; }
+.sts-endturn:not(.enemy):not(.off):hover { transform: translateY(-2px); }
+.sts-endturn:not(.enemy):not(.off):active { transform: translateY(2px); }
 
 /* 手牌 */
 .hand-row { position: absolute; left: 0; right: 0; bottom: -40px; height: 320px; display: flex; justify-content: center; align-items: flex-end; z-index: 45; pointer-events: none; }
@@ -403,7 +421,7 @@ img { -webkit-user-drag: none; }
 }
 
 /* 结束回合按钮脉动 */
-.end-turn.ready { animation: btn-ready 1.6s ease-in-out infinite; }
+/* 第二十二批：旧 .end-turn.ready 脉动已由原版 glow 语义替代（无可出牌发光），保留关键帧供历史参考 */
 @keyframes btn-ready {
   0%, 100% { box-shadow: inset 0 1px 0 rgba(255,200,140,.25), 0 3px 0 #1c0a06, 0 5px 10px rgba(0,0,0,.6), 0 0 0 rgba(255,180,80,0); }
   50% { box-shadow: inset 0 1px 0 rgba(255,200,140,.25), 0 3px 0 #1c0a06, 0 5px 10px rgba(0,0,0,.6), 0 0 22px rgba(255,180,80,.75); }
