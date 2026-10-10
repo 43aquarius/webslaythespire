@@ -25,7 +25,7 @@ PLANS = {
     'topbar': (None, 'PASSTHROUGH', None),
     'relics': (110, 'PNG', None),
     'status': (72, 'PNG', None),
-    'typeicons': (None, 'PNG', None),
+    # typeicons 目录已移除（第二十五批：类型行改原版纯文字渲染，wiki 徽章弃用）
     'bg': (None, None, None),        # jpg 保持
     'campfire': (128, 'PNG', None),  # 原版篝火按钮(sleep/smith)
     'title': (900, 'PNG', None),     # 原版漂云(仅 3 张在用)

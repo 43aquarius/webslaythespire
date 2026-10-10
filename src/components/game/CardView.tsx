@@ -62,18 +62,8 @@ const COLOR_ORB: Record<string, string> = {
   red: 'cardRedOrb', green: 'cardGreenOrb', blue: 'cardBlueOrb', purple: 'cardPurpleOrb', colorless: 'cardRedOrb',
 }
 
-const COLOR_TYPEICON: Record<string, string> = {
-  red: 'ironclad', green: 'silent', blue: 'defect', purple: 'watcher', colorless: 'ironclad',
-}
-
-// 类型小图标路径（原版：能力牌无普通稀有度，common 回退 uncommon）
-function typeIconUrl(color: string, type: string, rarity: string): string {
-  const base = COLOR_TYPEICON[color] || 'ironclad'
-  let rar = raritySuffix(rarity)
-  if (type === 'power' && rar === 'Common') rar = 'Uncommon'
-  if (base === 'ironclad') return `${A}/typeicons/${type}${rar}.png`
-  return `${A}/typeicons/${base}${type}${rar.toLowerCase()}.png`
-}
+// 原版类型文案（ZHS ui.json SingleCardViewPopup.TEXT[0..2]）
+const TYPE_NAME: Record<string, string> = { attack: '攻击', skill: '技能', power: '能力' }
 
 export interface CardViewProps {
   card: CardInstance
@@ -104,11 +94,11 @@ function CardViewInner({ card, width = 150, onClick, selected, dimmed, className
   const rar = raritySuffix(def.rarity)
   const frame = `${A}/frames/frame${def.type[0].toUpperCase()}${def.type.slice(1)}${rar}.png`
   const banner = `${A}/frames/banner${rar}.png`
-  const typeIcon = typeIconUrl(color, def.type, def.rarity)
   const cost = cardCost(card, ctx?.hpLost ?? 0)
   const upgraded = card.upgraded > 0
   const bg = (TYPE_BG[color] || TYPE_BG.red)[def.type]
   const orbImg = COLOR_ORB[color] || 'cardRedOrb'
+  const typeName = TYPE_NAME[def.type] || def.type
 
   // ===== 费用配色（原版 GetCostTextColorInHand）=====
   // 付不起 → 红 #FF5555（描边 #501717）；本回合免费/减费 → 绿 #7FFF00（描边 #1F5923）
@@ -187,16 +177,35 @@ function CardViewInner({ card, width = 150, onClick, selected, dimmed, className
             {cost === -1 ? 'X' : cost}
           </div>
         )}
-        {/* 描述 */}
+        {/* 类型行（原版 renderType：纯文字，插在插画窗底缘与描述文字之间；
+            卡中心下方 22px → 55.5% from top；灰 #595959；ZHS 无动态框(typeWidth<1.1)无图标）*/}
+        <div
+          className="card-type-row absolute flex items-center justify-center"
+          style={{ left: px(0.10), width: pw(0.80), top: py(0.530), height: ph(0.050) }}
+        >
+          <span
+            className="sts-body"
+            style={{
+              fontSize: width * 0.057,
+              color: '#595959',
+              textShadow: '0 1px 1px rgba(0,0,0,0.35)',
+              letterSpacing: 0.5,
+            }}
+          >
+            {typeName}
+          </span>
+        </div>
+        {/* 描述（原版 renderDescriptionCN：文本块底端锚定，行距收紧至原版 1.45×cap）*/}
         <div
           className="card-desc sts-body absolute text-center"
           style={{
             left: px(0.08), width: pw(0.84), top: py(0.495), height: ph(0.375),
             fontSize: width * 0.076,
-            lineHeight: 1.28,
+            lineHeight: 1.15,
             color: '#f2e6d0',
             textShadow: '1px 1px 1px #000',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+            paddingBottom: ph(0.06),
             overflow: 'hidden',
           }}
         >
@@ -209,29 +218,6 @@ function CardViewInner({ card, width = 150, onClick, selected, dimmed, className
                   : <span key={i}>{s.t}</span>)
               : desc}
           </div>
-        </div>
-        {/* 底部类型行：类型小图标 + 类型名（对齐原版） */}
-        <div
-          className="absolute flex items-center justify-center gap-1"
-          style={{ left: px(0.18), width: pw(0.64), bottom: pb(0.025), height: ph(0.085) }}
-        >
-          <img
-            src={typeIcon}
-            alt=""
-            draggable={false}
-            style={{ height: '62%', width: 'auto', objectFit: 'contain' }}
-          />
-          <span
-            className="sts-title"
-            style={{
-              fontSize: width * 0.062,
-              color: '#ffe9c4',
-              textShadow: '1px 1px 0 #000',
-              letterSpacing: 1,
-            }}
-          >
-            {def.type === 'attack' ? '攻击' : def.type === 'skill' ? '技能' : '能力'}
-          </span>
         </div>
         {/* 升级标识 */}
         {upgraded && (

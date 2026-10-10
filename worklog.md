@@ -578,3 +578,27 @@ Stage Summary:
 - 本地与远端谱系对齐(34da092)，生产服务器在 :3000 以第二十四批源码重建并通过双版本冒烟
 - 判定经验入库：会话恢复先做 git 双向考古(本地未推送 vs 远端超前后再 reset)，防止用旧本地覆盖远端新成果；摘要滞后于实际进度时以 worklog+git 为准
 - 后续候选(承 Task 25)：typeicons 原版文字化/敌人 idle 多帧动画/检视屏大图/商店宝箱 UI 素材
+
+---
+Task ID: 27
+Agent: main
+Task: 第二十六批：typeicons 原版文字化（renderType 纯文字渲染 + 位置修正 + 描述底端锚定）+ 沙箱回滚事故恢复
+
+Work Log:
+- 【沙箱回滚事故】本会话两轮"继续"之间沙箱被整体回滚至前会话死亡点（dc2a86d/origin ref=3620fe1），Task 26 的 reset+push 被回退且 Tasks 21-25 成果从本地消失；真实 GitHub 远端完好（93ed89e 含全部成果）。恢复路径：先在旧基线上提交本批修改(087ddfc) → git rebase --onto origin/main dc2a86d 只重放本批提交（避免误重放 dc2a86d 本体）→ 二进制工件冲突取 ours（远端版）后重建 → 合并树完整性验证（test_batch21-23 就位/顶栏/敌人52/charbg/BOSS_ICON 全在）
+- 【原版行为考证——推翻既有实现】反编译 AbstractCard.renderType：类型文字位于卡中心下方22px=55.5% from top，即插画窗底缘与描述文字之间，而非我们一直放的位置（卡底 89-97.5%）！ZHS "攻击" 34px<48px → typeWidth=0.42<1.1 → renderDynamicFrame 不画（动态框仅英文等宽文本语言）；无任何图标（wiki 32px 徽章为 wiki 自创，原版无此物）。证据链：代码（★★★★★）+ wiki 合成卡 Red-Bash 灰盾位 54-59%（★★★★）+ VLM 对检视屏/手牌截图的误判证伪（STS2 卡有类型板属二代设计，"Snakebite/Aggression"非一代卡池——423 卡名单查无）
+- 【重要方法论】VLM 位置读数需像素证据复核：本批 VLM 三次改口（底部白字带底板→中部灰盾→插线下方灰字），最终由逐行像素剖面+行数分布收敛；STS1 检索截图常混入 STS2/MOD（先查 423 卡名单验明正身）
+- 【实现·Next.js】CardView.tsx：删除 COLOR_TYPEICON/typeIconUrl/wiki 徽章 img；类型行改纯文字 span（TYPE_NAME 攻击/技能/能力，ZHS ui.json SingleCardViewPopup.TEXT 权威文案），定位 top py(0.530) 高 ph(0.050)（中心 55.5% from top），色 #595959（0.35 灰=CardTypeColor），字号 width*0.057（原版 17px/420 等比），字体族 sts-body；DOM 序置于 desc 前（原版 renderType 先于 renderDescription，重叠时描述覆盖类型，同原版 z 序）
+- 【实现·描述底端锚定】原版 desc 块以底端为锚（多行向上生长），我们此前垂直居中导致 3-4 行卡上侵类型行；改 alignItems flex-end + paddingBottom ph(0.06)（块底=81% from top）+行距 1.28→1.15（原版 pitch 1.45×cap≈5.87% 卡高，我们 5.43% 字号×1.15=6.25% 兼顾中文呼吸感）；4 行卡（16 张 39-40 字 desc）块顶 59% 仍低于类型行底 58% 之外——实测 C2 不重叠
+- 【实现·standalone】ui.ts 删 typeIconKey/TYPEICON_BASE，cardInner 类型行同规格（top 52.55%/高 4.09% 画布百分比，与 Next py 换算一致）；style.css .card-type-row/.card-desc 同步；DOM 序 cardInner 中类型行移至 desc 前
+- 【素材弃用】public/assets/typeicons/ 32 张 wiki 徽章删除；make_assets.py 去掉 typeicons 桶；单文件 36.39MB（无徽章内联）
+- 【跨版本一致性修复】batch23 E1 在 93ed89e 即失败（非本批回归）：Next 版顶栏 bar img 只有 Tailwind 工具类、standalone 有 .tp-bar——补 tp-bar 类对齐（测试钩子类双版本统一）
+- test_batch25.ts（双版本 16 项）：A 结构（无 img/无 typeicons 引用/文案配对 store/色 #595959/位置 52-59%/字号 0.057）B 布局（类型行底<描述块顶/块底 78-84%/行距 1.15）C 注入 4 行卡+升级卡（不重叠/锚定/类型行不变）D 素材弃用（404/ASSETS 无键）——16+16 全绿
+- 测量技术：字号比例断言须用 offsetWidth（getBoundingClientRect 含舞台 scale 0.833 与旋转，比值失真 0.0889 误报）；视口 577px 会截掉手牌下半（类型行 552<577 可见但描述 587>577 出画）→ set viewport 1280 800 后 VLM 才能读到完整卡
+- 全套回归（合并树重建后）：batch25 16+16 / batch20 12+12 / batch21 34+42 / batch22 22+20 / batch23 37+37（E1 修复后）/ regression 16 / regression5 412 / bugcheck 29+29 / mptest 23 / fulltest 全流程 gameover（含 rest:smith/商店/宝箱/bossRelic/二幕）——全绿
+- VLM 终验（合并构建）：类型行灰字在插画正下方、白色描述不重叠、顶栏/敌人立绘/意图在位、双版本一致（初验裁剪错位由视口高度与 4x 放大读小字能力不足所致，先像素坐标后 VLM）
+
+Stage Summary:
+- 类型行从"wiki 徽章+文字@卡底"修正为原版 renderType 精确复刻：纯灰字 #595959 @55.5% from top（插画窗底缘），双版本同步；描述改底端锚定+行距 1.15 消除长卡上侵
+- 沙箱回滚事故恢复方法入库：rebase --onto <old-baseline> 只重放本批提交；二进制工件取 ours 后必须重建；"远端为唯一权威"再次验证（本地 reflog 可被回滚，GitHub 不会）
+- 后续候选（承 Task 25）：敌人 idle 多帧动画/检视屏大图/商店宝箱 UI 素材；新候选：原版 ZHS 默认字体 NotoSansMonoCJKsc（现全站思源宋，FontHelper.java ZHS_DEFAULT_FONT 证据）

@@ -277,14 +277,7 @@ const COLOR_FRAME_BG: Record<string, Record<string, string>> = {
   colorless: { attack: 'frames/bgAttackRed.png', skill: 'frames/bgSkillRed.png', power: 'frames/bgPowerRed.png' },
 }
 const COLOR_ORB: Record<string, string> = { red: 'cardRedOrb', green: 'cardGreenOrb', blue: 'cardBlueOrb', purple: 'cardPurpleOrb', colorless: 'cardRedOrb' }
-const TYPEICON_BASE: Record<string, string> = { red: '', green: 'silent', blue: 'defect', purple: 'watcher', colorless: '' }
-function typeIconKey(color: string, type: string, rarity: string): string {
-  const base = TYPEICON_BASE[color] || ''
-  let rar = raritySuffix(rarity)
-  if (type === 'power' && rar === 'Common') rar = 'Uncommon'
-  if (!base) return 'typeicons/' + type + rar + '.png'
-  return 'typeicons/' + base + type + rar.toLowerCase() + '.png'
-}
+// 原版类型文案（ZHS ui.json SingleCardViewPopup.TEXT[0..2]）；类型行改纯文字渲染（原版 renderType 无图标）
 const TYPE_NAME: Record<string, string> = { attack: '攻击', skill: '技能', power: '能力' }
 
 // 卡面内容（不含外层 .sts-card 包装，供手牌做差异更新）
@@ -331,8 +324,8 @@ function cardInner(card: CardInstance, width = 148, opts?: { unaffordable?: bool
   <div class="sts-title card-name" style="font-size:${width * 0.088}px;color:${up ? '#7fff00' : rar === 'Rare' ? '#ffd98a' : '#ffe9c4'};${up ? 'text-shadow:1px 1px 0 #1b6131,0 0 6px rgba(10,50,20,.9)' : ''}">${esc(def.name)}</div>
   ${cost !== -99 ? `<img class="clayer" src="${A('frames/' + orb + '.png')}" alt="">
   <div class="sts-title card-cost" style="font-size:${width * 0.115}px;color:${costColor};text-shadow:${costShadow}">${cost === -1 ? 'X' : cost}</div>` : ''}
+  <div class="card-type-row"><span class="sts-body" style="font-size:${width * 0.057}px">${TYPE_NAME[def.type] || def.type}</span></div>
   <div class="sts-body card-desc" style="font-size:${width * 0.076}px">${up ? '<span style="color:#7fe08a">+ </span>' : ''}${descHtml}</div>
-  <div class="card-type-row"><img src="${A(typeIconKey(color, def.type, def.rarity))}" alt=""><span class="sts-title" style="font-size:${width * 0.062}px">${TYPE_NAME[def.type]}</span></div>
   ${up ? '<div class="sts-title card-up">✦</div>' : ''}</div>`
 }
 

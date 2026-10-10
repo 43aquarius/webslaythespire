@@ -145,8 +145,8 @@ img { -webkit-user-drag: none; }
   text-shadow: 1px 1px 0 #000, 0 0 6px #000; line-height: 1.05; overflow: hidden; }
 .card-cost { position: absolute; left: 20.119%; top: 7.952%; width: 11.096%; height: 11.044%; display: flex; align-items: center; justify-content: center;
   color: #fff; text-shadow: 1px 1px 0 #000, 0 0 8px #a02010; }
-.card-desc { position: absolute; left: 25.375%; width: 49.055%; top: 49.688%; height: 30.689%; text-align: center; line-height: 1.28; color: #f2e6d0;
-  text-shadow: 1px 1px 1px #000; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.card-desc { position: absolute; left: 25.375%; width: 49.055%; top: 49.688%; height: 30.689%; text-align: center; line-height: 1.15; color: #f2e6d0;
+  text-shadow: 1px 1px 1px #000; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 4.91%; overflow: hidden; }
 .card-up { position: absolute; right: 22.066%; top: 9.998%; color: #7fe08a; text-shadow: 1px 1px 0 #000; font-size: 15px; }
 .sts-card.dimmed { opacity: .5; }
 .sts-card.playable { cursor: pointer; }
@@ -354,11 +354,10 @@ img { -webkit-user-drag: none; }
   100% { transform: translateX(-50%) translateY(-72px) scale(.9); opacity: 0; } }
 @keyframes card-in { 0% { transform: translateY(60px) scale(.7); opacity: 0; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
 
-/* ============ 卡牌底部类型行（类型小图标 + 类型名） ============ */
-.card-type-row { position: absolute; left: 31.215%; width: 37.375%; bottom: 11.030%; height: 6.956%;
-  display: flex; align-items: center; justify-content: center; gap: 4px; }
-.card-type-row img { height: 62%; width: auto; object-fit: contain; }
-.card-type-row span { color: #ffe9c4; text-shadow: 1px 1px 0 #000; letter-spacing: 1px; }
+/* ============ 卡牌类型行（原版 renderType：纯文字，插画窗底缘与描述之间，灰 #595959） ============ */
+.card-type-row { position: absolute; left: 20.119%; width: 59.762%; top: 52.55%; height: 4.09%;
+  display: flex; align-items: center; justify-content: center; }
+.card-type-row span { color: #595959; text-shadow: 0 1px 1px rgba(0,0,0,.35); letter-spacing: 0.5px; }
 
 /* ============ 标题：角色选择 + GitHub ============ */
 .char-row { display: flex; gap: 18px; justify-content: center; margin: 14px 0 4px; flex-wrap: wrap; }

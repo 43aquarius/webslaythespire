@@ -339,9 +339,9 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
   return (
     <div className="top-hud absolute top-0 inset-x-0 z-40 sts-screen-fade select-none"
       style={{ height: TP_H, pointerEvents: 'none' /* 空白区域点击穿透到下方敌人（修复Boss头部/意图点不到） */ }}>
-      {/* 原版顶栏底板 bar.png（1920×128 等比拉伸） */}
+      {/* 原版顶栏底板 bar.png（1920×128 等比拉伸）；tp-bar 类与 standalone 对齐（测试钩子） */}
       <img src={`${A}/topbar/bar.png`} alt="" draggable={false}
-        className="absolute left-0 top-0" style={{ width: '100%', height: TP_H, objectFit: 'fill' }} />
+        className="tp-bar absolute left-0 top-0" style={{ width: '100%', height: TP_H, objectFit: 'fill' }} />
 
       {/* ===== 主行区（原版 TopPanel 单行：名字/HP/金币/药水/层/遗物） ===== */}
       <div className="absolute flex items-start" style={{ left: 20, right: 220, top: 0, height: TP_H }}>
