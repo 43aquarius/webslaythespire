@@ -623,3 +623,26 @@ Stage Summary:
 - 敌人立绘从静态合成图升级为原版 idle 循环动画：Spine timeline 全通道（含 deform/shear/drawOrder）逐帧采样烘焙循环 WebP，52 敌 5.76MB，双版本 img 直接播放零 JS 播放逻辑
 - 方法论入库：①Spine 3.4 FFD 权威语义链（json 混合顶点→runtime bones/xyw 拆分→weighted 增量流/非加权绝对流）必须读内嵌 runtime 源码而非猜 ②6 元组解包错位类 bug 用逐骨骼数值对比定位 ③headless 动图验证用双 screenshot bbox diff 而非 drawImage ④原版语义考证以反编译 java 的 loadAnimation/setAnimation 为唯一权威
 - 后续候选（承 Task 25 队列）：检视屏大图 / 商店宝箱 UI 素材原版化 / 原版 ZHS 默认字体 NotoSansMonoCJKsc（FontHelper.java 证据）
+---
+Task ID: 29
+Agent: main
+Task: 会话恢复（沙箱二次回滚）+ 第二十八批：原版 ZHS 默认字体 NotoSansMonoCJKsc 落地（两版本）
+
+Work Log:
+- 【会话恢复·沙箱二次回滚】摘要滞留"第二十五批"但 worklog/git 考古实际已至第二十七批(a0d02c1)——.git 被回滚至 dc2a86d 但工作区保留第二十七批产物(spine_anim.py/test_batch27.ts/单文件40.72MB)；verify_worktree_vs_remote.py 全量哈希比对：远端 1285 跟踪文件与工作区 100% 一致(0差异0缺失)→无未推送成果丢失→git reset --hard origin/main 干净恢复；scripts/test_batch27.ts 修 /tmp/anim_pilot 截图目录 mkdir(沙箱重启清空 /tmp 导致 C1 环境性失败)
+- 【恢复后清障】reset --hard 不删 untracked：cardart 238 张 png 旧版残留(沙箱回滚恢复物)致 standalone 重建暴涨 50.12MB→精确清理后 39.11MB；生产环境重建(dev server 顶替 :3000 → npm run build + start_prod.sh)
+- 【权威考证·推翻历史实现】FontHelper.java：ZHS 语言 initializeFonts 唯一 fontFile=NotoSansMonoCJKsc-Regular.otf，全部 prepFont 卡位(卡名27/描述24/类型行17/检视大图48/能量数字76/顶栏/伤害数字)共享此一字体；prepFont(size, isLinearFiltering) 第二参是线性过滤而非粗体——历史注释"英文 Kreon+简中 SourceHanSerifSC"系误读：ZHS_BOLD_FONT(SourceHanSerifSC-Bold) 是从未被引用的死常量(grep 全文件仅定义行)，"粗体感"来自 FreeType borderWidth 描边；Kreon 仅 ENG 路线
+- 【子集化】scripts/subset_font_zhs.py：90 源码文件全量文案(字符串字面量正则+注释中文保守并入)+ASCII 全集+常用中英标点+序号圈数字+GB2312 一级 3755 字缓冲=3998 唯一字符(汉字3783)→fontTools woff2 1.32MB(原 OTF 15.7MB)；覆盖校验以原 OTF cmap 为基准(3949 需求字形 0 缺失；emoji ⚓☕ 等原字体本无的走系统 fallback 豁免)；unicode_escape 二次解码陷阱(源文件已是 UTF-8,再解破坏中文)
+- 【重大修复·CSS 变量作用域】next/font 的 --font-zh-mono 挂在 body(layout.tsx variable 类)，而旧 --sts-font-* 定义在 :root(html)——html 无法向内解析后代元素的变量→var 链 guaranteed-invalid→.sts-title/.sts-body 全部退回 Tailwind 默认 sans，**旧宋体实现从未真正生效(全站一直系统 sans 渲染)**；document.fonts face unloaded+getPropertyValue 空 是定位线索；修复：变量定义移至 body + body 全局默认 font-family 即 mono(原版全场景 mono，未挂类文字不再落系统字体)
+- 【Next 版】layout.tsx 四 localFont(Kreon/SerifSC title/body)→单 zhMonoFont；adjustFontFallback:false(自动生成的 Arial 调整 fallback 面 data URI 在本环境 error)
+- 【standalone 版】build.ts @font-face 族名映射 NotoSansMonoCJKsc；style.css body/.sts-title/.sts-body 换 mono 链(sans-serif 兜底)；死常量宋体 2.75MB+Kreon ttf 遗留删除，单文件 40.72→39.11MB
+- 【act-name 书法体保留】.act-name(幕开场"第一幕"大字)的 Ma Shan Zheng 链保留——系自创演出非资源还原范畴
+- 【test_batch28 双版本 13+13】A 资产(woff2 可达/魔法头 wOF2/旧宋体 404 或 @font-face 清零/@font-face 注入[next 派生族名 zhMonoFont|standalone NotoSansMonoCJKsc]) B 等宽数学铁证(iiii=MMMM ASCII 全等宽 ±1.5px + 永永=2×MM 半宽比 2:1——区分 mono 与 serif 的强断言) C computed 样式(body/标题/按钮 mono 链+全站无 SourceHanSerif/STSong/SimSun 残留) D 战斗内(@font-face loaded error=0+卡面文字 mono 继承) E 截图存档；woff2 base64 前缀 d09GMk(OTF/CFF 载体)≠d09GMg(TTF 载体)——两种 sfnt 版本均合法，断言用 d09GM[kg]
+- 【全套回归】batch28 13+13 / regression 16 / regression5 412 / bugcheck 29+29 / batch20 12+12 / batch21 34+42 / batch22 22+20 / batch23 37+37 / batch25 16+16 / batch27 13+13 / mptest 24 / fulltest 全流程 gameover——全绿
+- 【VLM 验收】双版本 6/6 全符合：黑体无衬线/卡面清晰无溢出/顶栏数字统一/等宽对齐/标题协调/无破图重叠
+- 【版本】v1.11 谱系延续；提交 f9b8d93 推送成功
+
+Stage Summary:
+- 全站文字从"从未生效的思源宋链(实际系统 sans)"修正为原版 ZHS 真实观感：NotoSansMonoCJKsc 黑体等宽(含拉丁/数字半宽 2:1)，资源原版化最后一块拼图落地
+- 方法论入库：①FontHelper 字体选择以 initializeFonts 的 fontFile 赋值为唯一权威，常量声明≠使用(死常量陷阱) ②next/font 变量作用域：variable 挂 body 时依赖它的自定义属性必须定义在 body 或其后代，:root 会 guaranteed-invalid ③字体子集覆盖校验以原字体 cmap 为基准而非扫描集(原字体没有的字形走系统 fallback 是预期) ④woff2 base64 头 d09GMk/d09GMg 区分 OTF/TTF 载体 ⑤沙箱回滚 reset --hard 后必查 untracked 旧资产残留(会污染构建产物)
+- 后续候选（承 Task 25 队列）：检视屏大图(SingleCardViewPopup)/商店宝箱 UI 素材原版化/房间切换渐变过渡(第十四批研究收获未落地项)
