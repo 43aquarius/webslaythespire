@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { StatusMap } from '@/game/types'
 import { RELICS } from '@/game/relics'
 import { POTIONS } from '@/game/potions'
+import { POTION_LAYERS, POTION_PLACEHOLDER_COLOR, potionLayerKey, POTION_PLACEHOLDER_KEY } from '@/game/potionLayers'
 import { useGame } from '@/store/gameStore'
 import { AP } from '@/game/engine'
 
@@ -379,7 +380,7 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
             {potGhosts.map(g => (
               <span key={g.id} className={`sts-pot-ghost sts-pot-ghost-${g.kind}`}
                 style={{ left: g.idx * 44, top: 0, width: 38, height: 44, position: 'absolute', pointerEvents: 'none' }}>
-                <img src={`${A}/potions/${g.pid}.png`} alt="" className="w-full h-full object-contain" draggable={false} />
+                <PotionImg potionId={g.pid} />
               </span>
             ))}
           </div>
@@ -532,19 +533,53 @@ export function RelicIcon({ id, size = 42, flash }: { id: string; size?: number;
   )
 }
 
+// ============ 原版药水分层渲染（第二十一批：复刻 AbstractPotion.render 层序） ============
+// liquid(纯色mask着色) → hybrid(可选) → spots(可选) → glass(白，原图)；空槽 = 占位剪影 @ 白75%
+// mask 技术复刻 libGDX sb.setColor × 白色纹理 = CSS mask + background-color
+function potMask(url: string, bg: string): React.CSSProperties {
+  return {
+    position: 'absolute', inset: 0, display: 'block', background: bg,
+    WebkitMaskImage: `url("${url}")`, maskImage: `url("${url}")`,
+    WebkitMaskSize: 'contain', maskSize: 'contain',
+    WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
+    WebkitMaskPosition: 'center', maskPosition: 'center',
+  }
+}
+
+export function PotionImg({ potionId, className, style }: { potionId: string | null; className?: string; style?: React.CSSProperties }) {
+  const box: React.CSSProperties = { position: 'relative', display: 'inline-block', width: '100%', height: '100%', verticalAlign: 'middle', ...style }
+  if (!potionId) {
+    return (
+      <span className={`pot-layers ${className ?? ''}`} data-pot="empty" style={box}>
+        <span className="pot-layer" data-layer="placeholder" style={potMask(`${A}/${POTION_PLACEHOLDER_KEY}`, POTION_PLACEHOLDER_COLOR)} />
+      </span>
+    )
+  }
+  const spec = POTION_LAYERS[potionId]
+  if (!spec) return <span className={`pot-layers ${className ?? ''}`} data-pot={potionId} style={box} />
+  return (
+    <span className={`pot-layers ${className ?? ''}`} data-pot={potionId} style={box}>
+      {spec.liquid ? <span className="pot-layer" data-layer="liquid" style={potMask(`${A}/${potionLayerKey(spec.shape, 'liquid')}`, spec.liquid)} /> : null}
+      {spec.hybrid ? <span className="pot-layer" data-layer="hybrid" style={potMask(`${A}/${potionLayerKey(spec.shape, 'hybrid')}`, spec.hybrid)} /> : null}
+      {spec.spots ? <span className="pot-layer" data-layer="spots" style={potMask(`${A}/${potionLayerKey(spec.shape, 'spots')}`, spec.spots)} /> : null}
+      <img data-layer="glass" src={`${A}/${potionLayerKey(spec.shape, 'glass')}`} alt="" draggable={false}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }} />
+    </span>
+  )
+}
+
 // ============ 药水槽（hover 弹跳 / 获得入场 / 原版 NPotion 外观） ============
 export function PotionSlot({ potionId, size = 40, onClick, onDiscard, selected, acquired }: { potionId: string | null; size?: number; onClick?: () => void; onDiscard?: () => void; selected?: boolean; acquired?: boolean }) {
   const def = potionId ? POTIONS[potionId] : null
   if (!def) {
+    // 空槽：原版行为 = 灰色占位剪影（POTION_PLACEHOLDER @ PLACEHOLDER_COLOR）
     return (
       <span
         className="sts-slot"
-        style={{
-          width: size, height: size * 1.15, borderRadius: '50% 50% 46% 46%',
-          border: '2px dashed rgba(160,130,90,0.5)',
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        }}
-      />
+        style={{ width: size, height: size * 1.15, display: 'inline-block', position: 'relative' }}
+      >
+        <PotionImg potionId={null} />
+      </span>
     )
   }
   return (
@@ -552,7 +587,7 @@ export function PotionSlot({ potionId, size = 40, onClick, onDiscard, selected, 
       <span
         className={`sts-slot sts-pot-hover relative inline-block cursor-pointer ${selected ? 'sts-targetable' : ''} ${acquired ? 'sts-pot-in' : ''}`}
         onClick={onClick} style={{ width: size, height: size * 1.15, borderRadius: selected ? 8 : undefined }}>
-        <img src={`${A}/potions/${potionId}.png`} alt={def.name} className="w-full h-full object-contain" draggable={false} />
+        <PotionImg potionId={potionId} />
         {onDiscard && (
           <span
             className="pdisc absolute sts-body font-bold"

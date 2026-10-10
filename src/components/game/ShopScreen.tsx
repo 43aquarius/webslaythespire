@@ -6,7 +6,7 @@ import { CardView } from './CardView'
 import { RELICS } from '@/game/relics'
 import { POTIONS } from '@/game/potions'
 import { EVENTS } from '@/game/events'
-import { Tip, TopHud } from './Shared'
+import { Tip, TopHud, PotionImg } from './Shared'
 
 const A = '/assets'
 
@@ -152,7 +152,7 @@ export function ShopScreen() {
                   tip={<><b>{def.name}</b><br />{def.desc}</>}
                 >
                   <div className="sts-panel flex flex-col items-center gap-1 p-3" style={{ width: 120 }}>
-                    <img src={`${A}/potions/${item.potionId}.png`} alt={def.name} width={44} height={50} draggable={false} />
+                    <PotionImg potionId={item.potionId} style={{ width: 44, height: 50 }} />
                     <div className="sts-body" style={{ fontSize: 12, color: '#f5e5c8' }}>{def.name}</div>
                     <ShopPrice price={item.price} sold={item.sold} canAfford={canAfford} />
                   </div>

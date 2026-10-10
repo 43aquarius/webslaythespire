@@ -6,6 +6,7 @@ import { CARDS, cardCost, cardDesc, cardDescParts, cardValues, cardColor } from 
 import { ENEMIES } from '@/game/enemies'
 import { RELICS } from '@/game/relics'
 import { POTIONS } from '@/game/potions'
+import { POTION_LAYERS, POTION_PLACEHOLDER_COLOR, potionLayerKey, POTION_PLACEHOLDER_KEY } from '@/game/potionLayers'
 import { enemyDisplayDamage, AP } from '@/game/engine'
 import { EVENTS } from '@/game/events'
 import { CHARACTER_INFO } from '@/game/run'
@@ -434,15 +435,32 @@ function relicIcon(id: string, size = 34, flash = false): string {
   </span>`
 }
 
+// ============ 原版药水分层渲染（第二十一批：复刻 AbstractPotion.render 层序） ============
+// liquid(纯色mask着色) → hybrid(可选) → spots(可选) → glass(白，原图)；空槽 = 占位剪影 @ 白75%
+function potionLayersHtml(pid: string | null, w?: number, h?: number): string {
+  const size = w && h ? `width:${w}px;height:${h}px;` : 'width:100%;height:100%;'
+  if (!pid) {
+    return `<span class="pot-layers" data-pot="empty" style="position:relative;display:inline-block;${size}"><i class="pot-layer" data-layer="placeholder" style="position:absolute;inset:0;-webkit-mask:url(${A(POTION_PLACEHOLDER_KEY)}) center/contain no-repeat;mask:url(${A(POTION_PLACEHOLDER_KEY)}) center/contain no-repeat;background:${POTION_PLACEHOLDER_COLOR}"></i></span>`
+  }
+  const spec = POTION_LAYERS[pid]
+  if (!spec) return `<span class="pot-layers" data-pot="${pid}" style="position:relative;display:inline-block;${size}"></span>`
+  const L = (layer: string, color: string) => `<i class="pot-layer" data-layer="${layer}" style="position:absolute;inset:0;-webkit-mask:url(${A(potionLayerKey(spec.shape, layer))}) center/contain no-repeat;mask:url(${A(potionLayerKey(spec.shape, layer))}) center/contain no-repeat;background:${color}"></i>`
+  return `<span class="pot-layers" data-pot="${pid}" style="position:relative;display:inline-block;${size}">
+    ${spec.liquid ? L('liquid', spec.liquid) : ''}${spec.hybrid ? L('hybrid', spec.hybrid) : ''}${spec.spots ? L('spots', spec.spots) : ''}
+    <img data-layer="glass" src="${A(potionLayerKey(spec.shape, 'glass'))}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain">
+  </span>`
+}
+
 function potionHtml(pid: string | null, idx: number, combat: boolean, acquired = false): string {
   const sel = combat && g().selectedPotionIdx === idx
-  if (!pid) return `<span class="pslot" style="width:38px;height:44px"></span>`
+  // 空槽/未知id：原版行为 = 占位剪影（POTION_PLACEHOLDER @ 白75%）
+  if (!pid) return `<span class="pslot" style="width:38px;height:44px">${potionLayersHtml(null)}</span>`
   const def = POTIONS[pid]
-  // 防御：未知药水 id 渲染为空槽（与 Next.js 版一致，避免渲染循环崩溃）
-  if (!def) return `<span class="pslot" style="width:38px;height:44px"></span>`
+  // 防御：未知药水 id 渲染为占位槽（与 Next.js 版一致，避免渲染循环崩溃）
+  if (!def) return `<span class="pslot" style="width:38px;height:44px">${potionLayersHtml(null)}</span>`
   // 原版 NPotion：hover 弹跳（DoBounce）/ 获得入场（PlayNewlyAcquiredAnimation 0.1s淡入+40px上浮0.35s BackOut）
   return `<span class="pslot has ${sel ? 'sel' : ''} ${acquired ? 'sts-pot-in' : ''}" data-act="potion" data-idx="${idx}" data-tip="<b>${esc(def.name)}</b><br><span style='color:#d8c8a8'>${esc(def.desc)}</span>">
-    <img src="${A('potions/' + pid + '.png')}" alt="">
+    ${potionLayersHtml(pid)}
     ${combat ? `<i class="pdisc" data-act="potionDiscard" data-idx="${idx}">✕</i>` : ''}
   </span>`
 }
@@ -584,7 +602,7 @@ function updateHud(run: RunState, combat: boolean) {
       const el = document.createElement('span')
       el.className = `pslot has sts-pot-ghost-${gh.kind}`
       el.style.cssText = `width:38px;height:44px;position:absolute;left:${gh.idx * 44}px;top:0;pointer-events:none;z-index:5`
-      el.innerHTML = `<img src="${A('potions/' + gh.pid + '.png')}" alt="" style="width:100%;height:100%;object-fit:contain">`
+      el.innerHTML = potionLayersHtml(gh.pid)
       potRow.appendChild(el)
       setTimeout(() => el.remove(), 500)
     }
@@ -1792,7 +1810,7 @@ function updateShopScreen(run: RunState) {
         el.className = 'sts-panel shop-item'
         el.dataset.pidx = String(i)
         el.dataset.tip = `<b>${esc(def.name)}</b><br>${esc(def.desc)}`
-        el.innerHTML = `<img src="${A('potions/' + item.potionId + '.png')}" width="42" height="48">
+        el.innerHTML = `${potionLayersHtml(item.potionId, 42, 48)}
           <div class="sts-body" style="font-size:12px;color:#f5e5c8">${esc(def.name)}</div><span class="shop-price"></span>`
         potsEl.appendChild(el)
       }

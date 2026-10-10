@@ -16,7 +16,8 @@ PLANS = {
     'intent': (None, 'PNG', None),
     'mapicons': (140, 'PNG', None),
     'neow': (640, 'PNG', None),      # 涅奥鲸鱼+眨眼眼睑(第十八批)
-    'potions': (None, 'PNG', None),
+    # 第二十一批：原版药水分层（64px mask 图层，需保真不缩放）；旧 wiki 单图已在第二十一批移除
+    'potionlayers': (None, 'PNG', None),
     'relics': (110, 'PNG', None),
     'status': (72, 'PNG', None),
     'typeicons': (None, 'PNG', None),

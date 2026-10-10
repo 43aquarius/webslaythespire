@@ -150,11 +150,16 @@ img { -webkit-user-drag: none; }
 .relic img { width: 82%; height: 82%; object-fit: contain; }
 .pots-row { display: flex; gap: 6px; }
 .pslot { position: relative; display: inline-flex; align-items: center; justify-content: center; border-radius: 50% 50% 46% 46%;
-  border: 2px dashed rgba(160,130,90,.5); width: 38px; height: 44px; }
-.pslot.has { border: none; cursor: pointer; }
+  width: 38px; height: 44px; }
+/* 第二十一批：空槽改为原版占位剪影（POTION_PLACEHOLDER），移除虚线圈 */
+.pslot.has { cursor: pointer; }
 .pslot.has img { width: 100%; height: 100%; object-fit: contain; }
 .pslot.has:hover { filter: brightness(1.3); }
 .pslot.has.sel { border-radius: 8px; animation: target-pulse 1s infinite; }
+/* 第二十一批：原版药水分层（liquid→hybrid→spots→glass，mask 着色） */
+.pot-layers { position: relative; display: inline-block; }
+.pot-layers .pot-layer { position: absolute; inset: 0; display: block; }
+.pot-layers img[data-layer=glass] { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .pdisc { position: absolute; right: -8px; top: -6px; width: 16px; height: 16px; border-radius: 50%; background: #6a2016; border: 1px solid #a05040;
   color: #ffd0c0; font-size: 10px; font-style: normal; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 

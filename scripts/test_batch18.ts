@@ -126,9 +126,14 @@ async function main() {
 
   // ---------- D. 进入战斗（原版一幕背景 + 出牌音效链路） ----------
   console.log('-- D. 战斗与SFX链路 --')
-  // 开始一局: 主菜单 → 选角 → 出发 → 涅奥快速通过
+  // 开始一局: 主菜单 → 选角(需先点角色卡) → 出发 → 涅奥快速通过(store API, 第二十一批经验)
   cli(['eval', `[...document.querySelectorAll('button')].find(b=>b.textContent.includes('开 始')) && [...document.querySelectorAll('button')].find(b=>b.textContent.includes('开 始')).click()`])
-  // 等待选角屏挂载（房间过渡黑幕1.1s，见第十五批）——轮询出发按钮
+  // 等待选角屏挂载（房间过渡黑幕1.1s，见第十五批）——轮询角色卡按钮
+  for (let i = 0; i < 10; i++) {
+    if (ev(`[...document.querySelectorAll('button')].some(b=>/铁甲战士/.test(b.textContent))`) === true) break
+    await sleep(400)
+  }
+  cli(['eval', `[...document.querySelectorAll('button')].find(b=>/铁甲战士/.test(b.textContent)) && [...document.querySelectorAll('button')].find(b=>/铁甲战士/.test(b.textContent)).click()`])
   for (let i = 0; i < 10; i++) {
     if (ev(`[...document.querySelectorAll('button')].some(b=>/出\\s*发/.test(b.textContent))`) === true) break
     await sleep(400)
@@ -139,10 +144,13 @@ async function main() {
     cli(['eval', `[...document.querySelectorAll('button')].find(b=>b.textContent.includes('出 发')) && [...document.querySelectorAll('button')].find(b=>b.textContent.includes('出 发')).click()`])
   }
   await sleep(2500)
-  // 涅奥选择（跳过卡牌选择类：选第一个非选卡类选项）
-  for (let i = 0; i < 8 && ev(`window.__sts.getState().run?.screen`) !== 'map'; i++) {
-    ev(`(() => { const ov=document.querySelector('.overlay'); if(ov){ const c=ov.querySelector('[class*=card-selectable]'); if(c){c.click(); return 1} } const opts=[...document.querySelectorAll('button')].filter(b=>/获得|赠予|赐予|交换|代价/.test(b.textContent)); if(opts.length){opts[0].click(); return 2} return 0 })()`)
-    await sleep(900)
+  // 涅奥选择（store API：chooseNeow(1) + resolveSelect，随机选项不再依赖DOM文案）
+  for (let i = 0; i < 14 && ev(`window.__sts.getState().run?.screen`) !== 'map'; i++) {
+    const j = evJson(`(() => { const g = window.__sts.getState(); return JSON.stringify({ screen: g.run?.screen, sel: g.select ? g.select.kind : null, uids: g.select?.cardUids?.slice(0, 2) }) })()`)
+    if (j.screen === 'map' && !j.sel) break
+    if (j.screen === 'neow') ev(`window.__sts.getState().chooseNeow(1)`)
+    if (j.sel && Array.isArray(j.uids) && j.uids.length) ev(`window.__sts.getState().resolveSelect(${JSON.stringify(j.uids[0])})`)
+    await sleep(700)
   }
   const scr1 = ev(`window.__sts.getState().run?.screen`)
   check('D1 到达地图', scr1 === 'map', `screen=${scr1}`)
