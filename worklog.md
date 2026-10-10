@@ -602,3 +602,24 @@ Stage Summary:
 - 类型行从"wiki 徽章+文字@卡底"修正为原版 renderType 精确复刻：纯灰字 #595959 @55.5% from top（插画窗底缘），双版本同步；描述改底端锚定+行距 1.15 消除长卡上侵
 - 沙箱回滚事故恢复方法入库：rebase --onto <old-baseline> 只重放本批提交；二进制工件取 ours 后必须重建；"远端为唯一权威"再次验证（本地 reflog 可被回滚，GitHub 不会）
 - 后续候选（承 Task 25）：敌人 idle 多帧动画/检视屏大图/商店宝箱 UI 素材；新候选：原版 ZHS 默认字体 NotoSansMonoCJKsc（现全站思源宋，FontHelper.java ZHS_DEFAULT_FONT 证据）
+
+---
+Task ID: 28
+Agent: 主 Agent（43aquarius 会话）
+Task: 第二十七批：敌人 idle 原版动画——Spine 3.4 动画烘焙器（timeline/deform/drawOrder/shear 全通道）+ 52 敌循环 WebP + 双版本接入
+
+Work Log:
+- 【权威映射考证】反编译 java 逐类提取 loadAnimation/setAnimation：52 sprite 全量映射（50 Spine 动画 + bronzeOrb 原版无动画(AbstractMonster 静态 img) + hexaghost 非 Spine → 两者单帧）；idle 动画名大小写混杂（idle/Idle/waving/animation/idle_flap/idle_open/Idle_1/Idle_2）；byrd 双骨架选 flying、bookOfStabbing 实际用 stabBook 目录、corruptHeart 走 npcs/heart、类名考古（dagger→SnakeDagger、shieldGremlin→GremlinTsundere、madGremlin→GremlinWarrior、mystic→Healer、sneakyGremlin→GremlinThief、theChamp→Champ）
+- 【通道普查】Spine 3.4 json 动画通道：bones(rotate/translate/scale/**shear**——首次扫描漏报，FFD 键名是 deform 不是 ffd) + slots(attachment 466/color 76) + deform 130 + drawOrder 7 + paths 14(跳过)/events 9(跳过)；idle 含 deform 31 敌、含 shear 8 敌(fungibeast 尾巴 21 骨全 shear)、无 ik 动画、无非 normal transform、全 default 单皮肤
+- 【引擎 spine_anim.py】SpineAnimator(SpineComposer)：①_world 按 Bone.updateWorldTransform 逐行对齐（la=cos(rot+shearX)*sx、lb=cos(rot+90+shearY)*sy；**6 元组 (a,b,tx,c,d,ty) 陷阱：首次实现按 libGDX (a,b,c,d) 顺序解包致 pc=tx 污染，root 层正常子层全飞，逐骨骼数值对比定位**）②timeline 插值（线性/stepped/贝塞尔 [cx1,cy1,cx2,cy2] 二分 48 次求根；首帧前 timeline 不生效=保持 setup=spine-c 语义）③deform 权威语义（SkeletonJson.java 574-611 + VertexAttachment.computeWorldVertices 100-115 逐行考证）：runtime 将 json 混合顶点 [cnt,(bi,x,y,w)*cnt] 拆为 bones 流+xyw 流；weighted deform=零基增量流(长度 2Σk, offset 元素偏移, 未覆盖=0 增量)；非加权 deform=setup+json 增量=绝对坐标(渲染直接替换)；weighted 世界顶点=Σ((x+dx)·boneA+(y+dy)·boneB+boneW)·w ④drawOrder 3.4 算法（offsets 仅 {slot,offset} 无 attachment 字段——那是 3.6+ 语义；drawOrder[pos]=origIdx + unchanged 逆序回填）⑤IK setup 约束每帧重解（_apply_ik_setup 复用，解析解幂等）
+- 【烘焙】帧 n=clamp(ceil(dur*12),8,20)（循环语义 t=dur*i/n 不含末帧）；联合 bbox 固定画布（含 setup 防御帧）；max_side=min(静态 png 最长边,460) 保持显示尺寸基准；q70/alpha80/method6，单敌>260KB 自动降级 q60/mf16（corruptHeart/nemesis/writhingMass 降级）；52 敌全量 5.76MB 零失败
+- 【guardian 形态修正（意外收获）】setup 全挂 80 附件(idle+defensive 形态同显)——第二十四批静态图把防御形态附件一起渲染了；动画 attachment timeline t=0 卸下 def* → 41 附件=原版正确 idle 形态（460x227 宽扁比例）
+- 【双版本接入】Next CombatScreen.tsx / standalone ui.ts 1159：.png→.webp；**CSS 模拟浮动 idle-bob 双版本移除**（真动画替代模拟，避免双重动作）；make_assets enemies 桶改 WEBP_ONLY（.png 全弃）；52 静态 png 删除（webp 全替代）；单文件 36.39→40.72MB（+4.3MB）
+- 【test_batch27 双模式 13+13】A 资产（52 webp 可达/MIME/RIFF 头、50 含 ANIM+ANMF chunk、旧 png 404|内联键清零——standalone atob 前缀 23 字符陷阱 slice(22)→split(',')、standalone img src 是 data URI 无 'enemies/' 字样→选择器按模式分）B 战斗 DOM（全 .webp 引用、加载成功、idle-bob 移除+animationName 无 bob）C 动画运行证据（**headless 下 canvas drawImage 不取动图新帧恒同帧——改双 screenshot 精确裁剪首敌 sprite bbox 像素 diff>200**，对照组混入能量VFX问题→精确 bbox 裁剪）
+- 【全套回归】batch27 13+13 / regression 16 / batch20 12+12 / batch21 34+42 / batch22 22+20 / batch23 37+37 / batch25 16+16 / regression5 412 / bugcheck 29+29 / mptest 22+22（客机金币首跑失败重跑过=历史时序偶发非本批回归）/ fulltest 全流程 gameover（16 层）
+- 【VLM 验收】四敌抽帧拼贴全过（cultist 挥手/deca 呼吸/fungibeast 蠕动/guardian 双臂扇动平滑无破图）；游戏内 jawworm/slimeBoss 立绘完整协调；受击闪白工作（VLM 所见"高亮荧光绿"即 brightness(3) 中间帧）；伤害 140→134 生效（**测试调 playCard 正确签名 (uid, targetUid) 而非 {cardUid,targetIdx}**）
+
+Stage Summary:
+- 敌人立绘从静态合成图升级为原版 idle 循环动画：Spine timeline 全通道（含 deform/shear/drawOrder）逐帧采样烘焙循环 WebP，52 敌 5.76MB，双版本 img 直接播放零 JS 播放逻辑
+- 方法论入库：①Spine 3.4 FFD 权威语义链（json 混合顶点→runtime bones/xyw 拆分→weighted 增量流/非加权绝对流）必须读内嵌 runtime 源码而非猜 ②6 元组解包错位类 bug 用逐骨骼数值对比定位 ③headless 动图验证用双 screenshot bbox diff 而非 drawImage ④原版语义考证以反编译 java 的 loadAnimation/setAnimation 为唯一权威
+- 后续候选（承 Task 25 队列）：检视屏大图 / 商店宝箱 UI 素材原版化 / 原版 ZHS 默认字体 NotoSansMonoCJKsc（FontHelper.java 证据）

@@ -1156,7 +1156,7 @@ function updateEnemies(run: RunState) {
       const stateDelay = freshCombat ? 1.3 + ((eIdx * 37 + (e.uid.charCodeAt(e.uid.length - 1) || 0)) % 41) / 100 : 0
       el.innerHTML = `
         <div class="intent-slot"></div>
-        <div class="sprite"><img class="idle-bob" src="${A('enemies/' + def.sprite + '.png')}" alt="" style="width:${sw}px;height:${sw}px;animation-delay:${(eIdx % 5) * 0.45}s"></div>
+        <div class="sprite"><img src="${A('enemies/' + def.sprite + '.webp')}" alt="" style="width:${sw}px;height:${sw}px"></div>
         <div class="enemy-info" style="animation:sts-state-in .5s cubic-bezier(.2,.8,.3,1) ${stateDelay}s backwards">
           <div class="ename">${esc(def.name)}</div>
           ${hpBarShell('', def.boss ? 280 : 170)}

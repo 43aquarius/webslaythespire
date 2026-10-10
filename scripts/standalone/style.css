@@ -450,10 +450,6 @@ img { -webkit-user-drag: none; }
 /* ============ 动画还原包（第九批） ============ */
 
 /* 敌人待机浮动 */
-.idle-bob { animation: idle-bob 2.6s ease-in-out infinite; }
-@keyframes idle-bob {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-7px) scale(1.012); }
 }
 
 /* 抽牌：新手牌从抽牌堆（左下）飞入（作用于内层卡面，避免覆盖扇形布局 transform） */

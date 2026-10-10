@@ -454,12 +454,6 @@
 /* ============ 动画还原包（第九批） ============ */
 
 /* 敌人待机浮动（呼吸感） */
-@keyframes sts-idle-bob {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-7px) scale(1.012); }
-}
-.sts-idle-bob { animation: sts-idle-bob 2.6s ease-in-out infinite; }
-
 /* 抽牌：从抽牌堆（左下）飞入 */
 @keyframes sts-draw-in {
   /* 原版：从抽牌堆弧线飞入，带变暗(原版卡牌飞行时渐黑)+旋转；两段弧线 */

@@ -407,18 +407,16 @@ function EnemyView({ enemy, idx }: { enemy: EnemyInstance; idx: number }) {
       </div>
       {/* 斩击特效 */}
       <SlashFx items={mySlashes} removeFx={removeFx} big={def.boss} />
-      {/* 精灵图（待机浮动 + 受击闪白） */}
+      {/* 精灵图（原版 idle 动画 WebP + 受击闪白；第二十七批） */}
       <div ref={spriteRef}>
         <img
-          src={`${A}/enemies/${def.sprite}.png`}
+          src={`${A}/enemies/${def.sprite}.webp`}
           alt={def.name}
           draggable={false}
-          className="sts-idle-bob"
           style={{
             width: spriteW, height: spriteW,
             objectFit: 'contain',
             filter: 'drop-shadow(0 10px 12px rgba(0,0,0,0.55))',
-            animationDelay: `${(idx % 5) * 0.45}s`,
           }}
         />
       </div>

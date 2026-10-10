@@ -10,7 +10,7 @@ OUT = '/home/z/my-project/scripts/standalone/assets.json'
 # 第十八批新增: campfire/events/title 需内联（篝火按钮/事件插画/漂云）
 PLANS = {
     'cardart': (None, 'PASSTHROUGH', None),  # 已离线烘焙为 512 画布 WebP（带透明，与边框同盒渲染）→ 直接内联
-    'enemies': (420, 'PNG', None),   # 敌人需要透明
+    'enemies': (None, 'WEBP_ONLY', None),  # 第二十七批：原版 idle 动画 WebP（动图直通；静态 png 已废弃删除）
     'frames': (None, 'PNG', None),   # 卡框保持
     'hero': (None, 'PNG', None),
     'intent': (None, 'PNG', None),
@@ -68,6 +68,9 @@ for d, (maxside, fmt, quality) in PLANS.items():
         continue
     for f in sorted(os.listdir(dp)):
         if not f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+            continue
+        # 第二十七批：enemies 桶只收 .webp 动图（.png 已全部替换删除）
+        if d == 'enemies' and not f.lower().endswith('.webp'):
             continue
         # 第十八批：已被原版图替换的旧背景不再内联（combat1-4/campfire*/event*/menubg 在用）
         if d == 'bg' and f in ('combat.jpg', 'menu.jpg'):
