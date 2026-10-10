@@ -147,6 +147,8 @@ export function BossRelicScreen() {
   return (
     <div className="w-full h-full relative flex flex-col items-center justify-center gap-8 select-none"
       style={{ background: 'radial-gradient(ellipse at 50% 35%, #3a2214 0%, #140a06 65%, #080402 100%)' }}>
+      {/* 第二十三批：顶栏（原版 TopPanel 在所有房间屏常驻） */}
+      <TopHud />
       <div className="sts-title" style={{ fontSize: 40, color: '#ffd980', textShadow: '3px 3px 0 #000' }}>
         击败了首领！选择你的战利品
       </div>
@@ -202,6 +204,8 @@ export function RestScreen() {
   return (
     <div className={`w-full h-full relative flex flex-col items-center justify-center gap-6 select-none ${healing ? 'sts-rest-desat' : ''}`}
       style={{ backgroundImage: `url(${A}/bg/${campBg}.jpg)`, backgroundSize: 'cover', backgroundPosition: 'center 30%' }}>
+      {/* 第二十三批：顶栏（原版 TopPanel 在所有房间屏常驻，含篝火） */}
+      <TopHud />
       <div className="absolute inset-0" style={{ background: 'rgba(6,3,2,0.35)' }} />
       {healing && [0, 1, 2, 3].map(k => (
         <div key={k} className="sts-smoke-puff" style={{ animationDelay: `${k * 0.42}s`, left: `${46 + k * 2}%`, top: '46%' }} />

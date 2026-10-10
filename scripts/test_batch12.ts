@@ -155,17 +155,19 @@ async function main() {
   })()`)
   check('能量0数字红#FF5555', energyNumStyle.color === 'rgb(255, 85, 85)', JSON.stringify(energyNumStyle))
   check('能量0宝球变暗', String(energyNumStyle.filter).includes('brightness'), energyNumStyle.filter)
-  // 回能 → 爆发（dataset.burst 标记 + 动画二选一验证）
-  const burstMark0 = ev(`document.querySelector('.sts-energy')?.dataset.burst || ''`)
+  // 回能 → VFX（第二十三批更新：原 burst scale 动画已由原版 EnergyPanel.renderVfx 双图旋转取代；
+  // 触发语义=回合开始(phase player & turn 递增)，原版 setEnergy 即回合开始重置能量）
   ev(`(() => {
     const st = window.__sts.getState()
-    st.run.combat.players[0].energy = 3
+    const c = st.run.combat
+    c.phase = 'player'
+    c.turn = (c.turn || 0) + 1
     window.__sts.setState({ run: { ...st.run } })
     return 'ok'
   })()`)
-  await sleep(350)
-  const burstMark1 = ev(`document.querySelector('.sts-energy')?.dataset.burst || ''`)
-  check('回能爆发闪光触发', !!burstMark1 && burstMark1 !== burstMark0, `mark0=${burstMark0} mark1=${burstMark1}`)
+  await sleep(450)
+  const vfxSeen = ev(`!!document.querySelector('.sts-energy-vfx .vfx1') && !!document.querySelector('.sts-energy-vfx .vfx2')`)
+  check('回能VFX触发(双图)', vfxSeen === true, `vfx=${vfxSeen}`)
 
   // ===== ⑤b 升级绿名 + 攻击数值随力量变色 =====
   ev(`(() => {

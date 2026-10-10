@@ -94,7 +94,7 @@ function hudCheck(tag: string) {
     const st = document.querySelector('${STAGE_SEL}')
     const sr = st ? st.getBoundingClientRect() : { left: 0, top: 0, right: innerWidth, bottom: innerHeight }
     ${MODE === 'next'
-      ? `const hpEl = [...document.querySelectorAll('.top-hud span, .top-hud div')].find(e => e.children.length === 0 && (e.textContent||'').includes('/') && e.offsetParent !== null)`
+      ? `const hpEl = [...document.querySelectorAll('.top-hud span, .top-hud div, .top-hud b')].find(e => e.children.length === 0 && (e.textContent||'').includes('/') && e.offsetParent !== null)`
       : `const hpEl = document.getElementById('hud-hp')`}
     const t = hpEl ? hpEl.textContent : ''
     const parts = t.split('/').map(s => s.trim())
@@ -105,13 +105,14 @@ function hudCheck(tag: string) {
     const els = {}
     const put = (k, sel) => { const e = document.querySelector(sel); els[k] = e && e.offsetParent !== null ? (() => { const b = e.getBoundingClientRect(); return { x: b.left - sr.left, y: b.top - sr.top } })() : null }
     ${MODE === 'next'
-      ? `put('portrait', '.top-hud .rounded-full'); put('gold', '#hud-gold'); put('potions', '#hud-potions')`
-      : `put('portrait', '#hud-portrait'); put('gold', '#hud-gold'); put('potions', '#hud-potions')`}
+      ? `put('portrait', '.top-hud .tp-name'); put('gold', '#hud-gold'); put('potions', '#hud-potions')`
+      : `put('portrait', '#hud-name'); put('gold', '#hud-gold'); put('potions', '#hud-potions')`}
     const stageW = sr.right - sr.left, stageH = sr.bottom - sr.top
-    return { hpTxt, hpOk, hpRed: nums.length >= 2 ? (nums[0] > 200 && nums[1] <= 110) : false, els, stageW: Math.round(stageW), stageH: Math.round(stageH) }
+    return { hpTxt, hpOk, hpRed: nums.length >= 2 ? (nums[0] > 200 && nums[1] <= 160) : false, els, stageW: Math.round(stageW), stageH: Math.round(stageH) }
   })()`)
   check(`${tag}血量为78/80红色样式`, r.hpOk === true && r.hpRed === true, `txt=${r.hpTxt} red=${r.hpRed}`)
   const e = r.els || {}
+  // 第二十三批：顶栏原版化后头像→名字(.tp-name/#hud-name)；SALMON #fa8072 rgb(250,128,114) → G<=160
   const okPos = e.portrait && e.gold && e.potions
     && e.gold.x < r.stageW * 0.42 && e.potions.x < r.stageW * 0.42
     && e.portrait.y < r.stageH * 0.3 && e.potions.y < r.stageH * 0.38

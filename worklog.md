@@ -505,3 +505,31 @@ Stage Summary:
 - 结束回合按钮从CSS文字按钮升级为原版三态素材+完整状态机（发光语义=无可出牌），双版本同步
 - 浏览器内采样捕获短窗口状态的技术入测试库；敌方回合时长本身是引擎既有特性（不同战斗敌人动作数不同），未改动
 - 后续候选：顶栏bar.png+图标全套(34张已勘察，改动面大需拆批)/药水占位与能量VFX/检视屏
+
+---
+Task ID: 24
+Agent: main
+Task: 第二十三批：原版顶栏全套复刻（TopPanel bar/图标/布局/色系/hover语义 + EnergyPanel 能量VFX，两版本）
+
+Work Log:
+- 研究反编译仓库 TopPanel.java/EnergyPanel.java/Settings.java/FontHelper.java：提取 TOPBAR_H=128/ICON 64/INFO_TEXT_Y=H-24 等布局常量与 JAVA int 色（RRGGBBAA）——SALMON #fa8072 / GOLD #efc851 / RED #ff6563 / GREEN #7fff00 / CREAM #fff6e2 / LIGHT_GRAY #b3b3b3；panelName 34/topPanelInfo 26/topPanelAmount 24
+- 布局复刻（1920×1080→1600×900 等比 5/6）：bar 107px 全宽 + 单行——名字白28+称号灰15(nameX=20,原版 titleX 紧随) / 心53(hover1.2x)+HP文字SALMON22 / 钱袋53(hover1.2x)+金币三态色 / 药水带(potionSelectBox 274x106→动态宽83+N×63) / 层旗53+CREAM层数 / 遗物带56居中 / 右上 deck(数量20px)+settings
+- 金币三态色复刻 renderGold：displayGold(逐级值)==gold→金#efc851 / >gold(花费中)→红#ff6563 / <gold(获得中)→绿#7fff00——与既有逐级计数动画天然组合
+- 右上图标 hover 复刻：CYAN 染色 + 25%白叠层 = mix-blend-mode:color #0ff + screen 白α.25（等效 libGDX setColor×白纹理+二次绘制）；settings 齿轮 300°/s 常转(tp-spin 1.2s)，hover 定格 rotate(270°)
+- 能量VFX 复刻 EnergyPanel.renderVfx：双图反向旋转(图1 50°→110°+水平镜像/图2 0°→-60°)，α.5→0、scale1→.1(exp10In≈cubic-bezier(.64,0,.78,0))，加色混合(770,1)→CSS screen；触发语义=回合开始(phase player&turn递增,复刻 setEnergy)——旧 burst scale 动画废除
+- 素材：topbar/ 9张(bar/hp/gold/floor/deck/settings/energy-vfx/potionbox)从反编译仓库提取；make_assets 增 PASSTHROUGH 目录并修 MIME 按扩展名推断(原写死 webp，PNG 标 webp 会破图)
+- 屏幕覆盖补全：RestScreen/BossRelicScreen 原无顶栏→补 TopHud（原版 TopPanel 所有房间屏常驻）
+- 【修复既有 bug】useGoldLabel 快速连续变化死锁：cleanup 杀旧循环后新 effect 因 running=true 提前 return，无人重启→label 停中途；删 cleanup 改为旧循环读同一 st.current 自动处理累计 add
+- 旧入口清理：Next InGameMenu/standalone 控制簇的独立 ⚙ 按钮删除（与顶栏 settings 齿轮重叠）；standalone 控制簇横排改竖排（横排 ~130px 宽遮挡顶栏图标区）；音乐面板 right:48→130
+- standalone 修复：药水 setHtml 从覆盖整个 #hud-potions 改为写入 .pots-row（保留 tp-potbox 框）；满带抖动挂回容器整体（框+槽一起抖+batch16 断言查容器 getAnimations）；gold 三态改用 goldAnim.cur（原闭包 me 是旧引用，跨 updateHud 失效）
+- 测试技术：rotate(270°) computed matrix 断言 matrix(0,-1,1,0)；data URL 模式资源断言用类名+naturalWidth（无路径文本）；hover 命令的 covered 检查=elementFromPoint，需 pointer-events 到位(.tp-stat 曾漏)
+- test_batch23 双版本 37+37 全绿；bugcheck 更新两处断言（头像→.tp-name/#hud-name；血量红→SALMON G≤160）后 29+29
+- 全套回归：regression 16/412+412、bugcheck 29+29、batch10 19+13、batch12 29+20(std 回能断言更新为 VFX 语义,历史基线19)、batch13 25+6/batch14 19+5/batch15 31+8(std 三套为 HEAD 相同历史现状,worktree 对照证实)、batch16 30+30(抖动挂载修复)、batch18 41+45、batch20 12+12、batch21 34+42、mptest 25、fulltest 全流程 gameover(含 rest:smith/商店/宝箱)
+- VLM 验收（zai.chat.completions.createVision）：双版本 8 项(底板/单行布局/hover1.2x/金币红/齿轮定格/VFX/篝火屏顶栏/无破图) 全部符合
+- 单文件 37.79MB；生产服务器已重建重启
+
+Stage Summary:
+- 顶栏从自创布局(头像+垂直堆叠)升级为原版 TopPanel 完整复刻：bar 底板+单行+原版图标素材+原版色系+hover 语义+能量VFX，双版本同步
+- 关键技术入库：mix-blend-mode:color 等效 libGDX setColor 着色；EnergyPanel VFX 触发语义=回合开始 setEnergy；Java Color(int) RRGGBBAA 换算（Settings 常量）
+- 既有 bug 修复入库：useGoldLabel 连续变化死锁（cleanup 竞态）
+- 后续候选：batch13/14/15 standalone 断言的 img[src*=] 路径匹配在 data URL 下失效（历史技术债,需统一改类名断言）/敌人Spine骨骼动画/检视屏大图

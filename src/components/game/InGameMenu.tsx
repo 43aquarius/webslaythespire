@@ -43,17 +43,7 @@ export function InGameMenu() {
 
   return (
     <>
-      {/* 齿轮按钮（右上角，音乐按钮左侧） */}
-      {!menuOpen && (
-        <button
-          className="sts-btn"
-          style={{ position: 'absolute', top: 10, right: 100, zIndex: 500, fontSize: 15, padding: '4px 10px', minWidth: 38 }}
-          onClick={() => toggleMenu(true)}
-          title="菜单 (Esc)"
-        >
-          ⚙
-        </button>
-      )}
+      {/* 第二十三批：入口移至顶栏 settings 齿轮（TopHud），此处仅保留 ESC 键与面板 */}
 
       {menuOpen && (
         <div

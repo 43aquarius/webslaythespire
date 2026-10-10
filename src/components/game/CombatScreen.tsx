@@ -831,24 +831,25 @@ export function CombatScreen() {
     lastPBlockRef.current = pBlock
   }, [pBlock])
 
-  // ===== 能量球：回能爆发闪光（原版 NEnergyCounter.OnEnergyChanged burst） =====
+  // ===== 能量球：回能爆发 VFX（第二十三批：原版 EnergyPanel.renderVfx 复刻） =====
+  // 原版 EnergyPanel.setEnergy 在回合开始/获得能量时触发（2s 定时器），与旧值无关
+  // 本版触发：回合开始（phase player 且 turn 递增，含首回合）——复刻"回合开始 setEnergy"
+  // VFX：双图反向旋转（图1 50°→110°+镜像 / 图2 0°→-60°），α 0.5→0、scale 1→0.1（exp10In），加色混合→screen
   const energyOrbRef = useRef<HTMLDivElement>(null)
   const pEnergy = combat ? AP(combat).energy : 0
-  const prevEnergyRef = useRef(pEnergy)
+  const pTurn = combat ? combat.turn : 0
+  const pPhase = combat ? combat.phase : ''
+  const prevTurnRef = useRef(0)
+  const [vfxKey, setVfxKey] = useState(0)
   useEffect(() => {
-    if (pEnergy > prevEnergyRef.current && energyOrbRef.current) {
-      energyOrbRef.current.dataset.burst = String(Date.now())
-      energyOrbRef.current.animate(
-        [
-          { transform: 'scale(1)', filter: 'brightness(1)' },
-          { transform: 'scale(1.3)', filter: 'brightness(2.1)', offset: 0.3 },
-          { transform: 'scale(1)', filter: 'brightness(1)' },
-        ],
-        { duration: 480, easing: 'ease-out' }
-      )
+    if (pPhase === 'player' && pTurn > prevTurnRef.current) {
+      const k = Date.now()
+      setVfxKey(k)
+      prevTurnRef.current = pTurn
+      const t = setTimeout(() => setVfxKey(0), 2200)
+      return () => clearTimeout(t)
     }
-    prevEnergyRef.current = pEnergy
-  }, [pEnergy])
+  }, [pTurn, pPhase])
 
   // ===== 药水投掷动画：战斗中使用药水时触发（监听药水栏变化） =====
   const potionSig = useGame(s => s.run && s.run.combat ? s.run.players.map(p => p.potions.join(',')).join('|') : '')
@@ -1045,7 +1046,7 @@ export function CombatScreen() {
         <PileButton label="消耗堆" count={AP(combat).exhaustPile.length} style={{ right: 26, bottom: 88 }} onClick={() => openPile('exhaust')} small />
       )}
 
-      {/* ===== 能量球（能量 0 时红字暗球 —— 原版 NEnergyCounter dark 态；回能爆发闪光） ===== */}
+      {/* ===== 能量球（能量 0 时红字暗球 —— 原版 NEnergyCounter dark 态；回能 VFX=原版 EnergyPanel） ===== */}
       <div ref={energyOrbRef} className="absolute sts-energy" style={{ left: 118, bottom: 116, width: 104, height: 104, zIndex: 44 }}>
         <img src={`${A}/frames/${energyOrb}.png`} alt="能量" className="w-full h-full object-contain" draggable={false}
           style={p.energy === 0 ? { filter: 'brightness(0.45) saturate(0.6)' } : undefined} />
@@ -1059,6 +1060,13 @@ export function CombatScreen() {
           }}>
           {p.energy}
         </div>
+        {/* 回能 VFX：双图反向旋转（原版 energyRedVFX 256×256，铁甲战士专属） */}
+        {vfxKey > 0 && (
+          <span key={vfxKey} className="sts-energy-vfx">
+            <img src={`${A}/topbar/energy-vfx.png`} alt="" className="vfx1" draggable={false} />
+            <img src={`${A}/topbar/energy-vfx.png`} alt="" className="vfx2" draggable={false} />
+          </span>
+        )}
       </div>
 
       {/* ===== 结束回合按钮（第二十二批：原版素材三态，复刻 EndTurnButton.render） ===== */}

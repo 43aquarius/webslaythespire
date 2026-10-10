@@ -7,6 +7,7 @@ import { POTIONS } from '@/game/potions'
 import { POTION_LAYERS, POTION_PLACEHOLDER_COLOR, potionLayerKey, POTION_PLACEHOLDER_KEY } from '@/game/potionLayers'
 import { useGame } from '@/store/gameStore'
 import { AP } from '@/game/engine'
+import { CHARACTER_INFO } from '@/game/run'
 
 import { STATUS_INFO, statusImgPath } from '@/game/statusInfo'
 import { STAGE_W, STAGE_H } from './Stage'
@@ -144,20 +145,21 @@ export function useGoldLabel(gold: number) {
     s.cur = gold
     if (s.running || s.add === 0) return
     s.running = true
-    let alive = true
+    // 第二十三批修复：不再用 cleanup 杀循环——快速连续变化时 cleanup 会让旧循环早死
+    // 且新 effect 因 running=true 提前 return，导致动画死锁停在中途（label 不再到达 cur）
+    // 旧循环读取同一 st.current，会自动处理后续累计的 add
     ;(async () => {
       await goldWait(400)
-      while (s.add !== 0 && alive) {
+      while (s.add !== 0) {
         const a = Math.abs(s.add), n = a > 100 ? 75 : a > 50 ? 10 : 1
         s.add = s.add > 0 ? s.add - n : s.add + n
-        if (alive) setLabel(s.cur - s.add)
+        setLabel(s.cur - s.add)
         await goldWait(Math.trunc(10 + 10 * Math.max(0, 10 - Math.abs(s.add))))
       }
       await goldWait(250)
-      if (alive) setLabel(s.cur)
+      setLabel(s.cur)
       s.running = false
     })()
-    return () => { alive = false }
   }, [gold])
   return label
 }
@@ -208,7 +210,15 @@ export function HpText({ hp, maxHp, block, size = 21, showName }: { hp: number; 
   )
 }
 
-// ============ 顶部 HUD（参照原版：左上 头像+血量文字+金币+药水+遗物 / 右上 牌组+层数） ============
+// ============ 顶部 HUD（第二十三批：原版 TopPanel 全套复刻） ============
+// 原版布局（1920×1080→1600×900 等比 5/6）：单行顶栏 bar.png(128→107)
+//   名字白34px(→28) + 称号灰(b3b3b3) / 心64(hover1.2x)+HP文字 SALMON #fa8072 / 钱袋64(hover1.2x)+金币三态色 /
+//   药水带(potionSelectBox 274x106→228x88 动态宽) / 层旗64+CREAM #fff6e2 数字 / 遗物带 / 右上 deck(数量)+settings(旋转齿轮)
+// 金币三态（原版 renderGold）：displayGold==gold→GOLD #efc851 / >gold(花费中)→RED #ff6563 / <gold(获得中)→GREEN #7fff00
+// 右上图标 hover：CYAN 染色 + 25% 白叠层（复刻 libGDX setColor×白纹理 + 白α.25 二次绘制）
+const TP_ICO = 53    // 原版图标 64×5/6
+const TP_TXT = 22    // 原版 topPanelInfoFont 26×5/6
+const TP_H = 107     // 原版 TOPBAR_H 128×5/6
 export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: number }) {
   const run = useGame(s => s.run)
   const openPile = useGame(s => s.openPile)
@@ -218,6 +228,7 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
   const net = useGame(s => s.net)
   const potionBeltFail = useGame(s => s.potionBeltFail)
   const combatOn = useGame(s => !!s.run?.combat)
+  const toggleMenu = useGame(s => s.toggleMenu)
 
   // 金币/血量变化浮动动画 + 新获遗物闪光（原版动画还原；hooks 须在早退前）
   const me0 = run ? (run.players[run.players.length > 1 ? net.myIdx : 0] || run.players[0]) : null
@@ -310,6 +321,9 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
   const me = run.players[myIdx] || run.players[0]
   const activeBlock = combat && run.combat ? (AP(run.combat).block ?? 0) : 0
   const myBlock = combat && run.combat && run.combat.activeIdx === myIdx ? activeBlock : 0
+  const charDef = CHARACTER_INFO[me.character] ?? CHARACTER_INFO.ironclad
+  // 原版金币三态色（renderGold：displayGold vs gold）
+  const goldColor = goldLabel === me.gold ? '#efc851' : goldLabel > me.gold ? '#ff6563' : '#7fff00'
 
   const onPotionClick = (idx: number) => {
     const pid = me.potions[idx]
@@ -319,58 +333,69 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
     useGame.setState(s => ({ selectedPotionIdx: s.selectedPotionIdx === idx ? null : idx }))
   }
 
+  const potSlots = me.potions.length || 3
+  const potBoxW = Math.round(83 + potSlots * 63)   // 原版 draw 宽 100+slots×76×scale
+
   return (
     <div className="top-hud absolute top-0 inset-x-0 z-40 sts-screen-fade select-none"
-      style={{
-        background: 'linear-gradient(180deg, rgba(8,5,3,0.88) 0%, rgba(8,5,3,0.62) 60%, transparent 100%)',
-        padding: '10px 18px 26px',
-        pointerEvents: 'none',   // 空白区域点击穿透到下方敌人（修复Boss头部/意图点不到）
-      }}>
-      <div className="flex items-start justify-between">
-        {/* 左上：头像+血量文字 / 金币 / 药水 / 遗物（参照原版原位） */}
-        <div className="flex flex-col items-start gap-1.5" style={{ maxWidth: 660 }}>
-          {/* 行1：角色头像 + 血量 78/80（原版无血条） */}
-          <div className="flex items-center gap-2.5">
-            <Tip tip={<b>{me.name}{mp ? '（你）' : ''}</b>}>
-              <span
-                className="pointer-events-auto relative inline-block rounded-full overflow-hidden"
-                style={{
-                  width: 54, height: 54,
-                  border: '2.5px solid #6b4a2e',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.7), inset 0 0 10px rgba(0,0,0,0.5)',
-                  background: 'radial-gradient(circle at 50% 30%, #3a2818, #14100a)',
-                }}
-              >
-                <img
-                  src={`${A}/hero/${me.character}.png`} alt={me.name}
-                  className="w-full h-full object-cover" draggable={false}
-                  style={{ objectPosition: '50% 10%' }}
-                />
+      style={{ height: TP_H, pointerEvents: 'none' /* 空白区域点击穿透到下方敌人（修复Boss头部/意图点不到） */ }}>
+      {/* 原版顶栏底板 bar.png（1920×128 等比拉伸） */}
+      <img src={`${A}/topbar/bar.png`} alt="" draggable={false}
+        className="absolute left-0 top-0" style={{ width: '100%', height: TP_H, objectFit: 'fill' }} />
+
+      {/* ===== 主行区（原版 TopPanel 单行：名字/HP/金币/药水/层/遗物） ===== */}
+      <div className="absolute flex items-start" style={{ left: 20, right: 220, top: 0, height: TP_H }}>
+        {/* 名字（白 panelName 34→28）+ 称号（灰 #b3b3b3，原版 titleX 紧随名字右侧） */}
+        <Tip tip={<b>{me.name}{mp ? '（你）' : ''}</b>}>
+          <span className="tp-name" style={{ margin: '15px 0 0 0', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'baseline', gap: 12, lineHeight: 1 }}>
+            <b style={{ fontSize: 28, color: '#fff', textShadow: '1px 1px 0 #000' }}>{charDef.name}</b>
+            <i style={{ fontSize: 15, color: '#b3b3b3', fontStyle: 'normal', textShadow: '1px 1px 0 #000' }}>{charDef.nameEn}</i>
+          </span>
+        </Tip>
+
+        {/* HP：心图标(hover 1.2x) + 78/80（SALMON #fa8072，原版 HP_NUM_OFFSET_X=60×5/6≈50） */}
+        <span id="hud-hp" className="tp-stat pointer-events-auto" style={{ marginLeft: 17, display: 'inline-flex', alignItems: 'flex-start' }}>
+          <span className="tp-ico" style={{ width: TP_ICO, height: TP_ICO, flex: '0 0 auto' }}>
+            <img src={`${A}/topbar/hp.png`} alt="hp" draggable={false} />
+          </span>
+          <span className="relative" style={{ marginLeft: -3, paddingTop: 20, whiteSpace: 'nowrap', lineHeight: 1 }}>
+            <HudFloat items={hpFloats.map(f => ({ ...f, color: f.v > 0 ? '#7fe08a' : '#ff5a4a' }))} />
+            {myBlock > 0 && (
+              <span className="relative" style={{ width: 26, height: 26, display: 'inline-flex', verticalAlign: '-7px', marginRight: 4 }}>
+                <img src={`${A}/status/block.png`} alt="block" className="w-full h-full object-contain" draggable={false} />
+                <span className="absolute inset-0 flex items-center justify-center sts-num font-bold"
+                  style={{ fontSize: 13, color: '#cfe8ff', textShadow: '1px 1px 0 #000', paddingTop: 1 }}>{myBlock}</span>
               </span>
-            </Tip>
-            <div className="flex flex-col gap-0.5">
-              <div className="relative">
-                <HudFloat items={hpFloats.map(f => ({ ...f, color: f.v > 0 ? '#7fe08a' : '#ff5a4a' }))} />
-                <HpText hp={me.hp} maxHp={me.maxHp} block={myBlock} />
-              </div>
-              {/* 行2：金币（原版在头像下方；逐级计数动画） */}
-              <div id="hud-gold" className="relative sts-body font-bold sts-num flex items-center gap-1.5"
-                style={{ color: '#ffd980', textShadow: '1px 1px 0 #000', fontSize: 17, lineHeight: 1 }}>
-                <HudFloat items={goldFloats.map(f => ({ ...f, color: '#ffd980' }))} />
-                <span style={{ fontSize: 15 }}>💰</span>{goldLabel}
-                {mp && (
-                  <span className="sts-num" style={{ color: '#a8b8c8', fontSize: 12 }}>
-                    （队友 {run.players[1 - myIdx]?.gold ?? '-'}）
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-          {/* 行3：药水（退场 ghost / 入场动画 / 满带抖动） */}
-          <div id="hud-potions" ref={beltRef} className="pointer-events-auto flex gap-1.5 relative" style={{ marginLeft: 2 }}>
+            )}
+            <b className="sts-num hp-num-val" style={{ fontSize: TP_TXT, color: '#fa8072', textShadow: '1px 1px 0 #000, 0 0 5px rgba(0,0,0,.9)' }}>
+              {me.hp}/{me.maxHp}
+            </b>
+          </span>
+        </span>
+
+        {/* 金币：钱袋(hover 1.2x) + 逐级计数数字（三态色，原版 GOLD_NUM_OFFSET_X=65×5/6≈54） */}
+        <span id="hud-gold" className="tp-stat pointer-events-auto relative" style={{ marginLeft: 48, display: 'inline-flex', alignItems: 'flex-start' }}>
+          <span className="tp-ico" style={{ width: TP_ICO, height: TP_ICO, flex: '0 0 auto' }}>
+            <img src={`${A}/topbar/gold.png`} alt="gold" draggable={false} />
+          </span>
+          <span className="relative" style={{ marginLeft: 1, paddingTop: 20, whiteSpace: 'nowrap', lineHeight: 1 }}>
+            <HudFloat items={goldFloats.map(f => ({ ...f, color: '#ffd980' }))} />
+            <b className="sts-num gold-val" style={{ fontSize: TP_TXT, color: goldColor, textShadow: '1px 1px 0 #000, 0 0 5px rgba(0,0,0,.9)' }}>
+              {goldLabel}
+            </b>
+            {mp && <span className="sts-num gold-mate" style={{ marginLeft: 8, fontSize: 13, color: '#a8b8c8' }}>（队友 {run.players[1 - myIdx]?.gold ?? '-'}）</span>}
+          </span>
+        </span>
+
+        {/* 药水带（原版 potionSelectBox 274×106 → 动态宽 83+N×63；槽 46） */}
+        <span id="hud-potions" ref={beltRef} className="pointer-events-auto relative"
+          style={{ marginLeft: 52, marginTop: 8, width: potBoxW, height: 73, flex: '0 0 auto' }}>
+          <img src={`${A}/topbar/potionbox.png`} alt="" draggable={false}
+            className="tp-potbox absolute inset-0 w-full h-full" style={{ objectFit: 'fill' }} />
+          <span className="absolute inset-0 flex items-center justify-center" style={{ gap: 17, padding: '0 14px' }}>
             {me.potions.map((pid, i) => (
               <PotionSlot
-                key={pid ?? `empty-${i}`} potionId={pid} size={38}
+                key={pid ?? `empty-${i}`} potionId={pid} size={46}
                 selected={combat && selectedPotionIdx === i}
                 acquired={!!pid && !prevPotions.current[i]}
                 onClick={() => onPotionClick(i)}
@@ -379,45 +404,64 @@ export function TopHud({ combat = false, floor }: { combat?: boolean; floor?: nu
             ))}
             {potGhosts.map(g => (
               <span key={g.id} className={`sts-pot-ghost sts-pot-ghost-${g.kind}`}
-                style={{ left: g.idx * 44, top: 0, width: 38, height: 44, position: 'absolute', pointerEvents: 'none' }}>
+                style={{ left: 14 + g.idx * 63, top: 8, width: 46, height: 53, position: 'absolute', pointerEvents: 'none' }}>
                 <PotionImg potionId={g.pid} />
               </span>
             ))}
-          </div>
-          {/* 行4：遗物行（新获遗物闪光） */}
-          <div className="pointer-events-auto flex flex-wrap gap-1 items-center justify-start" style={{ maxWidth: 620 }}>
-            {me.relics.map((id, i) => <RelicIcon key={id} id={id} size={32} flash={newRelic && i === me.relics.length - 1} />)}
-          </div>
-        </div>
+          </span>
+        </span>
 
-        {/* 右上：牌组按钮 + 层数 + 队友血量（避开右上角控制按钮簇） */}
-        <div className="flex flex-col items-center gap-1.5" style={{ marginRight: 196 }}>
-          <Tip tip={<b>查看牌组（{me.deck.length} 张）</b>}>
-            <button
-              className="pointer-events-auto sts-btn flex flex-col items-center justify-center"
-              style={{ width: 62, height: 62, padding: 2, borderRadius: 10 }}
-              onClick={() => openPile('deck')}
-            >
-              <img src={`${A}/frames/cardRedOrb.png`} alt="" width={26} height={20} draggable={false}
-                style={{ objectFit: 'contain' }} />
-              <span id="hud-deck-count" className="sts-num font-bold" style={{ fontSize: 15, lineHeight: 1.1 }}><DeckCount n={me.deck.length} /></span>
-            </button>
+        {/* 层数：旗图标 + CREAM 数字（原版 floorX 文字偏移 60×5/6=50；Tip 显示幕） */}
+        {floor !== undefined && (
+          <Tip tip={<b>第 {run.act} 幕 · 第 {floor} 层</b>}>
+            <span id="hud-floor" className="tp-stat tp-floor pointer-events-auto" style={{ marginLeft: 48, display: 'inline-flex', alignItems: 'flex-start' }}>
+              <img src={`${A}/topbar/floor.png`} alt="floor" draggable={false}
+                style={{ width: TP_ICO, height: TP_ICO, objectFit: 'contain' }} />
+              <b className="sts-num floor-val" style={{ marginLeft: -3, paddingTop: 20, fontSize: TP_TXT, lineHeight: 1, color: '#fff6e2', textShadow: '1px 1px 0 #000, 0 0 5px rgba(0,0,0,.9)' }}>
+                {floor}
+              </b>
+            </span>
           </Tip>
-          {floor !== undefined && (
-            <div className="sts-body font-bold" style={{ color: '#c8b090', fontSize: 12, textShadow: '1px 1px 0 #000' }}>
-              第 {run.act} 幕 · 第 {floor} 层{mp ? ' · 联机' : ''}
-            </div>
-          )}
-          {/* 联机：队友血量（78/80 样式小字） */}
-          {mp && run.players.map((rp, i) => (
-            i === myIdx ? null : (
-              <div key={i} className="flex flex-col items-start gap-0.5" style={{ marginTop: 2 }}>
-                <HpText hp={rp.hp} maxHp={rp.maxHp} size={17} showName={rp.name} />
-              </div>
-            )
-          ))}
-        </div>
+        )}
+
+        {/* 遗物带（原版 128×5/6≈107 视觉，取 56；顶栏垂直居中） */}
+        <span id="hud-relics" className="hud-relics pointer-events-auto flex items-center flex-wrap content-center"
+          style={{ marginLeft: 26, height: TP_H, maxWidth: 560, gap: 4, alignContent: 'center' }}>
+          {me.relics.map((id, i) => <RelicIcon key={id} id={id} size={56} flash={newRelic && i === me.relics.length - 1} />)}
+        </span>
       </div>
+
+      {/* ===== 右上角图标区（原版 MAP/DECK/SETTINGS；本作：deck+settings，settings 齿轮常转，hover CYAN 染色） ===== */}
+      <div className="absolute flex items-start" style={{ top: 0, right: 104, gap: 10, height: TP_H }}>
+        <Tip tip={<b>查看牌组（{me.deck.length} 张）</b>}>
+          <button className="tp-deck deck-btn pointer-events-auto relative" style={{ width: TP_ICO, height: TP_ICO, background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
+            onClick={() => openPile('deck')}>
+            <img src={`${A}/topbar/deck.png`} alt="deck" draggable={false} className="absolute inset-0 w-full h-full" style={{ objectFit: 'contain' }} />
+            <span className="tint" /><span className="tint2" />
+            <span id="hud-deck-count" className="sts-num absolute"
+              style={{ right: -2, top: TP_ICO - 6, fontSize: 20, lineHeight: 1, color: '#fff', textShadow: '1px 1px 0 #000' }}>
+              <DeckCount n={me.deck.length} />
+            </span>
+          </button>
+        </Tip>
+        <Tip tip={<b>设置</b>}>
+          <button className="tp-tico settings pointer-events-auto relative" aria-label="设置"
+            style={{ width: TP_ICO, height: TP_ICO, background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
+            onClick={() => toggleMenu()}>
+            <img src={`${A}/topbar/settings.png`} alt="settings" draggable={false} className="absolute inset-0 w-full h-full" style={{ objectFit: 'contain' }} />
+            <span className="tint" /><span className="tint2" />
+          </button>
+        </Tip>
+      </div>
+
+      {/* 联机：队友血量（顶栏下缘贴挂） */}
+      {mp && run.players.map((rp, i) => (
+        i === myIdx ? null : (
+          <div key={i} className="absolute flex items-center gap-1.5" style={{ top: TP_H + 4, right: 224 }}>
+            <HpText hp={rp.hp} maxHp={rp.maxHp} size={17} showName={rp.name} />
+          </div>
+        )
+      ))}
     </div>
   )
 }

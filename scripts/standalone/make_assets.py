@@ -20,6 +20,9 @@ PLANS = {
     'potionlayers': (None, 'PNG', None),
     # 第二十二批：结束回合按钮三态（256px 原版 topPanel 素材，保真）
     'endturn': (None, 'PNG', None),
+    # 第二十三批：顶栏全套（bar 1920x128 + 心/钱袋/层旗/deck/settings 64 + 能量VFX 256 + 药水带框 274x106）
+    # 共约 33KB，全部保真直接内联（PASSTHROUGH）
+    'topbar': (None, 'PASSTHROUGH', None),
     'relics': (110, 'PNG', None),
     'status': (72, 'PNG', None),
     'typeicons': (None, 'PNG', None),
@@ -78,10 +81,11 @@ for d, (maxside, fmt, quality) in PLANS.items():
         img = Image.open(path)
 
         if f.lower().endswith('.webp') or fmt == 'PASSTHROUGH':
-            # WebP（带透明）：直接内联不再重编码
+            # 直接内联不再重编码；MIME 按扩展名（第二十三批：topbar 为 PNG，cardart 为 WebP）
             with open(path, 'rb') as fp:
                 data = fp.read()
-            mime = 'image/webp'
+            ext = f.lower().rsplit('.', 1)[-1]
+            mime = 'image/webp' if ext == 'webp' else 'image/jpeg' if ext in ('jpg', 'jpeg') else 'image/png'
         else:
             if fmt == 'JPEG' or path.lower().endswith(('.jpg', '.jpeg')):
                 im = img.convert('RGBA')

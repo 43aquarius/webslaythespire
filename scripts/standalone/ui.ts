@@ -454,10 +454,10 @@ function potionLayersHtml(pid: string | null, w?: number, h?: number): string {
 function potionHtml(pid: string | null, idx: number, combat: boolean, acquired = false): string {
   const sel = combat && g().selectedPotionIdx === idx
   // 空槽/未知id：原版行为 = 占位剪影（POTION_PLACEHOLDER @ 白75%）
-  if (!pid) return `<span class="pslot" style="width:38px;height:44px">${potionLayersHtml(null)}</span>`
+  if (!pid) return `<span class="pslot" style="width:46px;height:53px">${potionLayersHtml(null)}</span>`
   const def = POTIONS[pid]
   // 防御：未知药水 id 渲染为占位槽（与 Next.js 版一致，避免渲染循环崩溃）
-  if (!def) return `<span class="pslot" style="width:38px;height:44px">${potionLayersHtml(null)}</span>`
+  if (!def) return `<span class="pslot" style="width:46px;height:53px">${potionLayersHtml(null)}</span>`
   // 原版 NPotion：hover 弹跳（DoBounce）/ 获得入场（PlayNewlyAcquiredAnimation 0.1s淡入+40px上浮0.35s BackOut）
   return `<span class="pslot has ${sel ? 'sel' : ''} ${acquired ? 'sts-pot-in' : ''}" data-act="potion" data-idx="${idx}" data-tip="<b>${esc(def.name)}</b><br><span style='color:#d8c8a8'>${esc(def.desc)}</span>">
     ${potionLayersHtml(pid)}
@@ -501,27 +501,42 @@ let combatShineOn = false
 let combatShineTimers: ReturnType<typeof setTimeout>[] = []
 
 function topHudShell(): string {
-  // 参照原版：左上 头像+血量+金币+药水+遗物 / 右上 牌组+层数（避开右上控制按钮）
-  return `<div class="top-hud"><div class="hud-row">
-    <div class="hud-left-col">
-      <div class="hud-id-row">
-        <span class="hud-portrait" id="hud-portrait" data-tip=""><img src="" alt=""></span>
-        <div class="hud-hp-gold">
-          ${hpNumShell('hud-hp', 21)}
-          <div class="gold-stat sts-body sts-num" id="hud-gold"></div>
-        </div>
-      </div>
-      <span class="pots-row" id="hud-potions"></span>
+  // 第二十三批：原版 TopPanel 全套复刻 —— bar底板 + 单行(名字/心+HP/钱袋+金币/药水带/层旗/遗物) + 右上deck+settings
+  // 保留 id 兼容既有测试：hud-hp/hud-gold/hud-potions/hud-relics/hud-deck-count/hud-floor + .deck-btn/.pots-row
+  return `<div class="top-hud">
+    <img class="tp-bar" src="${A('topbar/bar.png')}" alt="">
+    <div class="tp-row">
+      <span class="tp-name" id="hud-name" data-tip=""></span>
+      <span id="hud-hp" class="tp-stat">
+        <span class="tp-ico"><img src="${A('topbar/hp.png')}" alt="hp"></span>
+        <span class="hp-txt">
+          <span class="block-badge hud-block" style="display:none"><img src="${A('status/block.png')}" alt=""><i></i></span>
+          <b class="hp-num-val"></b>
+          <span class="hp-num-name" style="display:none"></span>
+        </span>
+      </span>
+      <span id="hud-gold" class="tp-stat">
+        <span class="tp-ico"><img src="${A('topbar/gold.png')}" alt="gold"></span>
+        <span class="gold-txt"><span class="gold-val sts-num"></span><span class="gold-mate" style="display:none"></span></span>
+      </span>
+      <span id="hud-potions" class="tp-pots">
+        <img class="tp-potbox" src="${A('topbar/potionbox.png')}" alt="">
+        <span class="pots-row"></span>
+      </span>
+      <span id="hud-floor" class="tp-stat tp-floor" style="display:none" data-tip=""></span>
       <span class="relics hud-relics" id="hud-relics"></span>
     </div>
-    <div class="hud-right">
-      <button class="sts-btn deck-btn" data-act="openPile" data-pile="deck" data-tip="<b>查看牌组</b>">
-        <img src="${A('frames/cardRedOrb.png')}" alt=""><b class="sts-num" id="hud-deck-count"></b>
+    <div class="tp-icons">
+      <button class="tp-tico deck-btn" data-act="openPile" data-pile="deck" data-tip="<b>查看牌组</b>">
+        <img src="${A('topbar/deck.png')}" alt="deck"><i class="tint"></i><i class="tint2"></i>
+        <b class="sts-num" id="hud-deck-count"></b>
       </button>
-      <div class="floor-stat" id="hud-floor" style="display:none"></div>
-      <div id="hud-mp-hp" style="display:none"></div>
+      <button class="tp-tico settings" data-act="toggleMenu" data-tip="<b>设置</b>">
+        <img src="${A('topbar/settings.png')}" alt="settings"><i class="tint"></i><i class="tint2"></i>
+      </button>
     </div>
-  </div></div>`
+    <div id="hud-mp-hp" style="display:none"></div>
+  </div>`
 }
 
 function updateHud(run: RunState, combat: boolean) {
@@ -538,26 +553,44 @@ function updateHud(run: RunState, combat: boolean) {
   }
   setText(deck, String(me.deck.length))
   const myBlock = combat && run.combat && run.combat.activeIdx === myIdx ? AP(run.combat).block : 0
-  // 头像 + 悬浮名（角色变化时才换图）
-  const po = document.getElementById('hud-portrait')
-  if (po) {
-    const img = po.querySelector('img') as HTMLImageElement | null
-    const want = A('hero/' + me.character + '.png')
-    if (img && img.getAttribute('src') !== want) img.src = want
-    po.setAttribute('data-tip', `<b>${esc(me.name)}${mp ? '（你）' : ''}</b>`)
+  // 名字（白）+ 称号（灰）+ data-tip 玩家名（第二十三批：原版 TopPanel.renderName，角色变化时才重写）
+  const nameEl = document.getElementById('hud-name')
+  if (nameEl) {
+    const cd = CHARACTER_INFO[me.character] || CHARACTER_INFO.ironclad
+    const want = `${cd.name}|${cd.nameEn}`
+    if (nameEl.dataset.v !== want) {
+      nameEl.dataset.v = want
+      nameEl.innerHTML = `<b>${esc(cd.name)}</b><i>${esc(cd.nameEn)}</i>`
+    }
+    nameEl.setAttribute('data-tip', `<b>${esc(me.name)}${mp ? '（你）' : ''}</b>`)
   }
   updateHpNum(document.getElementById('hud-hp'), me.hp, me.maxHp, myBlock)
+  // 层旗 + CREAM 数字（原版 renderDungeonInfo：TP_FLOOR + floorNum；战斗中也显示）
   const floorEl = document.getElementById('hud-floor')
   if (floorEl) {
-    if (combat) floorEl.style.display = 'none'
-    else { floorEl.style.display = ''; setText(floorEl, `第 ${run.act} 幕 · 第 ${run.visitedNodes.length} 层${mp ? ' · 联机合作' : ''}`) }
+    const fl = run.visitedNodes.length
+    const wantF = `${run.act}|${fl}`
+    if (floorEl.dataset.v !== wantF) {
+      floorEl.dataset.v = wantF
+      floorEl.innerHTML = `<span class="tp-ico"><img src="${A('topbar/floor.png')}" alt="floor"></span><b class="floor-val sts-num">${fl}</b>`
+    }
+    floorEl.style.display = ''
+    floorEl.setAttribute('data-tip', `<b>第 ${run.act} 幕 · 第 ${fl} 层</b>`)
   }
-  // 金币逐级计数（原版 NTopBarGold.UpdateGoldAnim：0.25+0.15s 延迟后按步长 75/10/1 递变，10-110ms 间隔，0.25s 后结算）
+  // 金币逐级计数（原版 NTopBarGold）+ 三态色（第二十三批：原版 renderGold ==金/花费中红/获得中绿）
   const goldEl = document.getElementById('hud-gold')
+  const goldVal = goldEl?.querySelector('.gold-val') as HTMLElement | null
+  const goldMate = goldEl?.querySelector('.gold-mate') as HTMLElement | null
   const paintGold = () => {
-    if (!goldEl) return
-    const mate = mp ? `（队友 ${run.players[1 - myIdx]?.gold ?? '-'}）` : ''
-    setText(goldEl, `💰 ${goldAnim.label}${mate}`)
+    if (!goldEl || !goldVal) return
+    // 三态：display(逐级值)==gold → 金 #efc851 / >gold(花费中) → 红 #ff6563 / <gold(获得中) → 绿 #7fff00
+    // 注意：用 goldAnim.cur（最新值）而非闭包 me——动画循环跨多次 updateHud，闭包 me 是旧引用（第二十三批修复）
+    goldVal.style.color = goldAnim.label === goldAnim.cur ? '#efc851' : goldAnim.label > goldAnim.cur ? '#ff6563' : '#7fff00'
+    setText(goldVal, String(goldAnim.label))
+    if (goldMate) {
+      if (mp) { goldMate.style.display = ''; setText(goldMate, `（队友 ${run.players[1 - myIdx]?.gold ?? '-'}）`) }
+      else goldMate.style.display = 'none'
+    }
   }
   if (goldAnim.cur < 0) { goldAnim.cur = me.gold; goldAnim.label = me.gold }
   if (me.gold !== goldAnim.cur) {
@@ -582,15 +615,20 @@ function updateHud(run: RunState, combat: boolean) {
     }
   }
   paintGold()
-  // 药水：入场标记 + 退场 ghost（原版 NPotion：使用 scale→0 0.2s Back In / 丢弃上浮 100px 0.4s Back In）
+  // 药水：写入 .pots-row 子容器（保留 tp-potbox 背景框；第二十三批修复：此前 setHtml 整体覆盖将框删掉）
   const potRow = document.getElementById('hud-potions')
-  if (potRow) {
+  const potSlots = potRow ? potRow.querySelector('.pots-row') as HTMLElement : null
+  if (potRow && potSlots) {
+    // 药水带背景框动态宽（原版 draw 宽 100+slots×76×scale ≈ 83+N×63）
+    const wantW = `${Math.round(83 + me.potions.length * 63)}px`
+    if (potRow.style.width !== wantW) potRow.style.width = wantW
     const ghosts: { idx: number; pid: string; kind: 'use' | 'discard' }[] = []
     for (let i = 0; i < prevPotions.length; i++) {
       if (prevPotions[i] && !me.potions[i]) ghosts.push({ idx: i, pid: prevPotions[i]!, kind: lastPotAct })
     }
-    setHtml(potRow, me.potions.map((p, i) => potionHtml(p, i, combat, !!p && !prevPotions[i])).join(''))
+    setHtml(potSlots, me.potions.map((p, i) => potionHtml(p, i, combat, !!p && !prevPotions[i])).join(''))
     // 药水带满失败抖动（原版 NPotionContainer.PlayAddFailedAnim：3·sin(5t)·sin(t/2) px，t 0→2π，0.5s）
+    // 第二十三批：抖动挂 #hud-potions 容器整体（框+槽一起，batch16 断言查容器 getAnimations）
     if (st.potionBeltFail > lastBeltFailSeen) {
       lastBeltFailSeen = st.potionBeltFail
       potRow.animate?.(Array.from({ length: 25 }, (_, i) => {
@@ -601,9 +639,9 @@ function updateHud(run: RunState, combat: boolean) {
     for (const gh of ghosts) {
       const el = document.createElement('span')
       el.className = `pslot has sts-pot-ghost-${gh.kind}`
-      el.style.cssText = `width:38px;height:44px;position:absolute;left:${gh.idx * 44}px;top:0;pointer-events:none;z-index:5`
+      el.style.cssText = `width:46px;height:53px;position:absolute;left:${14 + gh.idx * 63}px;top:8px;pointer-events:none;z-index:5`
       el.innerHTML = potionLayersHtml(gh.pid)
-      potRow.appendChild(el)
+      potSlots.appendChild(el)
       setTimeout(() => el.remove(), 500)
     }
     prevPotions = [...me.potions]
@@ -613,7 +651,7 @@ function updateHud(run: RunState, combat: boolean) {
   if (inCombat && !combatShineOn) {
     combatShineOn = true
     const bounce = (k: number) => {
-      const row = document.getElementById('hud-potions')
+      const row = document.querySelector('#hud-potions .pots-row')
       const slot = row?.children[k] as HTMLElement | null
       slot?.animate?.([
         { transform: 'translateY(0)', easing: 'cubic-bezier(.61,1,.88,1)' },
@@ -643,7 +681,7 @@ function updateHud(run: RunState, combat: boolean) {
   for (const id of relics) {
     if (!seenRelics.has(id) && seenRelics.size > 0) relicFlashUntil[id] = nowMs + 1900
   }
-  setHtml(document.getElementById('hud-relics'), relics.map(id => relicIcon(id, 34, (relicFlashUntil[id] || 0) > nowMs)).join(''))
+  setHtml(document.getElementById('hud-relics'), relics.map(id => relicIcon(id, 56, (relicFlashUntil[id] || 0) > nowMs)).join(''))
   seenRelics = new Set(relics)
   // 联机：队友血量（78/80 样式小字，右上角）
   const mini = document.getElementById('hud-mp-hp')
@@ -1405,16 +1443,22 @@ function updateCombatScreen(run: RunState) {
     }
     const eImg = energyBox.querySelector('img') as HTMLImageElement | null
     if (eImg) eImg.style.filter = en === 0 ? 'brightness(.45) saturate(.6)' : ''
-    const prev = (energyBox as any).__energy
-    if (typeof prev === 'number' && en > prev) {
-      energyBox.dataset.burst = String(Date.now())
-      energyBox.animate?.([
-        { transform: 'scale(1)', filter: 'brightness(1)' },
-        { transform: 'scale(1.3)', filter: 'brightness(2.1)', offset: 0.3 },
-        { transform: 'scale(1)', filter: 'brightness(1)' },
-      ], { duration: 480, easing: 'ease-out' })
+    // 第二十三批：原版 EnergyPanel.setEnergy 在回合开始触发（与旧能量值无关）
+    // 触发条件：phase player 且 turn 递增（含首回合）
+    const cTurn = c.turn || 0
+    const prevTurn = (energyBox as any).__turn
+    if (c.phase === 'player' && (typeof prevTurn !== 'number' || cTurn > prevTurn)) {
+      ;(energyBox as any).__turn = cTurn
+      // 原版 EnergyPanel.renderVfx —— 双图反向旋转 2s（α .5→0，scale 1→.1，加色混合）
+      const old = energyBox.querySelector('.sts-energy-vfx')
+      if (old) (old as HTMLElement).remove()
+      const vfx = document.createElement('span')
+      vfx.className = 'sts-energy-vfx'
+      vfx.innerHTML = `<img class="vfx1" src="${A('topbar/energy-vfx.png')}" alt=""><img class="vfx2" src="${A('topbar/energy-vfx.png')}" alt="">`
+      energyBox.appendChild(vfx)
+      setTimeout(() => vfx.remove(), 2200)
     }
-    ;(energyBox as any).__energy = en
+    ;(energyBox as any).__turn = cTurn
   }
   const pd = document.getElementById('pile-draw')
   if (pd) setText(pd.querySelector('b'), String(AP(c).drawPile.length))
@@ -1865,6 +1909,7 @@ function rRest(run: RunState): string {
   // 各幕原版篝火房背景（图集 campfire 区域）
   const campBg = run.act >= 4 ? 'campfire4' : run.act === 3 ? 'campfire3' : run.act === 2 ? 'campfire2' : 'campfire1'
   return `<div class="screen rest-bg center-col" style="background-image:url('${A('bg/' + campBg + '.jpg')}');background-size:cover;background-position:center 30%">
+  ${topHudShell()}
   <div class="shade" style="background:rgba(6,3,2,.35)"></div>
   <div class="smoke-slot" style="display:none"></div>
   <div class="big-title sts-title">篝火</div>
@@ -2764,6 +2809,12 @@ const ACTIONS: Record<string, (el: HTMLElement) => void> = {
   gotoMenu: (el) => g().gotoMenuScreen(el.dataset.screen as any),
   continueRun: () => g().continueRun(),
   closeMenu: () => g().toggleMenu(false),
+  // 第二十三批：顶栏 settings 齿轮（原版 TopPanel.renderSettingsIcon 位）
+  toggleMenu: () => {
+    const st = g()
+    if (!st.run) return
+    st.toggleMenu()
+  },
   menuSettings: () => {
     // 菜单内快捷设置：切换面板显示
     const panel = document.getElementById('ingame-menu-settings')
@@ -3069,19 +3120,11 @@ function setupControls() {
   })
 
   const wrap = document.createElement('div')
-  wrap.style.cssText = 'position:absolute;top:10px;right:10px;z-index:500;display:flex;gap:6px;align-items:center'
+  // 第二十三批：改竖排（原横排 ~130px 宽会遮挡顶栏 settings/deck 图标区 right:104）
+  wrap.style.cssText = 'position:absolute;top:10px;right:10px;z-index:500;display:flex;flex-direction:column;gap:6px;align-items:center'
 
-  // 齿轮菜单按钮（游戏内）
-  const gearBtn = document.createElement('button')
-  gearBtn.className = 'sts-btn'
-  gearBtn.style.cssText = 'font-size:15px;padding:4px 10px;min-width:38px'
-  gearBtn.textContent = '⚙'
-  gearBtn.title = '菜单 (Esc)'
-  gearBtn.addEventListener('click', () => {
-    const st = g()
-    if (st.run) st.toggleMenu(true)
-  })
-  wrap.appendChild(gearBtn)
+  // 第二十三批：齿轮菜单入口移至顶栏 settings 齿轮（topHudShell）；此处不再创建旧 ⚙ 按钮
+  // （旧按钮 top:10 right:10 与顶栏 settings 图标位置重叠）
 
   // 旋转 180 度按钮（仅触屏设备；点击后整个画面翻转 180 度，适配手机倒拿场景）
   if (typeof matchMedia !== 'undefined' && matchMedia('(hover: none)').matches) {
@@ -3129,7 +3172,7 @@ function setupControls() {
   btn.textContent = music.muted || music.volume === 0 ? '🔇' : '🎵'
   btn.title = '音乐音量'
   const panel = document.createElement('div')
-  panel.style.cssText = 'position:absolute;right:48px;top:0;display:none;align-items:center;gap:8px;background:rgba(12,8,5,.92);border:1px solid #6b4a2e;border-radius:8px;padding:8px 12px;box-shadow:0 4px 16px rgba(0,0,0,.6)'
+  panel.style.cssText = 'position:absolute;right:130px;top:0;display:none;align-items:center;gap:8px;background:rgba(12,8,5,.92);border:1px solid #6b4a2e;border-radius:8px;padding:8px 12px;box-shadow:0 4px 16px rgba(0,0,0,.6)'
   const slider = document.createElement('input')
   slider.type = 'range'; slider.min = '0'; slider.max = '1'; slider.step = '0.05'; slider.value = String(music.volume)
   slider.style.cssText = 'width:110px;accent-color:#c8a060'

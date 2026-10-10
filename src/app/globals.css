@@ -581,6 +581,50 @@
 }
 .sts-potion-throw { animation: sts-potion-throw 0.5s cubic-bezier(.4,0,.7,1) forwards; }
 
+/* ===== 第二十三批：原版 TopPanel 顶栏全套 =====
+   bar.png 底板 + 心/钱袋 hover 1.2x（renderHP/renderGold）
+   右上图标 hover：CYAN 染色 + 25% 白叠层（复刻 libGDX setColor(CYAN)×白纹理 + 白α.25 二次绘制）
+   settings 齿轮：平时 300°/s 旋转，hover 定格 270°（原版 settingsAngle） */
+.tp-ico { position: relative; display: block; }
+.tp-ico img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.tp-stat:hover .tp-ico { transform: scale(1.2); }
+.tp-ico { transition: transform 0.12s ease-out; transform-origin: center; }
+/* 右上图标（deck/settings）：mix-blend color 染青 + screen 提亮 */
+.tp-tico, .tp-deck { isolation: isolate; }
+.tp-tico .tint, .tp-deck .tint {
+  position: absolute; inset: 0; background: #0ff; mix-blend-mode: color;
+  opacity: 0; pointer-events: none; transition: opacity 0.12s;
+}
+.tp-tico .tint2, .tp-deck .tint2 {
+  position: absolute; inset: 0; background: #fff; mix-blend-mode: screen;
+  opacity: 0; pointer-events: none; transition: opacity 0.12s;
+}
+.tp-tico:hover .tint, .tp-deck:hover .tint { opacity: 0.95; }
+.tp-tico:hover .tint2, .tp-deck:hover .tint2 { opacity: 0.25; }
+/* 齿轮：300°/s 常转；hover 定格 270°（原版 -90°+360°） */
+.tp-tico.settings > img { animation: tp-spin 1.2s linear infinite; }
+.tp-tico.settings:hover > img { animation: none; transform: rotate(270deg); }
+@keyframes tp-spin { to { transform: rotate(360deg); } }
+
+/* ===== 能量VFX（原版 EnergyPanel.renderVfx：2s 双图反向旋转） =====
+   图1 50°→110°+水平镜像 / 图2 0°→-60°；α 0.5→0、scale 1→0.1（exp10In≈cubic(.64,0,.78,0)）
+   加色混合（770,1=SRC_ALPHA,ONE）→ CSS screen */
+.sts-energy-vfx { position: absolute; inset: -25%; pointer-events: none; isolation: isolate; }
+.sts-energy-vfx img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; mix-blend-mode: screen; will-change: transform, opacity;
+}
+.sts-energy-vfx .vfx1 { animation: sts-evfx1 2s cubic-bezier(.64, 0, .78, 0) forwards; }
+.sts-energy-vfx .vfx2 { animation: sts-evfx2 2s cubic-bezier(.64, 0, .78, 0) forwards; }
+@keyframes sts-evfx1 {
+  0% { transform: rotate(50deg) scaleX(-1) scale(1); opacity: 0.5; }
+  100% { transform: rotate(110deg) scaleX(-1) scale(0.1); opacity: 0; }
+}
+@keyframes sts-evfx2 {
+  0% { transform: rotate(0deg) scale(1); opacity: 0.5; }
+  100% { transform: rotate(-60deg) scale(0.1); opacity: 0; }
+}
+
 /* 药水碎裂闪光 */
 @keyframes sts-potion-shatter {
   0% { opacity: 0; transform: translate(-50%, -50%) scale(0.2); }
