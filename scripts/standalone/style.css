@@ -1,11 +1,13 @@
 /* ============ 杀戮尖塔单文件版样式 ============ */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { width: 100%; height: 100%; overflow: hidden; background: #050302; }
-body { font-family: "Noto Serif SC", "Source Han Serif SC", "STSong", "SimSun", serif; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+body { font-family: "NotoSansMonoCJKsc", "Noto Sans Mono CJK SC", "Noto Sans SC", sans-serif; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
 img { -webkit-user-drag: none; }
-/* 字体 = 原版方案（FontHelper.java）：英文 Kreon + 简中 SourceHanSerifSC；@font-face 由 build.ts 注入 */
-.sts-title { font-family: "Source Han Serif SC", "Kreon", "Noto Serif SC", "STSong", "SimSun", serif; font-weight: 700; }
-.sts-body { font-family: "Source Han Serif SC", "Kreon", "Noto Serif SC", "STSong", "SimSun", serif; }
+/* 字体 = 原版方案（FontHelper.java 权威考证，第二十八批）：ZHS 全部文字统一 NotoSansMonoCJKsc（黑体等宽，含拉丁/数字半宽）；
+   旧"英文 Kreon + 简中 SourceHanSerifSC"系误读（SourceHanSerifSC 为 ZHS_BOLD_FONT 死常量从未引用）；@font-face 由 build.ts 注入；
+   标题 font-weight:700 伪粗近似原版 FreeType 描边观感 */
+.sts-title { font-family: "NotoSansMonoCJKsc", "Noto Sans Mono CJK SC", "Noto Sans SC", sans-serif; font-weight: 700; }
+.sts-body { font-family: "NotoSansMonoCJKsc", "Noto Sans Mono CJK SC", "Noto Sans SC", sans-serif; }
 
 /* ============ 舞台（1600×900 逻辑分辨率，等比缩放） ============ */
 #stage-wrap { position: fixed; inset: 0; overflow: hidden; background: #050302; }

@@ -125,10 +125,17 @@
 }
 
 /* ============ 杀戮尖塔游戏样式 ============ */
-/* 字体 = 原版游戏方案 (FontHelper.java): 英文 Kreon + 简中 SourceHanSerifSC */
-:root {
-  --sts-font-title: var(--font-zh-title), var(--font-title), "SourceHanSerifSC", "Noto Serif SC", serif;
-  --sts-font-body: var(--font-zh-body), var(--font-body), "SourceHanSerifSC", "Noto Serif SC", serif;
+/* 字体 = 原版游戏方案 (FontHelper.java 权威考证，第二十八批)：
+   ZHS 语言全部文字统一 NotoSansMonoCJKsc-Regular（黑体等宽，含拉丁/数字半宽）。
+   旧实现"英文 Kreon + 简中 SourceHanSerifSC"系误读——SourceHanSerifSC 是 ZHS_BOLD_FONT
+   死常量从未被引用，Kreon 仅 ENG 路线。标题粗体观感用 CSS 伪粗近似原版 FreeType 描边。
+   ⚠ 变量必须定义在 body 上：next/font 的 --font-zh-mono 挂在 body（layout.tsx variable），
+   :root(html) 无法向内解析后代变量——旧版定义在 :root 导致 var 链 guaranteed-invalid，
+   全站实际一直退回 Tailwind 默认 sans（本批修复）。 */
+body {
+  --sts-font-title: var(--font-zh-mono), "Noto Sans Mono CJK SC", "Noto Sans SC", sans-serif;
+  --sts-font-body: var(--font-zh-mono), "Noto Sans Mono CJK SC", "Noto Sans SC", sans-serif;
+  font-family: var(--sts-font-body); /* 原版全场景 mono：全局默认即主字体（未挂类文字不再落系统 sans） */
 }
 
 .sts-title { font-family: var(--sts-font-title); }

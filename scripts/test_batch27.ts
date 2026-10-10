@@ -2,6 +2,7 @@
 // 断言基准：反编译 java loadAnimation/setAnimation 权威映射（50 Spine 动画 + bronzeOrb/hexaghost 原版静态）
 // 用法: npx tsx scripts/test_batch27.ts [next|standalone]
 import { execFileSync } from 'child_process'
+import * as fs from 'fs'
 
 const MODE = (process.argv[2] === 'standalone') ? 'standalone' : 'next'
 const URL = MODE === 'next' ? 'http://localhost:3000/' : 'file:///home/z/my-project/download/slay-the-spire-standalone.html'
@@ -152,6 +153,7 @@ async function main() {
              w: Math.ceil(r.width), h: Math.ceil(r.height) }
   })()`)
   check('C0 首敌精灵 bbox 获取', box && box.w > 20 && box.h > 20, JSON.stringify(box).slice(0, 100))
+  fs.mkdirSync('/tmp/anim_pilot', { recursive: true })  // 沙箱重启后 /tmp 清空，截图目录需自建
   cli(['screenshot', '/tmp/anim_pilot/t27_a.png'])
   await sleep(1100)
   cli(['screenshot', '/tmp/anim_pilot/t27_b.png'])
