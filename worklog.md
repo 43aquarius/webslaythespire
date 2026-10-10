@@ -533,3 +533,29 @@ Stage Summary:
 - 关键技术入库：mix-blend-mode:color 等效 libGDX setColor 着色；EnergyPanel VFX 触发语义=回合开始 setEnergy；Java Color(int) RRGGBBAA 换算（Settings 常量）
 - 既有 bug 修复入库：useGoldLabel 连续变化死锁（cleanup 竞态）
 - 后续候选：batch13/14/15 standalone 断言的 img[src*=] 路径匹配在 data URL 下失效（历史技术债,需统一改类名断言）/敌人Spine骨骼动画/检视屏大图
+
+---
+Task ID: 25
+Agent: main
+Task: 第二十四批：原版敌人立绘（Spine 合成）+ 选角屏素材原版化（两版本）
+
+Work Log:
+- 任务链承接：batch18 双版本 41+45 修复收尾 + 9d4a125 验证（确认为孤儿提交：与 3f511e8 同父的兄弟、无分支引用、仅存 reflog；第十八批内容早已由 3f511e8 规范提交并推送，远程=4af2ab0 无需处理）
+- 资源盘点结论：历史批次已原版化 cardart/frames/status/relics/intent/mapicons/potionlayers/endturn/topbar/bg/campfire/events/neow/fonts/sfx/audio/title(尺寸吻合验证)/maporig(第十五批已提取)；仍非原版=enemies(52张wiki渲染图)/hero(wiki小图)/charbg(同名但哈希不同)/typeicons(wiki 32px徽章,原版为文字渲染,留候选)
+- 关键发现：原版敌人=Spine 骨骼动画(skeleton.atlas/json/png)，非单张立绘；原版选角屏=选中角色全屏 Portrait.jpg(1920x1200)+Button.png，无独立透明立绘
+- Spine 3.4.02 合成器 scripts/spine_compose.py 从零实现：libGDX atlas 解析(region/rotate90顺时针还原)、骨骼层级世界变换(2x3仿射递归)、region 附件四角仿射、mesh 附件三角形纹理映射(PIL transform+三点解仿射)、加权顶点格式[boneCount,(boneIdx,x,y,weight)*cnt]（179=25×5+6×9 破解验证）、简单 mesh 分支(len==2n 直接坐标)、slot tint、两骨 IK 余弦定理解算(余弦定理+父系换算+子树重算)
+- 排障记录：仿射 AABB 平移符号(减号→加号，patch 全透明根因)；MaxFilter mask 膨胀在细长三角形灾难(改源三角形外扩1px消缝)；mesh UV v 方向实验定论 v*h(渲染覆盖11806≥贴图非透明11553)；IK p0 坐标系混淆(apply(pw,...)是世界系，父系解算需直接用局部平移——修复后误差29-70px→0.00px)；矩阵元组(c,f)才是平移(tgt[3]误用d元素)
+- VLM 误判证伪方法论：VLM 在小尺寸对比图上反复误报"躯干缺失/部件脱节/翅膀残影"，全部由像素证据链推翻(投影无空白带/渲染覆盖率≥贴图非透明总数/scipy填洞检测<350px)——bbox 与 spine 元数据 setup 边界六敌抽验精确匹配<0.1px 是数学正确性的铁证；jawworm IoU 0.15 为姿态差异(setup+IK=待机姿态 vs wiki=攻击帧)非渲染错误
+- 52 敌人映射表（开发代号考据）：centurion=romeo/sphericGuardian=tank/writhingMass=spaghetti/shieldGremlin=femaleGremlin/sneakyGremlin=thiefGremlin/mystic=healer/reptomancer=reptile/fungibeast=fungi/gremlinNob=nobGremlin/redlouse=louseRed/spikeSlime=slimeAlt/gremlinLeader=gremlinleader/taskmaster=slaverMaster/dagger=mage_dagger/giantHead=head/acidslime=slime；特殊：hexaghost 非 Spine(core+6plasma 环绕合成)、byrd 双骨架(flying/grounded 选 flying)、corruptHeart 取 npcs/heart
+- 选角屏：charbg 四张替换为 charSelect/*Portrait.jpg(原版全屏图)；hero 四张由 characters/*/idle 骨架合成(铁甲349x251/寂静258x233/缺陷237x221/观者374x296，VLM 验收三合格+watcher"躯干分离"为紫袍中缝设计误判,空洞检测1.5%)
+- 截图工具 bug 修复：换敌 setState 必须分配新 uid——standalone 手动 DOM 按 euid 查询更新，uid 重复导致黑块+敌人缺失（Next 版 React key 冲突表现为状态错乱）
+- 构建链：make_assets(enemies 420px PNG 内联) → build.ts(36.40MB 单文件) → next build + start_prod.sh
+- VLM 游戏内验收：Next 战斗3组(邪教徒+颚虫+真菌兽/拉格维林/五哥布林)立绘完整清晰无破图比例合理；双版本选角屏原版场景图正常；standalone uid 修复后同验通过
+- 全套回归：regression16+16、bugcheck29+29、batch10 19、batch12 29、batch13 25、batch14 19、batch15 30+1(⑤b墨迹,历史时序偶发)、batch16 30、batch18 41+45、batch20 12、batch21 34+42、mptest(联机时序波动)、fulltest gameover
+- batch15/16 需 :3100 端口服务（.next/standalone 复制起 PORT=3100）；测试后已清理
+
+Stage Summary:
+- 敌人立绘从 wiki 渲染图全量升级为原版 Spine 骨架合成（setup-pose+IK），52 敌人+4 角色立绘，选角屏背景原版化——"很多资源不是原本的"需求收尾（剩余候选：typeicons 徽章图标改文字渲染）
+- 核心技术入库：Spine 3.4 json/atlas 解析与 setup-pose 合成全链路（region/mesh/加权/IK）；加权顶点编码格式；合成质量验证三件套(bbox 元数据匹配/覆盖率对照/空洞检测)
+- 方法论入库：VLM 小图误判需像素证据链证伪；换敌测试必须重分配 uid
+- 后续候选：typeicons 原版文字化/敌人 idle 多帧动画(三帧 scenes 图集或 Spine 动画帧采样)/检视屏大图/商店宝箱 UI 素材
