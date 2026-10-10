@@ -482,3 +482,26 @@ Stage Summary:
 - 关键技术入库：libGDX Color(int)=RRGGBBAA；mask+background 等效 libGDX 着色；make_assets 单层目录限制
 - 测试可靠性：Neow 导航改 store API（不再依赖DOM文案）；角色选择屏需先选角色
 - 后续候选：结束回合按钮与顶栏原版UI素材(topPanel 34张已勘察)/敌人Spine骨骼动画/检视屏大图
+
+---
+Task ID: 23
+Agent: main
+Task: 第二十二批：结束回合按钮原版化（topPanel 三态素材 + EndTurnButton.render 复刻，两版本）
+
+Work Log:
+- 素材勘察：ui/topPanel 含 endTurnButton/endTurnHover/endTurnButtonGlow(256x256, 纯图形无文字, VLM确认=深色六边形宝石+金边) + bar.png(顶栏1920x128) + 34张图标——本批只取按钮三态，顶栏留后续
+- 渲染层序复刻（EndTurnButton.java render）：hover 轮廓图先绘(衬底)→主图后绘(常量板/glow板)→文字层最后；hover上浮tmpY+2→CSS translateY(-2px)，按下-2→translateY(2px)
+- 语义复刻：isGlowing=AbstractPlayer.useCard后手牌无可出牌时置位——本版实时计算 hand.every(cardCost>energy)；敌方回合GRAYSCALE shader→filter:grayscale(1)；isDisabled→DISABLED_COLOR(0.7)
+- 色值换算（Settings int，RRGGBBAA）：CREAM#fff6e2/GOLD#efc851；libGDX CYAN#00ffff/LIGHT_GRAY#b3b3b3
+- 双版本实现差异：Next=CSS background-image三态(globals.css)；standalone=img标签(data URL) + 更新器JS切换src与className（style.css同套状态规则）
+- 尺寸定位：208x208 画布 contain（内容区238x113@256画布≈居中），right:88 bottom:104；文字25px居中(板心≈画布中心)
+- 【测试技术】敌方回合为短窗口：外部轮询每回合exec往返数百毫秒会错过——改浏览器内40ms setInterval采样(className列表+首次enemy时刻computed filter/text快照)；E1-E3由此稳定捕获；agent-browser原生hover命令驱动悬停态（hover别的元素恢复）
+- test_batch22：Next 22/22 + standalone 20/20；全套回归：regression 16+16/412+412、bugcheck 29+29、batch12 29+19、batch13 25+25、batch14 19+18、batch15 31+28、batch16 30+31(③入场动画偶发复跑过)、batch18 41+45、batch20 12、batch21 34+42、mptest 23、fulltest gameover
+- VLM验收：Next四态(常态/悬停青字轮廓/发光金字/敌方灰度)全部符合；standalone前三态符合，敌态截图因窗口<exec往返未捕获（紧循环24×90ms重试亦未中）——功能性由E1-E3浏览器内采样断言覆盖，视觉由Next同款CSS规则+VLM灰度确认覆盖
+- 排障记录：JSON转义地狱再现——正则字面量`\\/`经Write工具成双反斜杠导致esbuild Syntax error（出现两次：batch21 C区与batch22 B区），修复模式=文件内须为单反斜杠`\/`；模板字符串内`\\s`发往浏览器则正确
+- 旧 .end-turn.ready box-shadow脉动动画废除（原版无此效果），@keyframes保留历史参考
+
+Stage Summary:
+- 结束回合按钮从CSS文字按钮升级为原版三态素材+完整状态机（发光语义=无可出牌），双版本同步
+- 浏览器内采样捕获短窗口状态的技术入测试库；敌方回合时长本身是引擎既有特性（不同战斗敌人动作数不同），未改动
+- 后续候选：顶栏bar.png+图标全套(34张已勘察，改动面大需拆批)/药水占位与能量VFX/检视屏
