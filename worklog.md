@@ -453,3 +453,32 @@ Stage Summary:
 - 原版地图boss专属图标落地：开图即知本幕boss(预决定)、专属图标+名称提示、进战斗遭遇严格一致、幕推进重掷、旧档兼容 —— 两版本同步,12+12项E2E+全套回归全绿
 - sts2-web研究第七批结论：sts2-web自身剩余候选(检视屏大图/收集页)价值成本比低,本批转向原版一代反编译源挖掘(boss图标为原版独有行为,sts2-web无此数据),与用户"原版还原"目标更契合
 - 后续候选：药水分层合成(glass+liquid+spots+outline,原版渲染管线)/敌人Spine骨骼动画/结束回合按钮与顶栏原版UI素材替换
+
+---
+Task ID: 22
+Agent: main
+Task: 第二十一批：原版药水分层合成落地（两版本）+ batch18 导航脆弱性根治
+
+Work Log:
+- 承第二十批后续候选：本批落地药水分层合成（原版渲染管线），顶栏素材替换留作下批
+- 反编译仓库 /tmp 被会话清理 → 重新克隆 Li-Binghui/MySlayTheSpire
+- 管线研究：AbstractPotion.render 层序 = liquid(着色)→hybrid(可选)→spots(可选)→glass(白)；PotionSlot 空槽渲染 POTION_PLACEHOLDER @ PLACEHOLDER_COLOR(白75%)；render/renderOutline 仅弃用界面用 outline，正常药水带不含 outline 层
+- 双构造器形态发现：新版类用 super(PotionSize, PotionColor)（色由 initializeColor 映射），LiquidBronze/CultistPotion 用旧版显式 new Color(int)；提取脚本双形态解析
+- libGDX Color(int) 字节序定论：RRGGBBAA（R最高字节）——GREEN_TEXT=0x7FFF7FFF→#7fff7f 语义验证（LSB序会得粉色，荒谬）；LiquidBronze/CultistPotion int 色经此换算得 #e2b821/#18bcc0、#2853bc/#1c2c60
+- 权威数据修正两处直觉：attackPotion=card形+FIRE色（非card+ATTACK色）、dexterityPotion=S形+GREEN色（非STEROID）；18药水实际用到11种形状
+- 图层复制：89张（13形状×最多5层，moon/spiky/eye/anvil无spots）+placeholder，扁平命名 {shape}_{layer}.png（make_assets是单层os.listdir，子目录不收）
+- 渲染技术：CSS mask + background-color 复刻 libGDX sb.setColor×白纹理；Next=maskImage长写法(React)，standalone=mask速记法(HTML串)；glass为img原图
+- 落地三渲染点×2版本：药水带(Shared PotionSlot/ui.ts potionHtml)、获取toast(Shared potGhosts/ui.ts ghost)、商店(ShopScreen/ui.ts shop)；空槽从虚线圈改原版占位剪影
+- 旧wiki药水单图20张 git rm（无残留引用），make_assets 移除 potions 计划；单文件 37.79→37.70MB
+- 【重大排障①服务器存活】next build 直接调用跳过项目 build 脚本的 cp -r public → standalone 404；且 nohup bun 随 bash 会话回收死亡——必须用 scripts/start_prod.sh（double-fork+setsid）
+- 【重大排障②导航根治】batch21 首跑卡角色选择屏：出发按钮需先点角色卡；且 Neow DOM 文案正则法对随机选项集不稳定——两处统一修复（选角屏先点铁甲战士；涅奥改 store API chooseNeow(1)+resolveSelect，batch16 模式），batch18 同步改造
+- 测试基建：B区相对fetch需在页面打开后执行（about:blank 上 fetch 必失败）；agent-browser glassSrc 断言 standalone 须测 data: 前缀（文件名不存在）
+- test_batch21 双版本：Next 34/34 + standalone 42/42；VLM 四场景×2版本验收（火焰红球橙顶/仙女白形/邪教徒蓝月/迅捷深蓝青斑/毒药绿+深绿斑/青铜金铜+青蓝/商店卡形红/幽灵白形/空槽剪影可见/无破图无溢出）
+- 全套回归：regression 16/412、bugcheck 29+29、batch10 19+13、batch12 29+19、batch13 25+25、batch14 19+18、batch15 31+28、batch16 30+31、batch18 41+45、batch20 12、mptest 23（时序偶发复跑过）、fulltest 全流程 gameover
+- 版本：v1.14→v1.15 未改版本号（本批为资源/渲染层，无功能变化）——生产服务器已重建+start_prod 重启
+
+Stage Summary:
+- 原版药水分层合成全链路落地：18药水×权威形状/着色×双版本，渲染管线与着色值严格对齐反编译源
+- 关键技术入库：libGDX Color(int)=RRGGBBAA；mask+background 等效 libGDX 着色；make_assets 单层目录限制
+- 测试可靠性：Neow 导航改 store API（不再依赖DOM文案）；角色选择屏需先选角色
+- 后续候选：结束回合按钮与顶栏原版UI素材(topPanel 34张已勘察)/敌人Spine骨骼动画/检视屏大图
