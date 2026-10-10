@@ -559,3 +559,22 @@ Stage Summary:
 - 核心技术入库：Spine 3.4 json/atlas 解析与 setup-pose 合成全链路（region/mesh/加权/IK）；加权顶点编码格式；合成质量验证三件套(bbox 元数据匹配/覆盖率对照/空洞检测)
 - 方法论入库：VLM 小图误判需像素证据链证伪；换敌测试必须重分配 uid
 - 后续候选：typeicons 原版文字化/敌人 idle 多帧动画(三帧 scenes 图集或 Spine 动画帧采样)/检视屏大图/商店宝箱 UI 素材
+
+---
+Task ID: 26
+Agent: main
+Task: 会话恢复与状态对齐（用户"继续"）：前会话上下文耗尽时已超前完成第二十一~二十四批并推送，本会话同步本地 + 恢复生产环境
+
+Work Log:
+- 恢复上下文时摘要仍停留在"第十八批测试修复中"，但 git/worklog 考古显示前会话实际已推进至第二十四批：本地领先一个未推送提交 dc2a86d(第二十批)，远端 origin/main=34da092 领先本地五提交(3620fe1同内容第二十批 + 第二十一~二十四批 + Task25日志，均43aquarius署名)
+- 本地 dc2a86d 与远端 3620fe1 内容完全一致(31文件仅权限位差异，远端还含 eb2fd17 boss.png 755→644 权限修正)——判定远端为权威谱系，git reset --hard origin/main 丢弃本地重复提交，零丢失
+- 环境状态核验发现回归：沙箱重启后 .next 生产构建全丢(仅 .next/dev 残留，:3000 被开发服务器顶替)，standalone 单文件 36.40MiB 完好(与 Task25 记录一致)
+- 恢复生产环境：杀 dev 进程(1083/1084/1097+postcss) → npm run build(standalone 输出) → start_prod.sh，:3000 生产服务器 READY
+- start_prod.sh 版本 grep 恒空属预期(第十七批已删主菜单角标文字，脚本残留 informational 检查，无碍，留待后续顺手清理)
+- 冒烟验证(针对新构建)：regression 16/16 全绿；test_batch20 next 12 + standalone 12 全绿(boss专属图标/预决定/旧档兼容双模式通过)
+- 本会话未做功能改动：第二十一~二十四批(药水分层合成/结束回合按钮/顶栏复刻/敌人Spine立绘+选角屏)的内容与验证由前会话完成，详见 Task 22-25 日志
+
+Stage Summary:
+- 本地与远端谱系对齐(34da092)，生产服务器在 :3000 以第二十四批源码重建并通过双版本冒烟
+- 判定经验入库：会话恢复先做 git 双向考古(本地未推送 vs 远端超前后再 reset)，防止用旧本地覆盖远端新成果；摘要滞后于实际进度时以 worklog+git 为准
+- 后续候选(承 Task 25)：typeicons 原版文字化/敌人 idle 多帧动画/检视屏大图/商店宝箱 UI 素材
