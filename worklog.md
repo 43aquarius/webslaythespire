@@ -738,3 +738,26 @@ Stage Summary:
 - 两大既有/新引入 bug 入库：①sig 空态与强置空相等的 DOM 残留（"强制更新"技巧的隐藏反例——强置值必须与可能的空态值不等）②Esc 多监听者竞态（新增遮罩层时须排查全部既有 Esc 监听的让行条件，page.tsx/InGameMenu 两处让行标记不同源是隐患温床）
 - 测试基建入库：:3100 double-fork 独立启动器；npm run build 后必须重启 :3000；老式(argv[2]=URL)与新式(argv[2]=mode)测试参数地图（batch12-16/fulltest 老式、batch18+ 新式）
 - 后续候选（承队列）：敌人受击/死亡音效按敌种细分 / 房间切换渐变过渡剩余项 / 牌堆弹窗检视的双版本行为统一审计
+
+---
+Task ID: 34
+Agent: main
+Task: 用户反馈"主页贴图有错误"：修复主菜单贴图错误（原版 TitleBackground 完整还原）+ 合入远端 21-32 批分叉
+
+Work Log:
+- 排障定位：素材文件本身完好（PIL 验证 + VLM 描述），错误在用法——中景地形图 mg2.png(1920x789,含尖塔剪影)被当作"云"以 60vw 挂在屏幕 34% 高度漂移（悬空矩形块+生硬切断边缘），且缺失原版主菜单主体层 mg3Top（全屏尖塔中景）
+- 重新克隆反编译仓库，精读 TitleBackground.java + TitleCloud.java + title.atlas 全文：原版层次=sky(jpg/sky 1920x1469,y=-100) → mg3Bot(4:3专用,16:9不可见) → mg3Top(1920x1140,底部对齐全屏) → 塔身红光mg3TopGlow1/2(blendFunc(SRC_ALPHA,ONE)加法混合+alpha呼吸0.15~0.55周期5.76s) → midClouds×12(向左vX=-50~-10) → topClouds×6(向右vX=10~50) → logo
+- 关键考证：scale=WIDTH/1920；云设计画布1920x1266、画布底在屏幕顶下方1080+20px处、offsetY为libGDX底部偏移语义；云图18朵常驻(屏内概率≈55%)；mg2/mg1/fg均非主菜单素材；menu.jpg为宣传合成图
+- 素材提取：topCloud1-6 + midCloud1-12 + mg3TopGlow1/2 从 title*.png atlas 裁剪(顶部原点)存 WebP q90 共 657KB；mg3Top.png 验证与第二十批裁剪逐像素一致后转 WebP(468→105KB)；单文件版仅 +0.24MB
+- 双版本实现：MenuScreens.tsx/ui.ts 重写主菜单（sky 底部对齐裁 83px=center -241px / mg3Top bottom-0 全宽 / 红光 mix-blend-mode:screen+呼吸 / 18 朵云按画布 offset 定位+CSS 变量 --from/--to 复刻 ±1920 wrap 语义+负 delay 固定相位防 hydration 随机）；删除 mg2 误用与 main-menu-fog（原版无整体暗角）；globals.css/style.css 云类重写；make_assets.py title 桶过滤改 .webp
+- 排障①CSS HMR 缓存失效：dev server 编译产物滞后（DOM 新 CSS 旧），新 .sts-glow 类不存在→红光 img 变 static 参与 flex 布局→6 菜单按钮下 3 个溢出屏幕(bottom 1055>900)；浏览器重启无效，须杀 dev server 重启；教训：改 CSS 类后必须验证 computed style 而非只看 DOM
+- 排障②同目录双 dev 实例锁冲突：.next/dev/lock 禁止 3000+3100 双 dev；3100 按远端基建走生产模式(next build→拷贝 public+.next/static→start_test_server.sh)
+- 排障③git 分叉：本沙箱文件系统停留 20 批而远端已被推进至 32 批（pull 时发现）；26 冲突解决（AA 同内容任取/UU 截图与单文件取远端/worklog 取远端）；两边改动区域零重叠（MenuScreens 主菜单块 vs 31/32 批商店检视块）自动合并即正确；本批编号由"二十五"改为"三十三"(Task 34)
+- 测试：test_batch18 A 区断言更新（A2=18朵云/A2b mg3Top/A2c 红光×2）；合并后全套：batch18 43+47 / batch15 31(1项墨迹时序偶发重跑过) / batch16 30 / batch31 32 / batch32 16 / regression5 412 / bugcheck 29 —— 全绿
+- VLM 验收：修复前(悬空地形块+黑边) vs 修复后(天空铺满+尖塔中偏左+塔顶橙红光+云带环绕+按钮全可见)三阶段验收（dev/单文件/3100生产合并版）全部通过
+- 单文件版 45.15MB 重建（远端 31/32 批 44.91 + 主菜单 0.24）
+
+Stage Summary:
+- 主菜单贴图错误根治：从"3 朵云+误用地形图"还原为原版 TitleBackground 完整七层结构，双版本同步，全套回归+三阶段 VLM 验收通过
+- 环境发现入库：本沙箱与远端存在批次分叉（本地 20 批 vs 远端 32 批），已 merge 合一；远端 21-32 批功能（商店/宝箱/右键检视/3100基建）经 batch31/32 验证在合并后完好
+- 后续候选（承队列）：敌人受击/死亡音效细分 / 房间渐变剩余项 / 牌堆检视统一审计 / mg3Bot 4:3 适配（超宽屏裁切）

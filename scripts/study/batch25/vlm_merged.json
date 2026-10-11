@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "根据截图检查结果如下：\n\n1.  **天空铺满**：是，背景天空纹理完整覆盖全屏。\n2.  **尖塔位置**：是，尖塔位于画面中偏左位置，且结构完整可见。\n3.  **塔顶光效**：是，塔顶有明显的橙红色辉光效果。\n4.  **云朵数量**：是，画面中分布着多层、多朵形态各异的云彩。\n5.  **Logo清晰度**：是，“Slay the Spire” Logo 字体清晰，颜色鲜明。\n6.  **菜单按钮**：是，六个按钮（开始冒险、继续冒险、联机合作、统计、设置、制作名单）均完整显示且文字清晰。\n7.  **贴图错误**：未发现明显的贴图撕裂、错位或丢失现象，渲染正常。\n\n**结论**：该生产模式下的主菜单界面渲染完整，UI 元素齐全，视觉效果符合预期。",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1791716109,
+  "id": "20261011185505a2bd2c0fa6de4d10",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261011185505a2bd2c0fa6de4d10",
+  "usage": {
+    "completion_tokens": 208,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 1880,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 2088
+  }
+}
