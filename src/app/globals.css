@@ -716,58 +716,48 @@ body {
 .sts-shuffle-card:nth-child(7) { --sx: -124px; --sy: -14px; --sr: -178deg; }
 .sts-shuffle-card:nth-child(8) { --sx: 126px; --sy: -14px; --sr: 172deg; }
 
-/* 检视屏（原版 NInspectCardScreen：大卡 + 黑0.9背板 + 金箭头导航 + 升级预览勾选框） */
-.sts-inspect-backdrop {
+/* ===== 检视屏（第三十批：原版 PC SingleCardViewPopup 复刻） ===== */
+/* 背板：黑 0→0.9 pow2In 0.25s（原版 updateFade: fadeTimer 0.25, a=pow2In(0.9,0,t*4)） */
+.scv-backdrop {
   position: absolute; inset: 0;
-  background: rgba(0, 0, 0, 0.9);
-  animation: sts-inspect-backdrop-in 0.25s ease-out both;
+  background: #000;
+  animation: scv-fade-in 0.25s cubic-bezier(0.42, 0, 1, 1) both;  /* pow2In ≈ ease-in */
 }
-.sts-inspect-backdrop.closing { animation: sts-inspect-backdrop-out 0.25s ease-in both; }
-@keyframes sts-inspect-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes sts-inspect-backdrop-out { from { opacity: 1; } to { opacity: 0; } }
-/* 大卡入场：黑→亮淡入 0.25s + 0.875→1 缩放 0.15s BackOut(延迟0.1s)（原版开屏参数） */
-.sts-inspect-card-in {
-  animation: sts-inspect-card-fade 0.25s ease-out both, sts-inspect-card-scale 0.15s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s both;
+@keyframes scv-fade-in { from { opacity: 0; } to { opacity: 0.9; } }
+/* 1024 画布图层：全画布烘焙图 inset:0 同盒渲染（与 CardView 512 画布架构同构） */
+.scv-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; user-select: none; }
+.scv-art { position: absolute; pointer-events: none; user-select: none; }
+/* 翻页箭头（原版 POPUP_ARROW 256×scale @ W/2±400s；hover=白50%加色混合重绘 → CSS brightness 近似） */
+.scv-arrow { position: absolute; width: 213px; height: 213px; cursor: pointer; z-index: 5; }
+.scv-arrow img { width: 100%; height: 100%; display: block; }
+.scv-arrow-next img { transform: scaleX(-1); }
+.scv-arrow:hover img { filter: brightness(1.85); }
+/* 升级查看（原版 CHECKBOX 64 + 文案 cardTitleFont 27 @ (W/2, 70s from bottom)；hover 蓝 #87ceeb / 平时金 #efc851） */
+.scv-upgrade-toggle {
+  position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 14px; cursor: pointer; z-index: 5;
+  padding: 6px 12px;
 }
-@keyframes sts-inspect-card-fade { from { filter: brightness(0); opacity: 0; } to { filter: brightness(1); opacity: 1; } }
-@keyframes sts-inspect-card-scale { from { scale: 0.875; } to { scale: 1; } }
-/* 导航切卡：自 ±100px 滑入 0.25s ExpoOut（原版 navigate 参数） */
-.sts-inspect-nav-left { animation: sts-inspect-nav-in-l 0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.sts-inspect-nav-right { animation: sts-inspect-nav-in-r 0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }
-@keyframes sts-inspect-nav-in-l { from { translate: -100px 0; } to { translate: 0 0; } }
-@keyframes sts-inspect-nav-in-r { from { translate: 100px 0; } to { translate: 0 0; } }
-/* 金色箭头（原版 NGoldArrowButton：hover brightness1.2+1.1×，press brightness0.7，复归 0.5s ExpoOut / 亮度 1s） */
-.sts-inspect-arrow {
-  display: flex; align-items: center; justify-content: center;
-  width: 76px; height: 76px; cursor: pointer;
-  filter: brightness(0.9);
-  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), filter 1s cubic-bezier(0.16, 1, 0.3, 1);
+.scv-checkbox { position: relative; width: 53px; height: 53px; flex: none; }
+.scv-checkbox img { width: 100%; height: 100%; display: block; }
+.scv-tick-img { position: absolute; inset: 0; }
+.scv-upgrade-label {
+  font-size: 22.5px; color: #efc851; letter-spacing: 2px;
+  text-shadow: 2px 2px 0 #000, 0 0 8px rgba(0, 0, 0, 0.6);
 }
-.sts-inspect-arrow:hover { filter: brightness(1.2); transform: scale(1.1); transition: filter 0.05s linear, transform 0.05s linear; }
-.sts-inspect-arrow:active { filter: brightness(0.7); transform: scale(1); }
-/* 箭头入场：自 ±100px BackOut 0.25s 延迟 0.1s + 黑→亮淡入（原版 arrowIn） */
-.sts-inspect-arrow-in-l { animation: sts-inspect-arrow-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s both; --adx: -100px; }
-.sts-inspect-arrow-in-r { animation: sts-inspect-arrow-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s both; --adx: 100px; }
-@keyframes sts-inspect-arrow-in {
-  from { translate: var(--adx, 100px) 0; filter: brightness(0); opacity: 0; }
-  to { translate: 0 0; filter: brightness(0.9); opacity: 1; }
+.scv-upgrade-toggle:hover .scv-upgrade-label { color: #87ceeb; }
+/* 关键词 tips（原版 renderTips queuePowerTips @ W/2+340s, 420s from bottom） */
+.scv-tips {
+  position: absolute; left: 1083px; top: 548px; width: 360px;
+  display: flex; flex-direction: column; gap: 10px; z-index: 4;
+  animation: scv-fade-in 0.25s ease-out both;
 }
-/* 升级预览勾选框（原版 NTickbox：hover ×1.05+brightness1.2（0.05s），press ×0.95+brightness0.8，复归 0.5s ExpoOut） */
-.sts-inspect-tick {
-  display: flex; align-items: center; gap: 10px; cursor: pointer;
-  filter: brightness(1); scale: 1;
-  transition: scale 0.5s cubic-bezier(0.16, 1, 0.3, 1), filter 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+.scv-tip {
+  background: rgba(16, 9, 4, 0.94);
+  border: 2px solid #6b5433; border-radius: 6px;
+  padding: 10px 14px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.65), inset 0 0 12px rgba(0, 0, 0, 0.4);
 }
-.sts-inspect-tick:hover { scale: 1.05; filter: brightness(1.2); transition: scale 0.05s linear, filter 0.05s linear; }
-.sts-inspect-tick:active { scale: 0.95; filter: brightness(0.8); }
-.sts-tickbox {
-  width: 40px; height: 40px; flex: none;
-  border: 2.5px solid #a8834e; border-radius: 7px;
-  background: radial-gradient(ellipse at 35% 30%, #3a2a1a, #14100a 75%);
-  display: flex; align-items: center; justify-content: center;
-}
-.sts-tickbox.on { border-color: #ffd76a; box-shadow: 0 0 10px rgba(255, 205, 90, 0.5), inset 0 0 8px rgba(255, 205, 90, 0.25); }
-.sts-tickbox-check { color: #ffd76a; font-size: 26px; font-weight: 900; text-shadow: 0 0 8px rgba(255, 205, 90, 0.8); line-height: 1; }
 
 /* 按钮滑入（原版 NConfirmButton/NBackButton：启用时自隐藏位滑入） */
 @keyframes sts-btn-slide-r { from { translate: 180px 0; opacity: 0; } to { translate: 0 0; opacity: 1; } }

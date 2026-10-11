@@ -668,3 +668,25 @@ Stage Summary:
 - 原版药水体系补全为20种(远程18+钢铁精华/蛇油)，全部走图层合成架构；3处颜色按libGDX 1.9.5权威值修正
 - 本地/远程分叉对齐完成：本地线独有提交已重放合并，dc2a86d(重复第二十批)确认弃用；后续批次从第二十九批续编
 - 教训入库：跨会话批次推进必须先 git fetch 比对远程再开工（本会话在旧基线上重做撞车批次的根因）；沙箱回滚类事故以"远端为唯一权威"
+
+---
+Task ID: 31
+Agent: main
+Task: 会话恢复（摘要滞后校准）+ 第三十批：检视屏 PC 原版化（SingleCardViewPopup 复刻，两版本）
+
+Work Log:
+- 【会话恢复】交接摘要停留在"第二十五批"，worklog/git 考古实际已至第二十九批(5a31acf 本地=远程同步)；沙箱重启后 .next 生产构建全丢（dev server 顶替 :3000）→ npm run build + start_prod.sh 恢复；冒烟 regression16 + batch20 12+12 全绿。判定经验再次验证：摘要滞后时以 worklog+git 为准
+- 【原版考证·SingleCardViewPopup.java 全链路】布局：大卡=1024x1024 逻辑画布 1:1×scale 绘制（renderHelper orig 还原），卡身 bg ~597x838@offset(212,92)、frame 524x363@offset(251,449)、banner 648x153@offset(191,741)、orb 143x140（164 独立画布）、portrait=1024Portraits 目录（名字历史遗留，实际 500x380）@中心(W/2, H/2+136s)；字号 SCP_cardTitleFont_small 46/SCP_cardDescFont 48/panelNameFont 34/SCP_cardEnergyFont 76（我们舞台1600x900=原版1920×5/6）；色值 CARD_TYPE_COLOR=#595959(0.35灰)/BLUE_TEXT_COLOR=#87ceeb/GOLD_COLOR=#efc851（Java Color(int) RRGGBBAA 逆波兰序换算，GOLD 与第二十三批结论互证）；交互：点击卡外/Esc 关闭、POPUP_ARROW 256@W/2±400s（hover 白50%加色混合）、CHECKBOX+TICK"看升级版"@(W/2,70s)（allowUpgradePreview=非诅咒非状态；hover 蓝/平时金）、翻页保留 isViewingUpgrade（openPrev/Next tmp 传递）、open 默认 isViewingUpgrade=false、背景黑 0→0.9 pow2In 0.25s、renderTips 关键词面板@(W/2+340s,420s)
+- 【素材提取 extract_scv_assets.py】cardui.atlas 1024/* region 烘焙回 1024 全画布 webp（33张：bg 16+frame 9+banner 3+orb 5×164画布）→ inset:0 同盒渲染与 CardView 512 画布架构同构；1024Portraits 225 张→scvart/{我们卡id}.webp q80（scv_coverage.ts 生成映射：209 张 nameEn→snake_case 直配 + 16 张特殊名映射：thunder_clap/drop_kick/crippling_poison(我方误名 Crippling Cloud)/sweeping_beam/hyper_beam/multicast/consecrate(供奉)/crush_joints + status/{5张} curse/{3张} 无 type 子目录）；popupArrow/checkbox/tick 3 张；共 4.11MB。烘焙验证：bbox 对照 atlas 元数据（bg 非透明 46.9%≈597×838/1024² 47.8%）
+- 【Next 版】Overlays_inspect.tsx 新组件：ScvCard（1024 画布盒 + data-scv 测试钩子）+ InspectView 重写（旧手机版 NInspectCardScreen 风格整体替换）；布局换算：原版屏幕坐标→画布百分比（卡名@top14.6%中心17%=banner带、插画窗 20.7-79.3%/17.3-61.8%、类型行@52.2%中心53.9%=插画窗底缘与手牌卡 55.5% 互证、描述底端锚定@79.3%、字号=画布宽×原版字号/1024）；升级预览对齐原版语义：ticked 默认 false + shown=upgraded+1（推翻旧实现"默认=已升级/降级显示"）；关键词 tips：SCV_KEYWORDS(消耗/虚无/固有/保留) + STATUS_INFO 中文名匹配 desc 动态提取；globals.css 旧 sts-inspect-* 全套替换为 scv-*（pow2In≈cubic-bezier(0.42,0,1,1)）
+- 【standalone 版】ui.ts：scvCardHtml/inspectLayerHtml 重写（scvAllowUpgrade/scvTips 同构）、inspectOpen 重置 ticked、doInspectStep 保留 ticked（原版 tmp 传递）、doInspectClose 瞬关（原版无退场动画）；style.css 同步；make_assets.py 加 scv/scvart PASSTHROUGH 桶（989 文件 31.70MB）；单文件 39.13→44.62MB(+5.5MB)
+- 【重大既有 bug 修复·standalone 检视屏从未工作】sts-panel/inspect-root 的 inline onclick="event.stopPropagation()" 阻断事件冒泡到 document 的 data-act 委托 → 点击牌堆网格卡/检视箭头在单文件版从来打不开（历史批次从未自动化覆盖 standalone 检视交互，真实鼠标点击同样中招）；修复：移除两处 inline 拦截，委托 handler 内实现忽略语义（closest data-act 命中 .overlay 根且点击在 .sts-panel/.inspect-root 内 → 不触发 closePile）。定位链：console 无 handler 日志 → document 探针收不到 panel 内点击 → 对比 closePile 疑云（overlay 根 data-act 与按钮同名）→ 事件流实锤
+- 【test_batch30 双版本 34+34】A 素材(36+225 抽验/webp RIFF 或 data URI 头) B 结构(853 画布/图层齐全/文案) C 布局字号(46/48/34/76×5/6 精确断言/卡名 CREAM/类型 #595959/行距比 1.07) D 升级预览(默认非绿/勾选后名字+数值+tick) E 翻页(端点箭头隐藏/保留勾选/bash 10 绿/诅咒卡无按钮无宝珠/诅咒底板) F 关闭(背板点击/Esc)。测试技术：offsetWidth 替代 getBoundingClientRect(舞台 scale 陷阱 第二十五批再验证)、computed lineHeight 是 px 须换算比值、着色 span 须 span[style*=color]（首个 span 是无色文本段）、背板点击用 el.click() 派发（agent-browser click 中心点被大卡判遮挡）、SRC 宏占位符须 replaceAll
+- 【全套回归】batch30 34+34 / regression 16 / regression5 412 / bugcheck 29+29 / batch20 12+12 / batch21 34+42 / batch22 22+20 / batch23 37+37 / batch25 16+16 / batch27 13+13 / batch28 13+13 / batch29 13+13 / mptest 22 / fulltest 全流程 gameover——全绿
+- 【VLM 验收】双版本四场景(base/upgrade/curse/tips) 8/8 全符合：图层无错位/字号清晰/类型+描述不重叠/升级绿名绿数值/tick/诅咒无按钮无宝珠/tips 面板不重叠/箭头+黑背景
+
+Stage Summary:
+- 检视屏从手机版风格(NInspectCardScreen 小卡放大+SVG金箭头)升级为 PC 原版 SingleCardViewPopup 精确复刻：1024 画布大卡框架素材 + 1024Portraits 225 张高清插画 + 原版字号/色值/交互语义，双版本同步
+- 重大既有 bug 入库：standalone 版 inline stopPropagation 阻断 document data-act 委托（检视屏从未工作，历史无自动化覆盖）；修复模式=委托内忽略语义替代 inline 拦截
+- 方法论入库：atlas region 烘焙回 orig 全画布→inset:0 同盒渲染（与 512 画布架构同构，零 CSS 坐标换算）；1024Portraits 目录名陷阱（实际 500x380）；Java Color(int) 是 RGBA 倒序需逆波兰换算
+- 后续候选（承队列）：商店宝箱 UI 素材原版化 / 房间切换渐变过渡(第十四批研究收获未落地) / 奖励屏与商店卡的右键检视入口（原版 CardRewardScreen/ShopScreen 均可 open(card)）

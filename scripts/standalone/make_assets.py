@@ -10,6 +10,10 @@ OUT = '/home/z/my-project/scripts/standalone/assets.json'
 # 第十八批新增: campfire/events/title 需内联（篝火按钮/事件插画/漂云）
 PLANS = {
     'cardart': (None, 'PASSTHROUGH', None),  # 已离线烘焙为 512 画布 WebP（带透明，与边框同盒渲染）→ 直接内联
+    # 第三十批：检视屏（SingleCardViewPopup）——1024 画布大卡框架（bg/frame/banner/orb）+ UI 三件套，
+    # 已离线烘焙为全画布 WebP → 直接内联；scvart = 1024Portraits 225 张 500x380 高清插画（webp q80）
+    'scv': (None, 'PASSTHROUGH', None),
+    'scvart': (None, 'PASSTHROUGH', None),
     'enemies': (None, 'WEBP_ONLY', None),  # 第二十七批：原版 idle 动画 WebP（动图直通；静态 png 已废弃删除）
     'frames': (None, 'PNG', None),   # 卡框保持
     'hero': (None, 'PNG', None),

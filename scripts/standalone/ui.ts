@@ -2,7 +2,7 @@
 // 架构：1600×900 舞台等比缩放 + 屏幕切换时构建骨架 + 状态更新时仅差异更新区域
 // 修复：innerHTML 全量重建导致的画面闪动；补上选牌/牌堆遮罩渲染
 import { useGame } from '@/store/gameStore'
-import { CARDS, cardCost, cardDesc, cardDescParts, cardValues, cardColor } from '@/game/cards'
+import { CARDS, cardCost, cardDesc, cardDescParts, cardValues, cardColor, isStatusCard } from '@/game/cards'
 import { ENEMIES } from '@/game/enemies'
 import { RELICS } from '@/game/relics'
 import { POTIONS } from '@/game/potions'
@@ -2062,9 +2062,9 @@ let scryMarked: Set<string> = new Set()
 // 战斗内升级预览选中的卡 uid（原版 NUpgradePreview；空 = 未预览）
 let armPreviewUid: string | null = null
 
-// ============ 检视屏状态（原版 NInspectCardScreen：大卡+金箭头+升级预览勾选） ============
+// ============ 检视屏状态（第三十批：原版 PC SingleCardViewPopup 复刻） ============
 let inspectUid: string | null = null
-let inspectTicked = false
+let inspectTicked = false   // 原版 isViewingUpgrade：默认 false，翻页保留（openPrev/openNext tmp 传递）
 let inspectGen = 0
 let inspectDir = 0
 let inspectClosing = false
@@ -2076,29 +2076,90 @@ function pileCardsOf(run: RunState, pile: string): CardInstance[] {
   return run.deck
 }
 
-// 检视层 HTML：黑0.9背板 + 大卡（切卡±100px滑入）+ 金箭头（端点隐藏）+ 升级预览勾选框
+// 原版 allowUpgradePreview：非诅咒(color!=CURSE)且非状态(type!=STATUS)
+function scvAllowUpgrade(card: CardInstance): boolean {
+  const def = CARDS[card.id]
+  return !!def && !def.curse && !isStatusCard(card.id)
+}
+
+// 检视屏关键词 tips（原版 GameDictionary.keywords → renderTips @ W/2+340s, 420s）
+const SCV_KEYWORDS: Record<string, string> = {
+  '消耗': '打出后，这张牌将在本场战斗中移除。',
+  '虚无': '回合结束时，消耗这张牌。',
+  '固有': '在每场战斗开始时，这张牌就在你的手牌中。',
+  '保留': '这张牌不会被弃置。回合结束时将其保留在手牌中。',
+}
+function scvTips(card: CardInstance): { name: string; desc: string }[] {
+  const def = CARDS[card.id]
+  if (!def) return []
+  const text = `${def.desc} ${def.upDesc || ''}`
+  const out: { name: string; desc: string }[] = []
+  const seen = new Set<string>()
+  for (const [kw, desc] of Object.entries(SCV_KEYWORDS)) {
+    if (text.includes(kw) && !seen.has(kw)) { out.push({ name: kw, desc }); seen.add(kw) }
+  }
+  for (const info of Object.values(STATUS_INFO)) {
+    if (info.name.length >= 2 && text.includes(info.name) && !seen.has(info.name)) {
+      out.push({ name: info.name, desc: info.desc }); seen.add(info.name)
+    }
+  }
+  return out.slice(0, 5)
+}
+
+// 检视屏大卡（1024 画布盒：bg/大图插画/frame/banner 烘焙为 1024 全画布图 inset:0 同盒渲染）
+// 布局：原版 1920×1080 ×5/6 → 舞台 1600×900；字号 = 画布宽 × 原版字号/1024
+function scvCardHtml(card: CardInstance, viewingUpgrade: boolean, canvasW = 853): string {
+  const def = CARDS[card.id]
+  if (!def) return ''
+  const cursed = !!def.curse
+  const status = isStatusCard(card.id)
+  const colorRaw = cursed || status ? 'colorless' : (def.color || 'red')
+  const color = colorRaw.charAt(0).toUpperCase() + colorRaw.slice(1)
+  const rar = def.rarity === 'rare' ? 'Rare' : def.rarity === 'uncommon' ? 'Uncommon' : 'Common'
+  const typeCap = def.type.charAt(0).toUpperCase() + def.type.slice(1)
+  const bg = cursed ? A('scv/bgSkillCurse.webp') : A(`scv/bg${typeCap}${color}.webp`)
+  const frame = A(`scv/frame${typeCap}${rar}.webp`)
+  const banner = A(`scv/banner${rar}.webp`)
+  const orb = A(`scv/orb${color}.webp`)
+  const cost = cardCost(card)
+  const f = (n: number) => Math.round(canvasW * n / 1024)
+  const typeName = def.type === 'attack' ? '攻击' : def.type === 'power' ? '能力' : '技能'
+  // 描述：底端锚定，行距 1.53×cap≈1.07；查看升级版时动态值全绿（原版 upgradedD/B/M → GREEN_TEXT）
+  const segs = cardDescParts(card, undefined, viewingUpgrade ? (_idx: number, v: number) => ({ v, color: '#7fff00' }) : undefined)
+    .map(s => s.c ? `<span style="color:${s.c};font-weight:700">${esc(s.t)}</span>` : esc(s.t)).join('')
+  const pct = (p: number) => `${(p * 100).toFixed(2)}%`
+  return `<div class="scv-card" style="width:${canvasW}px;height:${canvasW}px">
+    <img class="scv-layer" data-scv="bg" src="${bg}" alt="">
+    <img class="scv-art" data-scv="art" src="${A(`scvart/${card.id}.webp`)}" alt="${esc(def.name)}" style="left:${pct(0.207)};top:${pct(0.173)};width:${pct(0.586)};height:${pct(0.445)}">
+    <img class="scv-layer" data-scv="frame" src="${frame}" alt="">
+    <img class="scv-layer" data-scv="banner" src="${banner}" alt="">
+    ${cost !== -99 ? `<img class="scv-art" data-scv="orb" src="${orb}" alt="" style="left:${pct(0.156)};top:${pct(0.049)};width:${pct(0.16)};height:${pct(0.16)}">
+    <div class="sts-title" data-scv="cost" style="position:absolute;left:${pct(0.175)};top:${pct(0.049)};width:${pct(0.14)};height:${pct(0.16)};display:flex;align-items:center;justify-content:center;font-size:${f(76)}px;color:#fff6e2;text-shadow:3px 3px 0 #000">${cost === -1 ? 'X' : cost}</div>` : ''}
+    <div class="sts-title" data-scv="name" style="position:absolute;left:${pct(0.10)};width:${pct(0.80)};top:${pct(0.146)};height:${pct(0.052)};display:flex;align-items:center;justify-content:center;font-size:${f(46)}px;line-height:1.05;overflow:hidden;color:${viewingUpgrade ? '#7fff00' : '#fff6e2'};text-shadow:2px 2px 0 #000,0 0 10px rgba(0,0,0,.8)">${esc(def.name)}</div>
+    <div data-scv="type" style="position:absolute;left:${pct(0.10)};width:${pct(0.80)};top:${pct(0.522)};height:${pct(0.034)};display:flex;align-items:center;justify-content:center"><span class="sts-body" style="font-size:${f(34)}px;color:#595959;letter-spacing:1px;text-shadow:0 1px 1px rgba(0,0,0,.35)">${typeName}</span></div>
+    <div class="sts-body" data-scv="desc" style="position:absolute;left:${pct(0.10)};width:${pct(0.80)};top:${pct(0.558)};height:${pct(0.235)};font-size:${f(48)}px;line-height:1.07;color:#fff6e2;text-shadow:2px 2px 2px #000;text-align:center;display:flex;align-items:flex-end;justify-content:center;overflow:hidden"><div style="width:100%">${segs}</div></div>
+  </div>`
+}
+
+// 检视层 HTML：黑0.9背板(pow2In 0.25s) + 1024大卡 + POPUP_ARROW 翻页（端点隐藏）+
+// CHECKBOX/TICK「看升级版」（诅咒/状态卡隐藏）+ 关键词 tips；点击卡外/Esc 关闭
 function inspectLayerHtml(cards: CardInstance[]): string {
   const idx = Math.max(0, cards.findIndex(c => c.uid === inspectUid))
   const card = cards[idx]
   if (!card) return ''
-  const shown: CardInstance = inspectTicked
-    ? { ...card, upgraded: Math.max(1, card.upgraded + 1) }
-    : card.upgraded > 0 ? { ...card, upgraded: card.upgraded - 1 } : card
-  const animCls = inspectGen === 0 ? 'inspect-card-in' : (inspectDir < 0 ? 'inspect-nav-l' : 'inspect-nav-r')
-  const arrow = (left: boolean) => `<svg width="52" height="52" viewBox="0 0 52 52" fill="none"><path d="${left ? 'M33 10 L17 26 L33 42' : 'M19 10 L35 26 L19 42'}" stroke="#e8b855" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`
-  return `<div class="inspect-root" onclick="event.stopPropagation()">
-    <div class="inspect-backdrop ${inspectClosing ? 'closing' : ''}" data-act="inspectClose"></div>
-    <div class="inspect-body">
-      <div class="inspect-card-wrap ${animCls}" key="insp-${inspectGen}">${cardHtml(shown, 300)}</div>
-      ${idx > 0 ? `<div class="inspect-arrow inspect-arr-in-l" data-act="inspectStep" data-dir="-1" title="上一张 (←)">${arrow(true)}</div>` : ''}
-      ${idx < cards.length - 1 ? `<div class="inspect-arrow inspect-arr-in-r" data-act="inspectStep" data-dir="1" title="下一张 (→)">${arrow(false)}</div>` : ''}
-      <div class="inspect-tick" data-act="inspectToggle">
-        <div class="tickbox ${inspectTicked ? 'on' : ''}">${inspectTicked ? '<span class="tickbox-check">✓</span>' : ''}</div>
-        <span class="sts-title" style="font-size:17px;color:${inspectTicked ? '#ffd76a' : '#c8b090'};text-shadow:2px 2px 0 #000;letter-spacing:2px">查看升级</span>
-      </div>
-      <div class="inspect-count">${idx + 1} / ${cards.length}</div>
-      <div class="inspect-hint">←/→ 切换 · 空格升级预览 · Esc 关闭</div>
-    </div>
+  const allowUp = scvAllowUpgrade(card)
+  const shown: CardInstance = inspectTicked ? { ...card, upgraded: card.upgraded + 1 } : card
+  const tips = scvTips(card)
+  return `<div class="inspect-root">
+    <div class="scv-backdrop" data-act="inspectClose"></div>
+    <div class="scv-card-center">${scvCardHtml(shown, inspectTicked)}</div>
+    ${idx > 0 ? `<div class="scv-arrow" data-act="inspectStep" data-dir="-1" title="上一张 (←)"><img src="${A('scv/arrow.webp')}" alt=""></div>` : ''}
+    ${idx < cards.length - 1 ? `<div class="scv-arrow scv-arrow-next" data-act="inspectStep" data-dir="1" title="下一张 (→)"><img src="${A('scv/arrow.webp')}" alt=""></div>` : ''}
+    ${allowUp ? `<div class="scv-upgrade-toggle" data-act="inspectToggle" title="查看升级后的数值 (空格)">
+      <div class="scv-checkbox"><img src="${A('scv/checkbox.webp')}" alt="">${inspectTicked ? `<img class="scv-tick-img" src="${A('scv/tick.webp')}" alt="">` : ''}</div>
+      <span class="sts-title scv-upgrade-label">看升级版</span>
+    </div>` : ''}
+    ${tips.length ? `<div class="scv-tips">${tips.map(t => `<div class="scv-tip"><div class="sts-title" style="font-size:21px;color:#ffd76a;text-shadow:2px 2px 0 #000">${esc(t.name)}</div><div class="sts-body" style="font-size:16px;color:#e8dcc8;line-height:1.4">${esc(t.desc)}</div></div>`).join('')}</div>` : ''}
   </div>`
 }
 
@@ -2117,21 +2178,29 @@ function doInspectStep(d: number) {
   inspectDir = d
   inspectGen++
   inspectUid = cards[i].uid
-  inspectTicked = cards[i].upgraded > 0
+  // 原版 openPrev/openNext：翻页保留 isViewingUpgrade（tmp 传递）
   inspectRerender()
 }
 
 function doInspectToggle() {
   if (!inspectUid || inspectClosing) return
+  const st = g()
+  if (!st.run || !st.pileView) return
+  const cards = pileCardsOf(st.run, st.pileView)
+  const card = cards.find(c => c.uid === inspectUid)
+  if (!card || !scvAllowUpgrade(card)) return
   inspectTicked = !inspectTicked
   inspectRerender()
 }
 
 function doInspectClose() {
   if (!inspectUid || inspectClosing) return
-  inspectClosing = true
+  // 原版 close()：直接关闭（无退场动画）
+  inspectUid = null
+  inspectTicked = false
+  inspectClosing = false
+  inspectGen = 0
   inspectRerender()
-  setTimeout(() => { inspectUid = null; inspectClosing = false; inspectGen = 0; inspectRerender() }, 240)
 }
 
 function overlayHtml(st: ReturnType<typeof g>): { html: string; sig: string } {
@@ -2169,7 +2238,7 @@ function overlayHtml(st: ReturnType<typeof g>): { html: string; sig: string } {
     return {
       sig,
       html: `<div class="overlay" data-act="closePile">
-        <div class="sts-panel" style="padding:22px;max-width:1440px;max-height:800px;display:flex;flex-direction:column;align-items:center;gap:14px" onclick="event.stopPropagation()">
+        <div class="sts-panel" style="padding:22px;max-width:1440px;max-height:800px;display:flex;flex-direction:column;align-items:center;gap:14px">
           <div class="sts-title" style="font-size:24px;color:#ffd980">${titles[pile]} <small style="font-size:15px;color:#a89070">(${cards.length})</small></div>
           <div class="sel-cards" style="max-height:620px">${grid || '<div class="sts-body">空空如也</div>'}</div>
           <button class="sts-btn slide-btn-r" data-act="closePile">关闭</button>
@@ -2929,11 +2998,7 @@ const ACTIONS: Record<string, (el: HTMLElement) => void> = {
     inspectGen = 0
     inspectDir = 0
     inspectClosing = false
-    const st = g()
-    if (st.run && st.pileView) {
-      const c = pileCardsOf(st.run, st.pileView).find(x => x.uid === inspectUid)
-      inspectTicked = !!c && c.upgraded > 0
-    }
+    inspectTicked = false   // 原版 open(): isViewingUpgrade = false
     inspectRerender()
   },
   inspectStep: (el) => doInspectStep(Number(el.dataset.dir || 1)),
@@ -3004,7 +3069,14 @@ const ACTIONS: Record<string, (el: HTMLElement) => void> = {
 }
 
 document.addEventListener('click', (e) => {
-  const el = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null
+  const t = e.target as HTMLElement
+  let el = t.closest('[data-act]') as HTMLElement | null
+  // 第三十批修复：panel/检视层内的点击不得触发 .overlay 根的 closePile（原 inline stopPropagation 语义
+  // 移到委托内——inline 版本会连 data-act 冒泡一起挡死，导致单文件版检视屏从来打不开的既有 bug）
+  if (el && el.classList.contains('overlay') && t.closest('.sts-panel, .inspect-root')) {
+    e.stopPropagation()
+    return
+  }
   if (el && el.dataset.act && ACTIONS[el.dataset.act]) {
     e.stopPropagation()
     ACTIONS[el.dataset.act](el)
