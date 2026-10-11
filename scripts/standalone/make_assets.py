@@ -66,8 +66,8 @@ for d, (maxside, fmt, quality) in PLANS.items():
         # 第十八批：已被原版图替换的旧背景不再内联（combat1-4/campfire*/event*/menubg 在用）
         if d == 'bg' and f in ('combat.jpg', 'menu.jpg'):
             continue
-        # 漂云仅内联在用的 3 张（其余 4 张未使用）
-        if d == 'title' and f not in ('mg2.png', 'topCloud2.png', 'midCloud13.png'):
+        # 第二十五批：主菜单只内联在用的 WebP 素材（mg3Top/18朵云/2红光；旧 PNG 云已弃用）
+        if d == 'title' and not f.endswith('.webp'):
             continue
         path = os.path.join(dp, f)
         key = f'{d}/{f}'

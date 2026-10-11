@@ -14,6 +14,60 @@ const A = '/assets'
 
 const CHARACTERS: CharacterId[] = ['ironclad', 'silent', 'defect', 'watcher']
 
+// ============ 原版主菜单背景（TitleBackground.java 还原，第二十五批） ============
+// 原版层次：sky(1920x1469,底部裁100px) → mg3Top(1920x1140,底部对齐铺满) →
+//   塔身红光mg3TopGlow1/2(加法混合呼吸) → midClouds×12(向左) → topClouds×6(向右) → logo
+// 云按原版 1920x1266 设计画布定位（画布底在屏幕顶下方 1080+20px 处），
+// 漂移 wrap 语义与原版一致（x 越过 ±1920 从另一侧回来），速度取原版 10~50px/s 区间
+const STS_S = 1600 / 1920 // 舞台(1600) 与原版美术(1920) 缩放比
+// [文件名, packedW, packedH, offX, offY(自画布底), 速度px/s, 负延迟s, y抖动px]
+type CloudDef = [string, number, number, number, number, number, number, number]
+const MID_CLOUDS: CloudDef[] = [ // 中层云：向左漂移（原版 vX=-50~-10）
+  ['midCloud1', 452, 165, 582, 740, -14, -90, 10],
+  ['midCloud2', 856, 216, 445, 740, -30, -200, -14],
+  ['midCloud3', 775, 203, 535, 751, -22, -330, 8],
+  ['midCloud4', 642, 179, 554, 760, -40, -120, -20],
+  ['midCloud5', 1252, 284, 376, 52, -18, -280, 16],
+  ['midCloud6', 272, 57, 665, 651, -36, -60, -6],
+  ['midCloud7', 911, 186, 506, 46, -26, -150, 12],
+  ['midCloud8', 1293, 372, 558, 86, -33, -370, -10],
+  ['midCloud9', 1686, 581, 41, 390, -16, -220, 18],
+  ['midCloud10', 635, 341, 473, 498, -28, -50, -16],
+  ['midCloud11', 1237, 638, 637, 190, -24, -300, 6],
+  ['midCloud12', 1519, 595, 342, 232, -35, -170, -12],
+]
+const TOP_CLOUDS: CloudDef[] = [ // 顶层云：向右漂移（原版 vX=10~50）
+  ['topCloud1', 558, 176, 811, 807, 15, -100, 12],
+  ['topCloud2', 1561, 374, 118, 398, 38, -250, -8],
+  ['topCloud3', 1299, 350, 257, 182, 25, -40, 16],
+  ['topCloud4', 585, 181, 1199, 677, 33, -180, -18],
+  ['topCloud5', 599, 151, 10, 445, 20, -310, 10],
+  ['topCloud6', 411, 97, 95, 872, 42, -70, -10],
+]
+/** 单朵漂云：定位/尺寸按原版画布等比换算，动画区间复刻原版 ±1920 wrap */
+function TitleCloud({ def }: { def: CloudDef }) {
+  const [name, w, h, offX, offY, v, delay, jit] = def
+  const from = -(1920 / Math.sign(v || 1) + offX) * STS_S // 向右:-(1920+offX) 向左:(1920-offX)
+  const to = (1920 * Math.sign(v || 1) - offX) * STS_S    // 向右:(1920-offX)  向左:-(1920+offX)
+  return (
+    <img
+      src={`${A}/title/${name}.webp`}
+      alt=""
+      draggable={false}
+      className="sts-cloud"
+      style={{
+        left: offX * STS_S,
+        top: (1100 - offY - h) * STS_S + jit,
+        width: w * STS_S,
+        ['--from' as string]: `${from.toFixed(1)}px`,
+        ['--to' as string]: `${to.toFixed(1)}px`,
+        ['--dur' as string]: `${(3200 / Math.abs(v * STS_S)).toFixed(1)}s`,
+        animationDelay: `${delay}s`,
+      }}
+    />
+  )
+}
+
 const CHAR_BORDER: Record<CharacterId, string> = {
   ironclad: '#b03828',
   silent: '#3a9a5a',
@@ -39,20 +93,34 @@ export function MainMenuScreen() {
 
   return (
     <div className="w-full h-full relative flex flex-col items-center justify-center select-none overflow-hidden sts-screen-fade">
-      {/* 原版主视觉背景：尖塔剪影 */}
+      {/* 原版 sky（jpg/sky 1920x1469）：cover 后底部对齐再裁 83px（=原版 y=-100） */}
       <div
         className="absolute inset-0"
         style={{
           backgroundImage: `url(${A}/bg/menubg.jpg)`,
           backgroundSize: 'cover',
-          backgroundPosition: 'center 38%',
+          backgroundPosition: 'center -241px',
         }}
       />
-      {/* 原版标题屏漂云（TitleCloud.java：x += vX·dt 环绕） */}
-      <img src={`${A}/title/midCloud13.png`} alt="" draggable={false} className="sts-cloud sts-cloud-far" />
-      <img src={`${A}/title/topCloud2.png`} alt="" draggable={false} className="sts-cloud sts-cloud-mid" />
-      <img src={`${A}/title/mg2.png`} alt="" draggable={false} className="sts-cloud sts-cloud-near" />
-      <div className="main-menu-fog" />
+      {/* 原版中景 mg3Top（1920x1140）：底部对齐铺满，顶部溢出 50px（=原版 60px×S） */}
+      <img
+        src={`${A}/title/mg3Top.webp`}
+        alt=""
+        draggable={false}
+        className="absolute left-0 bottom-0 w-full pointer-events-none select-none"
+      />
+      {/* 塔身红光（原版 mg3TopGlow1/2，加法混合呼吸，周期 5.76s） */}
+      <img
+        src={`${A}/title/mg3TopGlow1.webp`} alt="" draggable={false}
+        className="sts-glow" style={{ left: 225 * STS_S, top: (1080 - 289 - 60) * STS_S, width: 158 * STS_S }}
+      />
+      <img
+        src={`${A}/title/mg3TopGlow2.webp`} alt="" draggable={false}
+        className="sts-glow" style={{ left: 234 * STS_S, top: (1080 - 330 - 60) * STS_S, width: 153 * STS_S, animationDelay: '-2.9s' }}
+      />
+      {/* 原版 18 朵漂云：先画 midClouds（下层），再画 topClouds（上层） */}
+      {MID_CLOUDS.map(def => <TitleCloud key={def[0]} def={def} />)}
+      {TOP_CLOUDS.map(def => <TitleCloud key={def[0]} def={def} />)}
 
       {/* 官方 Logo */}
       <div className="relative flex flex-col items-center" style={{ marginBottom: 30 }}>

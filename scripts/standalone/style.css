@@ -861,13 +861,22 @@ img { -webkit-user-drag: none; }
 
 /* ============ 第十八批：原版资源还原 ============ */
 /* 标题屏漂云（原版 TitleCloud.java：x += vX·dt 环绕） */
-.sts-cloud { position: absolute; left: 0; pointer-events: none; user-select: none; opacity: .85; }
-.sts-cloud-far  { top: 6%;  width: 34vw; animation: sts-cloud-drift 130s linear infinite; }
-.sts-cloud-mid  { top: 16%; width: 44vw; animation: sts-cloud-drift 95s linear infinite; animation-delay: -40s; opacity: .9; }
-.sts-cloud-near { top: 34%; width: 60vw; animation: sts-cloud-drift 70s linear infinite; animation-delay: -25s; opacity: .95; }
+.sts-cloud {
+  position: absolute; left: 0; pointer-events: none; user-select: none; will-change: transform;
+  animation: sts-cloud-drift var(--dur) linear infinite;
+}
 @keyframes sts-cloud-drift {
-  from { transform: translateX(-70vw); }
-  to   { transform: translateX(110vw); }
+  from { transform: translateX(var(--from)); }
+  to   { transform: translateX(var(--to)); }
+}
+/* 塔身红光：加法混合 + 呼吸(周期5.76s，原版 mg3TopGlow) */
+.sts-glow {
+  position: absolute; pointer-events: none; user-select: none; mix-blend-mode: screen;
+  animation: sts-glow-breathe 5.76s ease-in-out infinite;
+}
+@keyframes sts-glow-breathe {
+  0%, 100% { opacity: .55; }
+  50%      { opacity: .15; }
 }
 /* 篝火按钮（原版 images/ui/campfire：木面板 + sleep/smith 原版图标） */
 .camp-btn {

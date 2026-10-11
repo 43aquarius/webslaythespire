@@ -1,0 +1,182 @@
+{
+ "topCloud1": {
+  "w": 558,
+  "h": 176,
+  "origW": 1920,
+  "origH": 1266,
+  "offX": 811,
+  "offY": 807,
+  "kb": 14.2
+ },
+ "topCloud2": {
+  "w": 1561,
+  "h": 374,
+  "origW": 1920,
+  "origH": 1266,
+  "offX": 118,
+  "offY": 398,
+  "kb": 55.5
+ },
+ "topCloud3": {
+  "w": 1299,
+  "h": 350,
+  "origW": 1920,
+  "origH": 1266,
+  "offX": 257,
+  "offY": 182,
+  "kb": 48.1
+ },
+ "topCloud4": {
+  "w": 585,
+  "h": 181,
+  "origW": 1920,
+  "origH": 1266,
+  "offX": 1199,
+  "offY": 677,
+  "kb": 10.5
+ },
+ "topCloud5": {
+  "w": 599,
+  "h": 151,
+  "origW": 1920,
+  "origH": 1266,
+  "offX": 10,
+  "offY": 445,
+  "kb": 12.8
+ },
+ "topCloud6": {
+  "w": 411,
+  "h": 97,
+  "origW": 1920,
+  "origH": 1266,
+  "offX": 95,
+  "offY": 872,
+  "kb": 8.1
+ },
+ "midCloud1": {
+  "w": 452,
+  "h": 165,
+  "origW": 1920,
+  "origH": 1266,
+  "offX": 582,
+  "offY": 740,
+  "kb": 13.5
+ },
+ "midCloud2": {
+  "w": 856,
+  "h": 216,
+  "origW": 1920,
+  "origH": 1266,
+  "offX": 445,
+  "offY": 740,
+  "kb": 24.8
+ },
+ "midCloud3": {
+  "w": 775,
+  "h": 203,
+  "origW": 1920,
+  "origH": 1266,
+  "offX": 535,
+  "offY": 751,
+  "kb": 21.6
+ },
+ "midCloud4": {
+  "w": 642,
+  "h": 179,
+  "origW": 1920,
+  "origH": 1266,
+  "offX": 554,
+  "offY": 760,
+  "kb": 18.9
+ },
+ "midCloud5": {
+  "w": 1252,
+  "h": 284,
+  "origW": 1920,
+  "origH": 1266,
+  "offX": 376,
+  "offY": 52,
+  "kb": 53.1
+ },
+ "midCloud6": {
+  "w": 272,
+  "h": 57,
+  "origW": 1920,
+  "origH": 1266,
+  "offX": 665,
+  "offY": 651,
+  "kb": 6.5
+ },
+ "midCloud7": {
+  "w": 911,
+  "h": 186,
+  "origW": 1920,
+  "origH": 1266,
+  "offX": 506,
+  "offY": 46,
+  "kb": 34.3
+ },
+ "midCloud8": {
+  "w": 1293,
+  "h": 372,
+  "origW": 1920,
+  "origH": 1266,
+  "offX": 558,
+  "offY": 86,
+  "kb": 57.8
+ },
+ "midCloud9": {
+  "w": 1686,
+  "h": 581,
+  "origW": 1920,
+  "origH": 1266,
+  "offX": 41,
+  "offY": 390,
+  "kb": 76.2
+ },
+ "midCloud10": {
+  "w": 635,
+  "h": 341,
+  "origW": 1920,
+  "origH": 1266,
+  "offX": 473,
+  "offY": 498,
+  "kb": 15.4
+ },
+ "midCloud11": {
+  "w": 1237,
+  "h": 638,
+  "origW": 1920,
+  "origH": 1266,
+  "offX": 637,
+  "offY": 190,
+  "kb": 62.7
+ },
+ "midCloud12": {
+  "w": 1519,
+  "h": 595,
+  "origW": 1920,
+  "origH": 1266,
+  "offX": 342,
+  "offY": 232,
+  "kb": 114.8
+ },
+ "mg3TopGlow1": {
+  "w": 158,
+  "h": 289,
+  "origW": 1920,
+  "origH": 1140,
+  "offX": 225,
+  "offY": 0,
+  "kb": 3.9
+ },
+ "mg3TopGlow2": {
+  "w": 153,
+  "h": 330,
+  "origW": 1920,
+  "origH": 1140,
+  "offX": 234,
+  "offY": 0,
+  "kb": 4.4
+ }
+}

@@ -1083,13 +1083,25 @@
 
 /* ============ 第十八批：原版资源还原样式 ============ */
 /* 标题屏漂云（原版 TitleCloud.java: x += vX·dt 环绕；三档深度不同速度） */
-.sts-cloud { position: absolute; left: 0; pointer-events: none; user-select: none; opacity: 0.85; }
-.sts-cloud-far  { top: 6%;  width: 34vw; animation: sts-cloud-drift 130s linear infinite; }
-.sts-cloud-mid  { top: 16%; width: 44vw; animation: sts-cloud-drift 95s linear infinite; animation-delay: -40s; opacity: 0.9; }
-.sts-cloud-near { top: 34%; width: 60vw; animation: sts-cloud-drift 70s linear infinite; animation-delay: -25s; opacity: 0.95; }
+/* ============ 原版主菜单漂云（TitleCloud.java，第二十五批） ============
+   18 朵云按原版画布定位；动画区间由 --from/--to 变量驱动（复刻原版 ±1920 wrap），
+   每朵速度/相位/y 抖动为固定配置（避免 hydration 随机不一致） */
+.sts-cloud {
+  position: absolute; left: 0; pointer-events: none; user-select: none; will-change: transform;
+  animation: sts-cloud-drift var(--dur) linear infinite;
+}
 @keyframes sts-cloud-drift {
-  from { transform: translateX(-70vw); }
-  to   { transform: translateX(110vw); }
+  from { transform: translateX(var(--from)); }
+  to   { transform: translateX(var(--to)); }
+}
+/* 塔身红光：原版 blendFunc(SRC_ALPHA, ONE) 加法混合 + alpha 呼吸(0.15~0.55, 周期5.76s) */
+.sts-glow {
+  position: absolute; pointer-events: none; user-select: none; mix-blend-mode: screen;
+  animation: sts-glow-breathe 5.76s ease-in-out infinite;
+}
+@keyframes sts-glow-breathe {
+  0%, 100% { opacity: .55; }
+  50%      { opacity: .15; }
 }
 
 /* 篝火按钮（原版 images/ui/campfire：wood 面板 + 原版 sleep/smith 图标） */

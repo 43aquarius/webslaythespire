@@ -651,6 +651,30 @@ const CHAR_COLOR: Record<string, string> = { ironclad: '#b03828', silent: '#3a9a
 let selectedChar: CharacterId = 'ironclad'
 
 // ---- 主菜单（原版风格：官方Logo + 尖塔主视觉 + 石板按钮） ----
+// 原版 TitleBackground.java 还原（第二十五批）：sky → mg3Top → 塔身红光 → midClouds×12 → topClouds×6 → logo
+const STS_S = 1600 / 1920
+// [文件名, packedW, packedH, offX, offY(自画布底), 速度px/s, 负延迟s, y抖动px]
+const MID_CLOUDS: [string, number, number, number, number, number, number, number][] = [
+  ['midCloud1', 452, 165, 582, 740, -14, -90, 10], ['midCloud2', 856, 216, 445, 740, -30, -200, -14],
+  ['midCloud3', 775, 203, 535, 751, -22, -330, 8], ['midCloud4', 642, 179, 554, 760, -40, -120, -20],
+  ['midCloud5', 1252, 284, 376, 52, -18, -280, 16], ['midCloud6', 272, 57, 665, 651, -36, -60, -6],
+  ['midCloud7', 911, 186, 506, 46, -26, -150, 12], ['midCloud8', 1293, 372, 558, 86, -33, -370, -10],
+  ['midCloud9', 1686, 581, 41, 390, -16, -220, 18], ['midCloud10', 635, 341, 473, 498, -28, -50, -16],
+  ['midCloud11', 1237, 638, 637, 190, -24, -300, 6], ['midCloud12', 1519, 595, 342, 232, -35, -170, -12],
+]
+const TOP_CLOUDS: [string, number, number, number, number, number, number, number][] = [
+  ['topCloud1', 558, 176, 811, 807, 15, -100, 12], ['topCloud2', 1561, 374, 118, 398, 38, -250, -8],
+  ['topCloud3', 1299, 350, 257, 182, 25, -40, 16], ['topCloud4', 585, 181, 1199, 677, 33, -180, -18],
+  ['topCloud5', 599, 151, 10, 445, 20, -310, 10], ['topCloud6', 411, 97, 95, 872, 42, -70, -10],
+]
+function rCloud(def: [string, number, number, number, number, number, number, number]): string {
+  const [name, w, h, offX, offY, v, delay, jit] = def
+  const sign = v > 0 ? 1 : -1
+  const from = -(1920 / sign + offX) * STS_S
+  const to = (1920 * sign - offX) * STS_S
+  return `<img class="sts-cloud" src="${A('title/' + name + '.webp')}" draggable="false" alt=""
+    style="left:${(offX * STS_S).toFixed(1)}px;top:${((1100 - offY - h) * STS_S + jit).toFixed(1)}px;width:${(w * STS_S).toFixed(1)}px;--from:${from.toFixed(1)}px;--to:${to.toFixed(1)}px;--dur:${(3200 / Math.abs(v * STS_S)).toFixed(1)}s;animation-delay:${delay}s">`
+}
 function rMainMenu(): string {
   const canCont = hasSave()
   const items = [
@@ -662,11 +686,14 @@ function rMainMenu(): string {
     { label: '制 作 名 单', act: 'gotoMenu', arg: 'credits', dis: false },
   ]
   return `<div class="screen">
-  <div class="main-menu-bg" style="background-image:url('${A('bg/menubg.jpg')}')"></div>
-  <img class="sts-cloud sts-cloud-far" src="${A('title/midCloud13.png')}" draggable="false" alt="">
-  <img class="sts-cloud sts-cloud-mid" src="${A('title/topCloud2.png')}" draggable="false" alt="">
-  <img class="sts-cloud sts-cloud-near" src="${A('title/mg2.png')}" draggable="false" alt="">
-  <div class="main-menu-fog"></div>
+  <div class="main-menu-bg" style="background-image:url('${A('bg/menubg.jpg')}');background-position:center -241px"></div>
+  <img src="${A('title/mg3Top.webp')}" draggable="false" alt="" style="position:absolute;left:0;bottom:0;width:100%;pointer-events:none;user-select:none">
+  <img class="sts-glow" src="${A('title/mg3TopGlow1.webp')}" draggable="false" alt=""
+    style="left:${(225 * STS_S).toFixed(1)}px;top:${((1080 - 289 - 60) * STS_S).toFixed(1)}px;width:${(158 * STS_S).toFixed(1)}px">
+  <img class="sts-glow" src="${A('title/mg3TopGlow2.webp')}" draggable="false" alt=""
+    style="left:${(234 * STS_S).toFixed(1)}px;top:${((1080 - 330 - 60) * STS_S).toFixed(1)}px;width:${(153 * STS_S).toFixed(1)}px;animation-delay:-2.9s">
+  ${MID_CLOUDS.map(rCloud).join('\n  ')}
+  ${TOP_CLOUDS.map(rCloud).join('\n  ')}
   <div class="center-col" style="padding-top:0;gap:14px">
     <img class="menu-logo" src="${A('bg/logo.png')}" alt="Slay the Spire" draggable="false" style="width:286px">
     <div style="display:flex;flex-direction:column;gap:13px;margin-top:22px">

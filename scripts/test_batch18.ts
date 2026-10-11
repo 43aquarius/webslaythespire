@@ -59,10 +59,12 @@ async function main() {
   }
   check('store就绪', ev(`typeof window.__sts === 'function'`) === true)
 
-  // ---------- A. 主菜单（原版天空+漂云+原版字体） ----------
+  // ---------- A. 主菜单（原版 sky+mg3Top+18朵漂云+塔身红光+原版字体） ----------
   console.log('-- A. 主菜单 --')
   check('A1 原版天空背景(menubg)', bgAnyOk('bg/menubg.jpg', 'menubg'))
-  check('A2 三层漂云', ev(`document.querySelectorAll('.sts-cloud').length`) === 3, `n=${ev(`document.querySelectorAll('.sts-cloud').length`)}`)
+  check('A2 原版18朵漂云(6 top+12 mid)', ev(`document.querySelectorAll('.sts-cloud').length`) === 18, `n=${ev(`document.querySelectorAll('.sts-cloud').length`)}`)
+  check('A2b mg3Top全屏中景', imgOk('title/mg3Top.webp', 'mg3Top'))
+  check('A2c 塔身红光x2', ev(`document.querySelectorAll('.sts-glow').length`) === 2, `n=${ev(`document.querySelectorAll('.sts-glow').length`)}`)
   const fonts = evJson(`(async () => { await document.fonts.ready; return { kreon: document.fonts.check('16px Kreon'), shs: document.fonts.check('16px "Source Han Serif SC"') } })()`)
   check('A3 原版英文字体Kreon', fonts.kreon === true, JSON.stringify(fonts))
   check('A4 原版中文字体SourceHanSerifSC', fonts.shs === true, JSON.stringify(fonts))
