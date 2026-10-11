@@ -1,0 +1,284 @@
+// ============ 商店界面（第三十一批原版化：全屏地毯 + 商人手 + 原版价格 + 特卖标签 + 移除服务 + 对话气泡） ============
+// 原版考证（ShopScreen.java）：rug 全屏 + merchantHand hover 跟随/1s 退场；价格=金币图标+数字（WHITE/FA8072/87CEEB）；
+// 特卖标签 cos 闪烁；purge512 + 1/4 黑剪影 + sold_out；speechBubble3 弹入浮动 4.2s；文案 ZHS characters.json
+const SHOP_TEXT = {
+  welcome: '~欢迎~\n~欢迎！~',
+  cantBuy: [
+    '哎呀呀，\n这点金币可不够啊。',
+    '嘿兄弟，你没 钱 啊！',
+    '没钱啦？',
+    '你的金币不够。',
+    '这个你买不起。',
+    '我这儿不是做慈善的。',
+  ],
+  buyMsg: [
+    '~谢~  ~啦~',
+    '又一笔买卖……\n嚯嚯嚯！\n有得 赚！',
+    '成交！',
+    '概不退换。',
+    '祝你顺利啊。',
+  ],
+  idle: [
+    '嗨！\n买点什么吧！\n买买买！',
+    '你的发型很不错哦',
+    '看起来你还挺闲？',
+    '你是狗党还是猫党？',
+    '你看起来很 ~危险~ 啊，\n嘿嘿……',
+    '慢慢看……\n……\n……不慢也行',
+    '你喜欢这张地毯吗？\n可惜这个不卖',
+    '要支持我这样的小店啊！',
+    '面具就是酷，我也是同党啊！',
+    '你有没有看见我的送货员？',
+    '多留会儿，听听音乐啊！',
+    '一个人前进太危险了！把你的钱都给我吧！',
+    '买点儿啥吧',
+    '~哈~  ~欠~',
+    '我喜欢金币。',
+    '我最喜欢的颜色是蓝色。\n你呢？',
+  ],
+}
+
+function buildShopScreen(): string {
+  return `<div class="screen shop-screen" data-scr="shop" style="position:relative;overflow:hidden">
+  <div class="shop-rug"><img src="${A('shop/rug.webp')}" alt=""></div>
+  ${topHudShell()}
+  <div class="shop-row-cards" style="top:21%"><div class="row" style="flex-wrap:wrap;justify-content:center;gap:1.6vw" id="shop-cards"></div></div>
+  <div class="shop-row-goods" style="top:48%">
+    <div class="row" style="gap:14px;flex-wrap:wrap;justify-content:center" id="shop-relics"></div>
+    <div class="row" style="gap:14px;flex-wrap:wrap;justify-content:center" id="shop-potions"></div>
+  </div>
+  <div class="shop-purge" style="top:55%"><div id="shop-removal" class="sts-shop-slot"></div></div>
+  <div class="sts-shop-hand sts-shop-hand-idle" id="shop-hand"><img src="${A('shop/hand.webp')}" alt=""></div>
+  <div id="shop-bubble-host"></div>
+  <button class="sts-btn sts-title shop-leave" data-act="leaveShop" style="font-size:22px">离开</button>
+</div>`
+}
+
+// 价格（原版：金币图标 + 数字；#FFFFFF 可买 / #FA8072 SALMON 买不起 / #87CEEB SKY 特卖）
+function shopPriceTag(sold: boolean, price: number, gold: number, discount?: boolean): string {
+  if (sold) return `<span class="shop-price" style="display:inline-flex;min-height:26px"></span>`
+  const color = gold < price ? '#FA8072' : discount ? '#87CEEB' : '#FFFFFF'
+  return `<span class="shop-price" data-afford="${gold >= price ? 1 : 0}" data-sale="${discount ? 1 : 0}" style="display:inline-flex;align-items:center;gap:4px;min-height:26px">
+    <img src="${A('topbar/gold.png')}" width="20" height="20" style="filter:drop-shadow(0 1px 0 #000)">
+    <span class="sts-num" style="color:${color};font-size:19px;font-weight:700;text-shadow:1px 1px 0 #000">${price}</span>
+    ${discount ? `<i class="sale-tag"><img src="${A('shop/saletag.webp')}" alt=""></i>` : ''}
+  </span>`
+}
+
+// 购买失败槽位抖动（原版 NMerchantSlot：x=sin(p·2π)·10，p=(1-(1-t)²)·2 Quad Out 采样 25 帧，0.4s）
+let shopFailSeen = 0
+function watchShopFail() {
+  const st = g()
+  if (!st.shopFail || st.shopFail.ts === shopFailSeen) return
+  shopFailSeen = st.shopFail.ts
+  const f = st.shopFail
+  let el: HTMLElement | null = null
+  if (f.kind === 'card') el = document.querySelector(`#shop-cards [data-sidx="${f.idx}"]`)
+  else if (f.kind === 'relic') el = document.querySelector(`#shop-relics [data-ridx="${f.idx}"]`)
+  else if (f.kind === 'potion') el = document.querySelector(`#shop-potions [data-pidx="${f.idx}"]`)
+  else el = document.getElementById('shop-removal')
+  el?.animate?.(Array.from({ length: 25 }, (_, i) => {
+    const t = i / 24, p = (1 - (1 - t) * (1 - t)) * 2
+    return { translate: `${Math.sin(p * 2 * Math.PI) * 10}px 0` }
+  }), { duration: 400 })
+}
+
+// —— 商人手 hover 跟随（原版 updateHand：hover 槽位 lerp*6 跟随 / 1s 无悬停退场） ——
+let shopHandOnce = false
+let shopHandTimer: ReturnType<typeof setTimeout> | null = null
+function setupShopHand() {
+  if (shopHandOnce) return
+  shopHandOnce = true
+  document.addEventListener('mouseover', ev => {
+    const t = ev.target as HTMLElement | null
+    if (!t) return
+    const root = t.closest?.('.shop-screen') as HTMLElement | null
+    if (!root) return
+    const slot = t.closest?.('[data-sidx],[data-ridx],[data-pidx],[data-act="buyRemoval"]') as HTMLElement | null
+    const hand = document.getElementById('shop-hand')
+    if (!hand) return
+    if (shopHandTimer) { clearTimeout(shopHandTimer); shopHandTimer = null }
+    if (slot && !slot.classList.contains('sold') && slot.dataset.act !== 'buyRemoval' ? true : (slot && slot.dataset.act === 'buyRemoval' && !slot.hasAttribute('data-used'))) {
+      const w = root.getBoundingClientRect()
+      const b = slot.getBoundingClientRect()
+      hand.classList.remove('sts-shop-hand-idle')
+      hand.style.left = `${b.left + b.width / 2 - w.left}px`
+    } else {
+      if (!shopHandTimer) shopHandTimer = setTimeout(() => hand.classList.add('sts-shop-hand-idle'), 1000)
+    }
+  })
+  document.addEventListener('mouseout', ev => {
+    const t = ev.target as HTMLElement | null
+    if (!t) return
+    const root = t.closest?.('.shop-screen') as HTMLElement | null
+    if (!root) return
+    const hand = document.getElementById('shop-hand')
+    if (!hand || hand.classList.contains('sts-shop-hand-idle')) return
+    if (shopHandTimer) clearTimeout(shopHandTimer)
+    shopHandTimer = setTimeout(() => hand.classList.add('sts-shop-hand-idle'), 1000)
+  })
+}
+
+// —— 对话气泡（原版 ShopSpeechBubble：1.5s 欢迎 → 40-60s 闲聊；买不起/成交即时覆盖） ——
+let shopBubbleN = 0
+let shopWelcomeSaid = false
+let shopSpeechTimer: ReturnType<typeof setTimeout> | null = null
+let shopSoldSeen = -1
+function shopSpeak(msgs: string[]) {
+  const host = document.getElementById('shop-bubble-host')
+  if (!host) return
+  const msg = msgs[Math.floor(Math.random() * msgs.length)]
+  const side = Math.random() < 0.5 ? 'L' : 'R'
+  const x = 34 + Math.random() * 32
+  shopBubbleN++
+  const words = msg.split(/(\s+)/).filter(w => w !== '')
+  // 逐词弹出：初始只挂 0 词，计时器逐步加入（BUMP_IN 近似）
+  host.innerHTML = `<div class="sts-speech-bubble" data-bubble-side="${side}" style="left:${x}%">
+    <img src="${A('shop/bubble.webp')}" alt=""${side === 'R' ? '' : ' style="transform:scaleX(-1)"'}>
+    <div class="sts-speech-text sts-body" id="shop-bubble-text"></div>
+  </div>`
+  const textEl = host.querySelector('#shop-bubble-text') as HTMLElement | null
+  let i = 0
+  const step = () => {
+    if (!textEl || !host.firstElementChild) return
+    if (i >= words.length) {
+      setTimeout(() => { if (host.firstElementChild) host.firstElementChild.remove() }, 1600)
+      return
+    }
+    const w = words[i++].replace(/[#@~]/g, '')
+    const sp = document.createElement('span')
+    sp.className = 'sts-speech-word'
+    sp.style.whiteSpace = 'pre-wrap'
+    sp.textContent = w
+    textEl.appendChild(sp)
+    setTimeout(step, 260)
+  }
+  step()
+  // 4.2s 生命周期兜底清除
+  const el = host.firstElementChild as HTMLElement
+  const ttl = setTimeout(() => el.remove(), 4400)
+  ;(el as any).__ttl = ttl
+}
+function watchShopSpeech(run: RunState) {
+  const shop = run.shop
+  if (!shop) return
+  // 欢迎（1.5s 后，每屏一次）
+  if (!shopWelcomeSaid) {
+    shopWelcomeSaid = true
+    if (shopSpeechTimer) clearTimeout(shopSpeechTimer)
+    shopSpeechTimer = setTimeout(() => {
+      shopSpeak([SHOP_TEXT.welcome])
+      // 闲聊循环 40-60s
+      const loop = () => {
+        shopSpeechTimer = setTimeout(() => { shopSpeak(SHOP_TEXT.idle); loop() }, 40000 + Math.random() * 20000)
+      }
+      loop()
+    }, 1500)
+  }
+  // 成交（sold 计数上升）
+  const soldCount = shop.cards.filter(c => c.sold).length + shop.relics.filter(c => c.sold).length + shop.potions.filter(c => c.sold).length + (shop.removalUsed ? 1 : 0)
+  if (shopSoldSeen < 0) shopSoldSeen = soldCount
+  else if (soldCount > shopSoldSeen) { shopSpeak(SHOP_TEXT.buyMsg); shopSoldSeen = soldCount }
+  else shopSoldSeen = soldCount
+  // 买不起（shopFail 变化 → cantBuy）
+  const st = g()
+  if (st.shopFail && st.shopFail.ts !== shopFailSeen) {
+    // watchShopFail 已处理抖动并更新 shopFailSeen；这里在同一帧后触发
+    shopSpeak(SHOP_TEXT.cantBuy)
+  }
+}
+function resetShopSpeech() {
+  shopWelcomeSaid = false
+  shopSoldSeen = -1
+  if (shopSpeechTimer) { clearTimeout(shopSpeechTimer); shopSpeechTimer = null }
+  const host = document.getElementById('shop-bubble-host')
+  if (host) host.innerHTML = ''
+}
+
+function updateShopScreen(run: RunState) {
+  const shop = run.shop
+  if (!shop) return
+  updateHud(run, false)
+  watchShopFail()
+  setupShopHand()
+  watchShopSpeech(run)
+  const stS = g()
+  const mpS = run.players.length > 1
+  const meS = run.players[mpS ? stS.net.myIdx : 0] || run.players[0]
+  // 卡牌（键控）：卡 + 价格 + 特卖标签（discount → 右上 saletag）
+  const cardsEl = document.getElementById('shop-cards')
+  if (cardsEl) {
+    shop.cards.forEach((item, i) => {
+      let el = cardsEl.querySelector(`[data-sidx="${i}"]`) as HTMLElement | null
+      if (!el) {
+        el = document.createElement('div')
+        el.dataset.sidx = String(i)
+        el.innerHTML = `<div class="shop-card-pos" style="position:relative"></div>`
+        cardsEl.appendChild(el)
+      }
+      const pos = el.firstElementChild as HTMLElement
+      el.className = `shop-card sts-shop-slot ${item.sold ? 'sold' : ''}`
+      if (item.sold) delete el.dataset.act
+      else { el.dataset.act = 'buyCard'; el.dataset.idx = String(i) }
+      setHtml(pos, `${cardHtml({ uid: 's' + i, id: item.cardId, upgraded: 0 }, 148)}` +
+        (item.discount && !item.sold ? `<i class="sale-tag"><img src="${A('shop/saletag.webp')}" alt=""></i>` : '') +
+        `<div style="margin-top:6px">${shopPriceTag(item.sold, item.price, meS.gold, item.discount)}</div>`)
+    })
+  }
+  // 遗物
+  const relicsEl = document.getElementById('shop-relics')
+  if (relicsEl) {
+    shop.relics.forEach((item, i) => {
+      const def = RELICS[item.relicId]
+      let el = relicsEl.querySelector(`[data-ridx="${i}"]`) as HTMLElement | null
+      if (!el) {
+        el = document.createElement('div')
+        el.dataset.ridx = String(i)
+        el.innerHTML = `<img src="${A('relics/' + item.relicId + '.png')}" width="62" height="62" style="filter:drop-shadow(0 3px 6px rgba(0,0,0,.55))">
+          <div class="shop-price" style="margin-top:4px"></div>`
+        relicsEl.appendChild(el)
+      }
+      el.className = `sts-shop-slot ${item.sold ? 'sold' : ''}`
+      el.style.display = 'flex'
+      el.style.flexDirection = 'column'
+      el.style.alignItems = 'center'
+      if (item.sold) { delete el.dataset.act; (el.firstElementChild as HTMLElement).style.filter = 'grayscale(1) opacity(.35)' }
+      else { el.dataset.act = 'buyRelic'; el.dataset.idx = String(i); (el.firstElementChild as HTMLElement).style.filter = '' }
+      setHtml(el.querySelector('.shop-price'), shopPriceTag(item.sold, item.price, meS.gold))
+    })
+  }
+  // 药水
+  const potsEl = document.getElementById('shop-potions')
+  if (potsEl) {
+    shop.potions.forEach((item, i) => {
+      const def = POTIONS[item.potionId]
+      let el = potsEl.querySelector(`[data-pidx="${i}"]`) as HTMLElement | null
+      if (!el) {
+        el = document.createElement('div')
+        el.dataset.pidx = String(i)
+        el.innerHTML = `${potionLayersHtml(item.potionId, 46, 52)}
+          <div class="shop-price" style="margin-top:4px"></div>`
+        potsEl.appendChild(el)
+      }
+      el.className = `sts-shop-slot ${item.sold ? 'sold' : ''}`
+      el.style.display = 'flex'
+      el.style.flexDirection = 'column'
+      el.style.alignItems = 'center'
+      if (item.sold) { delete el.dataset.act; (el.firstElementChild as HTMLElement).style.filter = 'grayscale(1) opacity(.35)' }
+      else { el.dataset.act = 'buyPotion'; el.dataset.idx = String(i); (el.firstElementChild as HTMLElement).style.filter = '' }
+      setHtml(el.querySelector('.shop-price'), shopPriceTag(item.sold, item.price, meS.gold))
+    })
+  }
+  // 移除服务（原版 renderPurge：purge512 + 1/4 黑剪影；已用 → sold_out512 无价格）
+  const rm = document.getElementById('shop-removal')
+  if (rm) {
+    rm.className = `sts-shop-slot ${shop.removalUsed ? 'sold' : ''}`
+    if (shop.removalUsed) { delete rm.dataset.act; rm.removeAttribute('data-used') }
+    else { rm.dataset.act = 'buyRemoval'; rm.setAttribute('data-used', '0') }
+    setHtml(rm, `<div style="position:relative;width:190px;height:230px">
+        <div class="purge-silhouette"></div>
+        <img class="purge-img" src="${A('shop/' + (shop.removalUsed ? 'soldout' : 'purge') + '.webp')}" width="190" height="190" style="object-fit:contain;position:relative;margin:auto;display:block">
+      </div>
+      <div style="margin-top:6px">${shopPriceTag(shop.removalUsed, shop.removalPrice, meS.gold)}</div>`)
+  }
+}

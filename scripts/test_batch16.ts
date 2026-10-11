@@ -176,7 +176,7 @@ async function main() {
   await sleep(1400)
   const shopHud = ev(`!!document.querySelector('#hud-gold')`)
   check('⑥商店顶栏HUD常驻', shopHud === true)
-  // 价格配色：买不起 #FF5555 / 打折 #7FFF00 / 正常 #FFF6E2
+  // 价格配色（第三十一批原版化：买不起 #FA8072 SALMON / 打折 #87CEEB SKY / 正常 #FFFFFF WHITE）
   const priceColors = evJson(`(() => {
     const tags = [...document.querySelectorAll('.shop-price, .price-tag, [class*=shop-price]')]
     const colors = tags.map(t => {
@@ -187,8 +187,8 @@ async function main() {
     return { n: tags.length, colors }
   })()`)
   check('⑥商店价格标签渲染', priceColors.n >= 4, JSON.stringify(priceColors).slice(0, 200))
-  check('⑥买不起红色(#FF5555)', JSON.stringify(priceColors).toLowerCase().includes('#ff5555') || JSON.stringify(priceColors).includes('255, 85, 85'), JSON.stringify(priceColors).slice(0, 300))
-  check('⑥打折绿色(#7FFF00)', JSON.stringify(priceColors).toLowerCase().includes('#7fff00') || JSON.stringify(priceColors).includes('127, 255, 0'), JSON.stringify(priceColors).slice(0, 300))
+  check('⑥买不起红色(#FA8072 SALMON)', JSON.stringify(priceColors).toLowerCase().includes('#fa8072') || JSON.stringify(priceColors).includes('250, 128, 114'), JSON.stringify(priceColors).slice(0, 300))
+  check('⑥打折天蓝(#87CEEB SKY)', JSON.stringify(priceColors).toLowerCase().includes('#87ceeb') || JSON.stringify(priceColors).includes('135, 206, 235'), JSON.stringify(priceColors).slice(0, 300))
   // 购买失败抖动：金币不足买卡 → shopFail + 槽位动画
   ev(`window.__sts.getState().buyCard(0)`)
   await sleep(250)

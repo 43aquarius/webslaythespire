@@ -108,17 +108,19 @@ async function main() {
   check('能量0数字红', energyInfo.color === 'rgb(255, 85, 85)', JSON.stringify(energyInfo))
   check('能量0宝球暗', String(energyInfo.filter).includes('brightness'), energyInfo.filter)
 
-  // ④ 回能爆发 + 升级绿名 + 数值变色
-  const mark0 = ev(`document.getElementById('energy-box')?.dataset.burst || ''`)
+  // ④ 回能爆发 → VFX（第三十一批适配：batch23 实现已改为原版 EnergyPanel.renderVfx 双图旋转，
+  // std 版断言从旧 dataset.burst（从未设置）对齐 next 版语义：触发=回合开始(phase player & turn 递增)）
   ev(`(() => {
     const st = window.__sts.getState()
-    st.run.combat.players[0].energy = 3
+    const c = st.run.combat
+    c.phase = 'player'
+    c.turn = (c.turn || 0) + 1
     window.__sts.setState({ run: { ...st.run } })
     return 'ok'
   })()`)
-  await sleep(400)
-  const mark1 = ev(`document.getElementById('energy-box')?.dataset.burst || ''`)
-  check('回能爆发触发', !!mark1 && mark1 !== mark0, `m0=${mark0} m1=${mark1}`)
+  await sleep(450)
+  const vfxSeen = ev(`!!document.querySelector('.sts-energy-vfx .vfx1') && !!document.querySelector('.sts-energy-vfx .vfx2')`)
+  check('回能VFX触发(双图)', vfxSeen === true, `vfx=${vfxSeen}`)
 
   ev(`(() => {
     const st = window.__sts.getState()

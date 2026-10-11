@@ -248,8 +248,11 @@ export function RestScreen() {
   )
 }
 
-// ============ 宝箱界面（第六批原版还原：开箱 → 遗物 2× 展示+稀有度光晕 → 拾取） ============
-// 原版 NTreasureRoomRelicHolder：120px 图标 2× 展示，hover 2.1（0.05s）/ press 1.9 / 常态 2.0（0.4s Expo Out）；稀有度光晕脉冲
+// ============ 宝箱界面（第三十一批原版化：三档宝箱图+开箱图+原版位置） ============
+// 原版考证（AbstractChest/SmallChest/MediumChest/LargeChest/TreasureRoom）：
+//   位置 CHEST_LOC=(W/2+348s, floorY+192s) → 68%/51%；512 画布素材 small/medium/large(+boss 备用)
+//   Small 75/25/0 +金50%25g · Medium 35/50/15 +金35%50g · Large 0/75/25 +金50%75g（游戏层 openTreasure 已落地）
+//   开箱换 openedImg；遗物展示/拾取沿用第六批两步语义（.sts-chest-relic / hover 2.1 / press 1.9 / 稀有度光晕）
 export function TreasureScreen() {
   const run = useGame(s => s.run)
   const openTreasure = useGame(s => s.openTreasure)
@@ -261,21 +264,29 @@ export function TreasureScreen() {
   const opened = treasureRelic !== undefined
   const def = treasureRelic ? RELICS[treasureRelic] : null
   const rarity = def?.rarity as 'common' | 'uncommon' | 'rare' | undefined
+  // 三档宝箱（旧档无 chestSize 回退 small；入房掷档 act1-3=50/33/17，act4=中箱）
+  const size = run.chestSize ?? 'small'
   return (
-    <div className="w-full h-full relative flex flex-col items-center justify-center gap-8 select-none"
+    <div className="w-full h-full relative select-none"
       style={{ background: 'radial-gradient(ellipse at 50% 75%, #4a3a10 0%, #160e04 60%, #080402 100%)' }}>
       <TopHud />
+      {/* 宝箱本体（原版 CHEST_LOC 68%/51%；开箱换 opened 图，已开不再可点） */}
+      <img
+        key={`chest-${size}-${opened}`}
+        src={`${A}/chests/${size}${opened ? 'Opened' : ''}.webp`}
+        alt="宝箱"
+        draggable={false}
+        className={`sts-chest-img ${opened ? 'sts-chest-opened' : ''}`}
+        data-chest={size}
+        data-chest-opened={opened ? '1' : '0'}
+        style={{ pointerEvents: opened ? 'none' : 'auto' }}
+        onClick={() => !opened && openTreasure()}
+      />
       <div className="w-full h-full flex flex-col items-center justify-center gap-8" style={{ paddingTop: 60 }}>
       {!opened ? (
         <>
-          <div className="sts-title" style={{ fontSize: 44, color: '#ffd980', textShadow: '3px 3px 0 #000' }}>宝箱</div>
-          <button
-            className="transition-transform hover:scale-105 active:scale-95"
-            onClick={openTreasure}
-            style={{ filter: 'drop-shadow(0 0 26px rgba(255,200,60,0.55))' }}
-          >
-            <img src={`${A}/mapicons/treasure.png`} alt="宝箱" width={180} height={180} draggable={false} />
-          </button>
+          <div className="sts-title" style={{ fontSize: 44, color: '#ffd980', textShadow: '3px 3px 0 #000', marginTop: '46vh' }}>宝箱</div>
+          <div className="sts-body" style={{ fontSize: 15, color: '#e8d8c0' }}>点击宝箱开启</div>
           <button
             className="sts-btn sts-title"
             style={{ fontSize: 20 }}

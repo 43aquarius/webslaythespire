@@ -690,3 +690,28 @@ Stage Summary:
 - 重大既有 bug 入库：standalone 版 inline stopPropagation 阻断 document data-act 委托（检视屏从未工作，历史无自动化覆盖）；修复模式=委托内忽略语义替代 inline 拦截
 - 方法论入库：atlas region 烘焙回 orig 全画布→inset:0 同盒渲染（与 512 画布架构同构，零 CSS 坐标换算）；1024Portraits 目录名陷阱（实际 500x380）；Java Color(int) 是 RGBA 倒序需逆波兰换算
 - 后续候选（承队列）：商店宝箱 UI 素材原版化 / 房间切换渐变过渡(第十四批研究收获未落地) / 奖励屏与商店卡的右键检视入口（原版 CardRewardScreen/ShopScreen 均可 open(card)）
+
+---
+Task ID: 32
+Agent: main
+Task: 会话恢复（摘要滞后校准）+ 第三十一批：商店/宝箱屏原版化（三档宝箱模型 + 全屏地毯商店 + 对话气泡，两版本）
+
+Work Log:
+- 【会话恢复】交接摘要滞留"第二十五批"，worklog/git 考古实际已至第三十批(0ade12a 本地=远程同步)；本次无沙箱回滚，仅核验：git 0/0、:3000 生产在跑、单文件 44.62MB 完好；冒烟 regression16 + batch20 12+12 全绿后开工
+- 【原版考证·全链路】ShopScreen.java/AbstractChest/SmallChest·MediumChest·LargeChest/ShopSpeechBubble/OnSaleTag/Merchant + characters.json ZHS：rug 全屏(zhs 1920x1136, updateRug lerp 滑入)；价格=UI_GOLD+tipHeaderFont23px，色 WHITE/#FA8072 SALMON/#87CEEB SKY；特卖标签 128px+加色混合闪烁 (cosDeg(ms/5%360)+1.25)/3∈[0.083,0.75] 周期1.8s；purge/sold_out 512 + 1/4透明黑卡身剪影(offset +18/-14)；商人手 merchantHand 512x1024 hover 跟随 lerp*6/1s 无悬停退场；气泡 speechBubble3 512 单图(facingRight=scaleX(-1))，随机 x(660~1260)s y=H-380s，4s 生命周期 swingIn 弹入 sin(t*4) 浮动，尾段 0.3s 淡出，文案 BUMP_IN 逐词；ZHS 台词（欢迎/买不起[1-6]/成交[7-11]/闲聊16条）；宝箱：入房掷档 act1-3=50/33/17 act4=0/100/0(TheEnding)，Small 75/25/0+金50%25 · Medium 35/50/15+金35%50 · Large 0/75/25+金50%75，CHEST_LOC=(W/2+348s, floorY+192s)→68%/51%，开箱换 openedImg
+- 【素材】extract_shop_chest.py：rug/purge/soldout/hand/saletag/bubble + chests 三档+开箱(+boss 备用)共 14 张 210KB 全 webp；气泡方向考证（alpha 行分布：speechBubble3 尾巴在上右，facingRight 翻转）
+- 【宝箱模型】types.ts chestSize/chestGold 字段；chooseNode treasure 分支入房掷档（入房不播 chestOpen，原版点击开箱才播）；openTreasure 重写：档位掷遗物档+金币立即入账(toast)+CHEST_OPEN 音效；适配说明——本项目遗物库无 rare 档，rare 掷中折叠并入 uncommon（small 75/25 · medium 35/65 · large 0/100，保"大箱必出高阶"原版精神）
+- 【Next 版】ShopScreen 重写：rug 全屏+滑入、卡行/遗物药水行/purge 右侧(73%)、原版价格（金币图标+数字三色）、SaleTag（::after mix-blend-mode:screen 闪烁）、商人手（hover 跟随/1s 退场，位置除回舞台 scale）、SpeechBubbleFx（逐词 BUMP_IN，生命周期 4.4s 与文案长度无关）+ speak 触发链（欢迎[跟踪 run.screen 翻转，原版 open() 每次重置 saidWelcome]/买不起 shopFail/成交 soldCount/闲聊 40-60s）；离开按钮右下角(原版 cancelButton"离开")；TreasureScreen：三档宝箱图@68%/51% + 开箱换图 + 两步语义保留(.sts-chest-relic/glow/拿走)
+- 【standalone 版】ui.ts 商店段整体重写(SHOP_TEXT/建屏/价格/手跟随 setupShopHand 委托/气泡模块 watchShopSpeech+离屏 resetShopSpeech 挂 __shopSeen)、rTreasure 三档图重写；style.css 新增 60 行（rug/手/标签双图法/气泡/宝箱 68%/51%）；make_assets 增 shop/chests PASSTHROUGH 桶；单文件 44.62→44.91MB(+290KB)
+- 【重大修复·Next useRoomFade 竞态】快速连续切换房间时旧 1100ms 定时器把 shown 写回旧目标→画面卡死在旧屏（探针复现：store 已 treasure 而DOM停在 map 12s+）；修复：T1 回调读 targetRef.current（任何时刻触发的定时器都收敛到最新目标）。根因复现方法论：探针先验证"正常流可用"再注入重载复现
+- 【测试适配】batch16 双版本价格断言更新（#FF5555/#7FFF00→#FA8072 SALMON/#87CEEB SKY 原版色）；batch12_standalone 回能断言适配 VFX 语义（batch23 改实现时漏适配，历史遗留 dataset.burst 从未设置——对齐 next 版 .sts-energy-vfx 双图断言）
+- 【测试技术沉淀】lsof 在本环境对改名进程(next-server)失效——端口查杀必须用 ss -tlnp 提取 pid；start_prod.sh 的 pkill 模式 "[s]tandalone/server.js" 会连杀 :3100 测试服务，双端口启动顺序必须 start_prod(:3000) 先、:3100 后；agent-browser eval 内嵌 TS as 语法不可用（浏览器端 SyntaxError）；选择器 #shop-cards>div 会命中外层包裹 div（多包一层破坏既有断言）；老测试(argv[2]=URL)与新测试(argv[2]=mode)参数风格不可混用；Next 房间过渡期间组件不重挂载——跨屏重置语义须跟踪 store 的 run.screen 而非组件挂载
+- 【test_batch31 双版本 32+32】A 素材(shop6+chests8 HTTP/ASSETS+RIFF/data URI 前缀) B 宝箱模型(掷档统计 240 次 50/33/17±13、act4 恒中、金币概率+均值 0.9-1.1 倍、__STS_RELICS 新调试钩子直读档位无 DOM 滞后、开箱 toast+确认回图) C 宝箱屏(三档图 data-chest、rect 比率位置 68%/51%（offsetLeft 不含 translate 陷阱）、开箱换图两步语义) D 商店(rug 全屏、三色+金币图标、特卖标签仅挂折扣卡+闪烁、purge+剪影灰度、手 idle/hover 跟随/1s 退场、离开右下角、售罄换图) E 气泡(欢迎 1.5s/买不起/成交/4.2s 生命周期)
+- 【全套回归】batch31 32+32 / regression 16 / regression5 412 / bugcheck 29+29 / batch10 19+13 / batch12 29+19(std 适配) / batch13 25+25 / batch14 19+18 / batch15 31+28 / batch16 30+31(新色断言) / batch18 41+45 / batch20 12+12 / batch21 34+42 / batch22 22+20 / batch23 37+37 / batch25 16+16 / batch27 13+13 / batch28 13+13 / batch29 13+13 / batch30 34+34 / mptest 22(首轮 1 失败重跑过=历史时序波动) / fulltest 双版本全流程 gameover(含 F8 treasure)——全绿
+- 【VLM 验收】6/6 全符合：全屏波斯地毯/价格三色+金币图标/特卖标签/剪刀移除服务+商人手/带尾巴气泡"欢迎"(位置自然)/宝箱关开两态+遗物光晕/HUD 常驻无破图
+
+Stage Summary:
+- 商店从自创纵向布局升级为原版摊位：全屏地毯+原版价格体系(金币图标+三色)+特卖标签闪烁+移除服务图+售罄图+商人手 hover 跟随+ZHS 台词对话气泡；宝箱从 mapicons 复用图升级为三档宝箱模型(入房掷档/开箱掷遗物档+金币/开箱换图)
+- 重大既有 bug 入库：Next useRoomFade 旧定时器回写 shown 竞态（画面卡死在旧屏）；修复=targetRef 收敛
+- 方法论入库：①端口查杀用 ss 不用 lsof（改名进程逃逸）②双端口启动顺序（start_prod 的 pkill 连杀）③跨屏重置语义挂 store 的 run.screen（房间过渡不重挂载）④选择器勿多包一层 div ⑤新老测试参数风格(argv URL vs mode) ⑥VLM 前先"正常流可用+重载注入"两步复现法
+- 后续候选（承队列）：奖励屏与商店卡的右键检视入口（原版 CardRewardScreen/ShopScreen 均可 open(card)）/ 房间切换渐变过渡未落地项已由本批 useRoomFade 加固部分覆盖 / 敌人受击/死亡音效按敌种细分

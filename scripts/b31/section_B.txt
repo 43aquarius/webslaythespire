@@ -1,0 +1,112 @@
+  // ===== B. 宝箱模型（store 层） =====
+  console.log('-- B. 宝箱模型 --')
+  // 通用构造：完整克隆 g.run + 覆盖目标字段；map 复用原样只补 n1 与 startNodes；
+  // screen 恒 'treasure' —— 绝不让部分态进 MapScreen 渲染（历史教训：最小化 map 导致渲染崩溃）
+  const N1 = 240
+  const dist = evJson(`(() => {
+    const g = window.__sts.getState()
+    const tally = { small: 0, medium: 0, large: 0 }
+    for (let i = 0; i < ${N1}; i++) {
+      const r = JSON.parse(JSON.stringify(g.run))
+      Object.assign(r, { combat: null, screen: 'treasure', currentNodeId: null, visitedNodes: [], chestSize: undefined, pendingTreasureRelic: undefined, chestGold: null, act: 1 })
+      r.map = JSON.parse(JSON.stringify(g.run.map))
+      r.map.startNodes = ['n1']
+      r.map.nodes.n1 = { id: 'n1', x: 0, y: 0, type: 'treasure', edges: [] }
+      window.__sts.setState({ run: r })
+      g.chooseNode('n1')
+      const s = window.__sts.getState().run.chestSize
+      if (s) tally[s]++
+    }
+    return { ...tally, n: ${N1} }
+  })()`)
+  const n1 = Number(dist?.n) || 0
+  const sPct = n1 ? (dist.small / n1) * 100 : 0, mPct = n1 ? (dist.medium / n1) * 100 : 0, lPct = n1 ? (dist.large / n1) * 100 : 0
+  check(`B1 入房掷档 50/33/17（实测 ${sPct.toFixed(0)}/${mPct.toFixed(0)}/${lPct.toFixed(0)}）`,
+    n1 === 240 && Math.abs(sPct - 50) < 13 && Math.abs(mPct - 33) < 13 && Math.abs(lPct - 17) < 10,
+    JSON.stringify(dist))
+  // B2 act4 → 恒 medium（TheEnding 0/100/0）
+  const act4 = evJson(`(() => {
+    const g = window.__sts.getState()
+    let ok = 0
+    for (let i = 0; i < 8; i++) {
+      const r = JSON.parse(JSON.stringify(g.run))
+      Object.assign(r, { combat: null, screen: 'treasure', currentNodeId: null, visitedNodes: [], chestSize: undefined, pendingTreasureRelic: undefined, chestGold: null, act: 4 })
+      r.map = JSON.parse(JSON.stringify(g.run.map))
+      r.map.startNodes = ['n1']
+      r.map.nodes.n1 = { id: 'n1', x: 0, y: 0, type: 'treasure', edges: [] }
+      window.__sts.setState({ run: r })
+      g.chooseNode('n1')
+      if (window.__sts.getState().run.chestSize === 'medium') ok++
+    }
+    return { ok }
+  })()`)
+  check('B2 act4 恒中箱（TheEnding 0/100/0）', act4?.ok === 8, JSON.stringify(act4))
+  // B3 档位掷点：金币概率/金额（large 50%75g · small 50%25g；均值 0.9-1.1 倍区间）
+  const N2 = 200
+  const tiers = evJson(`(() => {
+    const g = window.__sts.getState()
+    const out = { large: { gold0: 0, goldAmts: [] }, small: { gold0: 0, goldAmts: [] } }
+    for (const size of ['large', 'small']) {
+      for (let i = 0; i < ${N2}; i++) {
+        const r = JSON.parse(JSON.stringify(g.run))
+        Object.assign(r, { combat: null, screen: 'treasure', chestSize: size, pendingTreasureRelic: undefined, chestGold: null, act: 1, relics: [] })
+        window.__sts.setState({ run: r })
+        g.openTreasure()
+        const rr = window.__sts.getState().run
+        if (rr.chestGold) { out[size].gold0++; out[size].goldAmts.push(rr.chestGold) }
+      }
+    }
+    return out
+  })()`)
+  const lg: any = tiers?.large || {}, sm: any = tiers?.small || {}
+  check(`B3a large 箱金币 ~50% 次数 ${lg.gold0}/${N2}`, Number(lg.gold0) > N2 * 0.35 && Number(lg.gold0) < N2 * 0.65, JSON.stringify(lg))
+  check('B3a large 金币均值 ~75（0.9-1.1 倍）', Number(lg.goldAmts?.length) > 0 && (() => {
+    const a = lg.goldAmts as number[]
+    const avg = a.reduce((x, y) => x + y, 0) / a.length
+    return avg > 75 * 0.85 && avg < 75 * 1.15
+  })(), JSON.stringify((lg.goldAmts || []).slice(0, 8)))
+  check(`B3b small 箱金币 ~50% 次数 ${sm.gold0}/${N2}`, Number(sm.gold0) > N2 * 0.35 && Number(sm.gold0) < N2 * 0.65, JSON.stringify(sm))
+  check('B3b small 金币均值 ~25', Number(sm.goldAmts?.length) > 0 && (() => {
+    const a = sm.goldAmts as number[]
+    const avg = a.reduce((x, y) => x + y, 0) / a.length
+    return avg > 25 * 0.85 && avg < 25 * 1.15
+  })(), JSON.stringify((sm.goldAmts || []).slice(0, 8)))
+  // B4 档位折叠：large 不得出 common；small ~75% common（通过 DOM 光晕类断言：common→蓝 uncommon→绿）
+  const N3 = 120
+  const fold = evJson(`(() => {
+    const g = window.__sts.getState()
+    const out = { large: { blue: 0, green: 0 }, small: { blue: 0, green: 0 } }
+    for (const size of ['large', 'small']) {
+      for (let i = 0; i < ${N3}; i++) {
+        const r = JSON.parse(JSON.stringify(g.run))
+        Object.assign(r, { combat: null, screen: 'treasure', chestSize: size, pendingTreasureRelic: undefined, chestGold: null, act: 1, relics: [] })
+        window.__sts.setState({ run: r })
+        g.openTreasure()
+        const rr = window.__sts.getState().run
+        if (rr.pendingTreasureRelic) {
+          const glow = document.querySelector('[class*="sts-chest-glow"]')
+          const cls = glow ? glow.className : ''
+          if (cls.includes('uncommon')) out[size].green++
+          else if (cls.includes('common')) out[size].blue++
+        }
+      }
+    }
+    return out
+  })()`)
+  const lf: any = fold?.large || {}, sf: any = fold?.small || {}
+  const lTotal = (lf.blue || 0) + (lf.green || 0)
+  const sTotal = (sf.blue || 0) + (sf.green || 0)
+  check(`B4a large 0% common（${lf.blue}/${lTotal}）`, lTotal > 20 && Number(lf.blue || 0) === 0, JSON.stringify(fold))
+  check(`B4b small ~75% common（${sf.blue}/${sTotal}）`, sTotal > 20 && Number(sf.blue || 0) > sTotal * 0.6 && Number(sf.blue || 0) < sTotal * 0.9, JSON.stringify(fold))
+  // B5 开箱 toast + 确认回图 + 遗物入包
+  mutateRun(`r => { r.combat = null; r.screen = 'treasure'; r.chestSize = 'large'; r.pendingTreasureRelic = undefined; r.chestGold = null; r.relics = [] }`)
+  await sleep(700)
+  ev(`window.__sts.getState().openTreasure()`)
+  await sleep(600)
+  const openedState = evJson(`(() => { const st = window.__sts.getState(); const img = document.querySelector('[data-chest]'); return { toast: st.toast, pending: st.run ? st.run.pendingTreasureRelic : null, img: img ? img.getAttribute('data-chest') + '|' + img.getAttribute('data-chest-opened') : null } })()`)
+  check('B5a 开箱 toast（金币/遗物）', typeof openedState?.toast === 'string' || typeof openedState?.pending === 'string', JSON.stringify(openedState).slice(0, 160))
+  ev(`window.__sts.getState().confirmTreasure()`)
+  await sleep(900)
+  const doneState = evJson(`(() => { const st = window.__sts.getState(); return { screen: st.run ? st.run.screen : null, relics: st.run ? st.run.relics.length : 0 } })()`)
+  check('B5b 确认回图+遗物入包', doneState?.screen === 'map' && Number(doneState?.relics) > 0, JSON.stringify(doneState))
+

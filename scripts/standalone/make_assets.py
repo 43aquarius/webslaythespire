@@ -15,6 +15,10 @@ PLANS = {
     'scv': (None, 'PASSTHROUGH', None),
     'scvart': (None, 'PASSTHROUGH', None),
     'enemies': (None, 'WEBP_ONLY', None),  # 第二十七批：原版 idle 动画 WebP（动图直通；静态 png 已废弃删除）
+    # 第三十一批：商店（rug 全屏/purge/soldout/hand/saletag/bubble）+ 宝箱（三档+开箱），
+    # 均为离线烘焙 WebP（共约 210KB）→ 直接内联
+    'shop': (None, 'PASSTHROUGH', None),
+    'chests': (None, 'PASSTHROUGH', None),
     'frames': (None, 'PNG', None),   # 卡框保持
     'hero': (None, 'PNG', None),
     'intent': (None, 'PNG', None),
