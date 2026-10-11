@@ -62,6 +62,7 @@ export function cardCost(inst: CardInstance, hpLost = 0, cardsDiscardedThisTurn 
   if (inst.upgraded > 0 && def.upCost !== undefined) cost = def.upCost
   if (inst.id === 'bloodForBlood') cost = Math.max(0, cost - hpLost)
   if (inst.id === 'eviscerate') cost = Math.max(0, cost - cardsDiscardedThisTurn)
+  if (inst.costRoll != null) return inst.costRoll // 蛇油费用随机化
   return cost
 }
 

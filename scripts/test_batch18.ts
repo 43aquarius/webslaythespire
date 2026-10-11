@@ -83,9 +83,9 @@ async function main() {
   check('B4 变体src解析', poolInfo.ok === true, JSON.stringify(poolInfo))
   // 资源可达性
   if (MODE === 'next') {
-    const res = evJson(`(async () => { const r = await fetch('/assets/sfx/STS_SFX_BattleStart_1_v1.ogg'); const b = await fetch('/assets/fonts/SourceHanSerifSC-Bold.woff2'); const c = await fetch('/assets/bg/combat1.jpg'); return { sfx: r.status, font: b.status, bg: c.status } })()`)
+    const res = evJson(`(async () => { const r = await fetch('/assets/sfx/STS_SFX_BattleStart_1_v1.ogg'); const b = await fetch('/assets/fonts/NotoSansMonoCJKsc-Regular.woff2'); const c = await fetch('/assets/bg/combat1.jpg'); return { sfx: r.status, font: b.status, bg: c.status } })()`)
     check('B5 SFX音源HTTP 200', res.sfx === 200, JSON.stringify(res))
-    check('B6 字体HTTP 200', res.font === 200)
+    check('B6 字体HTTP 200 (第28批起ZHS默认= NotoSansMonoCJKsc)', res.font === 200)
     check('B7 战斗背景HTTP 200', res.bg === 200)
   } else {
     const assets = evJson(`(() => { const A = window.ASSETS || {}; return { sfx: !!A['audio/sfx/STS_SFX_BattleStart_1_v1.ogg'], font: !!A['fonts/kreon-bold.woff2'], camp: !!A['campfire/sleep.png'], evImg: !!A['events/bonfire.jpg'], lid: !!A['neow/lid6.png'], combat1: !!A['bg/combat1.jpg'] } })()`)

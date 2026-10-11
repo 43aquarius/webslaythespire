@@ -646,3 +646,25 @@ Stage Summary:
 - 全站文字从"从未生效的思源宋链(实际系统 sans)"修正为原版 ZHS 真实观感：NotoSansMonoCJKsc 黑体等宽(含拉丁/数字半宽 2:1)，资源原版化最后一块拼图落地
 - 方法论入库：①FontHelper 字体选择以 initializeFonts 的 fontFile 赋值为唯一权威，常量声明≠使用(死常量陷阱) ②next/font 变量作用域：variable 挂 body 时依赖它的自定义属性必须定义在 body 或其后代，:root 会 guaranteed-invalid ③字体子集覆盖校验以原字体 cmap 为基准而非扫描集(原字体没有的字形走系统 fallback 是预期) ④woff2 base64 头 d09GMk/d09GMg 区分 OTF/TTF 载体 ⑤沙箱回滚 reset --hard 后必查 untracked 旧资产残留(会污染构建产物)
 - 后续候选（承 Task 25 队列）：检视屏大图(SingleCardViewPopup)/商店宝箱 UI 素材原版化/房间切换渐变过渡(第十四批研究收获未落地项)
+
+---
+Task ID: 30
+Agent: main
+Task: 第二十九批（合并线）：原版药水体系完整化——新药水数据+瓶型图层+3色权威修正；并完成本地/远程分叉对齐
+
+Work Log:
+- 批次编号说明：前几会话上下文丢失期间，第21-28批实际已推送到远程GitHub（本地worklog无记录）；本会话在旧基线（第20批）上重做了药水批（与远程第21批主题撞车），经 git 取证（merge-base=第19批7a7c238，远程线 b9e2ca6=药水分层合成）后按第二十六批先例"远端为唯一权威"处理：git rebase --onto origin/main dc2a86d 重放本会话提交，跳过与远程3620fe1重复的本地第二十批，二进制/工件取theirs、药水单图保持远程删除（图层架构）
+- 本批独有增量（远程第21批没有的部分）：钢铁精华/蛇油两种药水游戏数据(potions.ts+usePotion)——镀金护甲新状态(endPlayerTurn回合结束转化格挡+damagePlayer受击掉层wasHPLost语义)与蛇油costRoll费用随机化(战斗抽牌堆为deck浅拷贝天然隔离；cardCost支持costRoll)
+- 新瓶型图层：anvil(4张glass/liquid/hybrid/outline，PotionSize.ANVIL无spots同moon/spiky惯例)+snecko(5张含spots) 从反编译仓库复制安装；POTION_LAYERS补essenceOfSteel(anvil+#008080 TEAL)/sneckoOil(snecko+#7FFF00 GREEN_TEXT+#EFC851 GOLD)
+- 3色权威修正(以本会话拉取的libGDX 1.9.5 Color.java为准)：strength液#4d4d4d→#3f3f3f(DARK_GRAY)、fear hybrid#ff1400→#ff341c(SCARLET)、blood/ghost hybrid#b3b3b3→#bfbfbf(LIGHT_GRAY)
+- powers.atlas提取platedarmor状态图标(顶部原点+offset平铺，128/armor校准可见像素差0.00，alpha_composite透明区RGB归零)；standalone经make_assets缩至72px(与metallicize同规格)
+- 测试适配：远程test_batch21断言更新(A8形状集11→13种、C14期望#bfbfbf)；batch18 B6字体URL适配第28批体系(SourceHanSerifSC-Bold已删→NotoSansMonoCJKsc-Regular，28批漏跑batch18的遗留)
+- 测试时序经验沉淀：HUD读players[0].potions镜像(直接setState须双写)；RewardScreen需run.combat非null；敌执行def.moves[nextMoveIdx]原版招式而非显示intent(固定intent只改UI)；endTurn全链可在<100ms完成(同步段内读block，勿sleep后读)；standalone img为data URL断言须按ASSETS值全等比对
+- test_batch29双版本13+13全绿；全套回归：batch21(远程版)34+42/regression16/412/fulltest全流程/batch18 41+45/bugcheck29+29/mptest23/batch12 29/13 25/14 19/batch15 31/batch16 30+31/batch20 12+12——全绿(batch18首轮37/4为时序偶发重跑过)
+- VLM双版本商店场景验收：铁砧/蛇形/小圆瓶三形状各异、青绿液#008080、蛇油黄绿液+金色层、商店与HUD同款一致、无破图错位
+- 单文件39.13MB(72.8MB磁盘)；脚本产物：install_potion_layers.py/compose_potions.py/extract_platedarmor.py/test_batch29.ts
+
+Stage Summary:
+- 原版药水体系补全为20种(远程18+钢铁精华/蛇油)，全部走图层合成架构；3处颜色按libGDX 1.9.5权威值修正
+- 本地/远程分叉对齐完成：本地线独有提交已重放合并，dc2a86d(重复第二十批)确认弃用；后续批次从第二十九批续编
+- 教训入库：跨会话批次推进必须先 git fetch 比对远程再开工（本会话在旧基线上重做撞车批次的根因）；沙箱回滚类事故以"远端为唯一权威"

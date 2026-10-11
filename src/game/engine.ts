@@ -192,6 +192,10 @@ export function damagePlayer(combat: CombatState, run: RunState, amount: number,
   if (hpLoss > 0) {
     // 震屏带 hpLoss：UI 据此分档（≥20强/≥10中/≥5弱/极弱）并触发受伤红晕
     fx(combat, 'shake', ptgt(combat), hpLoss)
+    // 镀金护甲：受攻击失去生命时层数 -1（原版 wasHPLost，非攻击伤害不减）
+    if (isAttack && AP(combat).statuses.platedArmor) {
+      AP(combat).statuses.platedArmor = Math.max(0, AP(combat).statuses.platedArmor - 1)
+    }
     // 世纪魔方：战斗中第一次因攻击失去生命 → 抽1张
     if (isAttack && run.relics.includes('centennialPuzzle') && !AP(combat).customFlags?.puzzleUsed) {
       const cf = AP(combat).customFlags = AP(combat).customFlags || {}
@@ -858,6 +862,8 @@ export function endPlayerTurn(combat: CombatState, run: RunState) {
   }
   // 金属化
   if (P.statuses.metallicize) playerGainBlock(combat, run, P.statuses.metallicize)
+  // 镀金护甲：回合结束时获得等同层数的格挡（原版 atEndOfTurnPreEndTurnCards）
+  if (P.statuses.platedArmor) playerGainBlock(combat, run, P.statuses.platedArmor)
   // 燃烧
   if (P.statuses.combust) {
     damagePlayer(combat, run, 1, null, false)
@@ -2264,6 +2270,17 @@ export function usePotion(combat: CombatState, run: RunState, idx: number, targe
     case 'cultistPotion':
       applyStatus(combat, 'player', 'ritual', 1)
       break
+    case 'essenceOfSteel':
+      applyStatus(combat, 'player', 'platedArmor', 4)
+      break
+    case 'sneckoOil': {
+      // 原版 SneckoOil：抽 5 张 + RandomizeHandCostAction（先抽后随机化，新抽的牌一并随机）
+      drawCards(combat, run, 5)
+      for (const c of AP(combat).hand) {
+        if (!c.freeThisTurn) c.costRoll = Math.floor(Math.random() * 4)
+      }
+      break
+    }
     case 'skillPotion': case 'attackPotion': {
       const pool = Object.values(CARDS).filter(c => c.rarity !== 'special' && c.rarity !== 'starter' && c.type === (pid === 'skillPotion' ? 'skill' : 'attack') && c.rarity !== 'rare')
       const c = makeCard(pick(pool).id)

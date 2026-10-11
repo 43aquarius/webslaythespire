@@ -118,6 +118,7 @@ export interface CardInstance {
   id: string
   upgraded: number      // 0 = 未升级；>0 = 升级次数
   freeThisTurn?: boolean // 药水墨牌：本回合 0 费
+  costRoll?: number      // 蛇油：战斗内费用随机化（0-3，战斗卡为副本不外泄）
   limitBreakExhaust?: boolean
 }
 

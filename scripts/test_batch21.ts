@@ -59,7 +59,7 @@ async function main() {
   check('A6 液态青铜=金铜+青蓝hybrid', POTION_LAYERS.liquidBronze.liquid === '#e2b821' && POTION_LAYERS.liquidBronze.hybrid === '#18bcc0')
   check('A7 邪教徒=蓝+深navy hybrid', POTION_LAYERS.cultistPotion.liquid === '#2853bc' && POTION_LAYERS.cultistPotion.hybrid === '#1c2c60')
   const shapes = new Set(Object.values(POTION_LAYERS).map(s => s.shape))
-  check('A8 形状集=11种', shapes.size === 11, [...shapes].join(','))
+  check('A8 形状集=13种(含第29批anvil/snecko)', shapes.size === 13 && shapes.has('anvil') && shapes.has('snecko'), [...shapes].join(','))
   check('A9 攻击=card形红液', POTION_LAYERS.attackPotion.shape === 'card' && POTION_LAYERS.attackPotion.liquid === '#ff0000')
 
   // ---------- 导航到地图 ----------
@@ -195,7 +195,7 @@ async function main() {
   })()`)
   check('C12 迅捷层序+青spots', trio.found === true && JSON.stringify(trio.swSeq) === JSON.stringify(['liquid', 'spots', 'glass']) && trio.swLiq === 'rgb(13, 66, 157)' && trio.swSp === 'rgb(0, 255, 255)', JSON.stringify(trio))
   check('C13 毒药层序+森林绿spots', trio.found === true && JSON.stringify(trio.poSeq) === JSON.stringify(['liquid', 'spots', 'glass']) && trio.poLiq === 'rgb(50, 205, 50)' && trio.poSp === 'rgb(34, 139, 34)', JSON.stringify(trio))
-  check('C14 瓶中幽灵白液+浅灰hybrid', trio.found === true && JSON.stringify(trio.ghSeq) === JSON.stringify(['liquid', 'hybrid', 'glass']) && trio.ghLiq === 'rgb(255, 255, 255)' && trio.ghHyb === 'rgb(179, 179, 179)', JSON.stringify(trio))
+  check('C14 瓶中幽灵白液+浅灰hybrid', trio.found === true && JSON.stringify(trio.ghSeq) === JSON.stringify(['liquid', 'hybrid', 'glass']) && trio.ghLiq === 'rgb(255, 255, 255)' && trio.ghHyb === 'rgb(191, 191, 191)', JSON.stringify(trio)) // LIGHT_GRAY=0xbfbfbf 第29批权威修正
 
   // ---------- D. 商店药水分层 ----------
   console.log('-- D. 商店 --')
