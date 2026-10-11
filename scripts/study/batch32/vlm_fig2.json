@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "根据您提供的截图，以下是客观描述：\n\n**① 中央半透明面板的完整内容：**\n*   **标题：** 菜 单\n*   **按钮（从上到下）：**\n    1.  继 续 游 戏\n    2.  设 置\n    3.  放 弃 本 局\n    4.  返回主菜单\n*   **底部小字：** 第 1 章 - 第 1 回 - 连续已自动存档\n\n**② 它的位置和层级：**\n该面板位于**检视大卡的上方**（即覆盖在卡面之上），处于最顶层显示。\n\n**③ 大卡卡名是：**\n防 御",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1791705999,
+  "id": "20261011160636353fcd98d2ec4ff0",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20261011160636353fcd98d2ec4ff0",
+  "usage": {
+    "completion_tokens": 158,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 936,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1094
+  }
+}

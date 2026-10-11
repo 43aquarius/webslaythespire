@@ -29,6 +29,8 @@ export function InGameMenu() {
       if (e.key === 'Escape' && run) {
         const st = useGame.getState()
         if (st.pileView || st.select || st.busy) return
+        // 第三十二批修复：检视层打开时让行（右键检视场景无 pileView，此前 Esc 会误开本菜单——VLM 图2 验收发现）
+        if (document.body.dataset.stsInspect) return
         e.preventDefault()
         toggleMenu()
       }

@@ -171,7 +171,8 @@ export function InspectView({ cards, index, onIndex, onClose }: {
   }, [index, allowUpgrade])
 
   return (
-    <div className="absolute inset-0" style={{ zIndex: 320 }} onClick={e => e.stopPropagation()}>
+    <div className="absolute inset-0" style={{ zIndex: 320 }} onClick={e => e.stopPropagation()}
+      onContextMenu={e => e.preventDefault()}>
       {/* 背板：黑 0→0.9 pow2In 0.25s（原版 updateFade） */}
       <div className="scv-backdrop" onClick={onClose} />
       {/* 大卡（1024 画布 853px，原版 renderHelper ×Settings.scale） */}

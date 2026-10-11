@@ -7,6 +7,23 @@ import { RELICS } from '@/game/relics'
 import { useEffect, useRef, useState } from 'react'
 import { POTIONS } from '@/game/potions'
 import { Tip, RelicIcon, PotionSlot, TopHud } from './Shared'
+import { CardInstance } from '@/game/types'
+import { InspectView } from './Overlays_inspect'
+
+// 第三十二批：奖励屏卡牌右键检视（原版 CardRewardScreen.cardSelectUpdate:
+// justClickedRight → CardCrawlGame.cardPopup.open(hoveredCard) 单卡版，无翻页箭头；左键仍为选卡）
+function useInspectCard() {
+  const [inspectCard, setInspectCard] = useState<CardInstance | null>(null)
+  const onCtx = (cid: string, uidPrefix: string) => (e: React.MouseEvent) => {
+    e.preventDefault()
+    if (inspectCard) return   // 已开检视：忽略新右键（原版 isPopupOpen 屏蔽输入）
+    setInspectCard({ uid: uidPrefix + cid, id: cid, upgraded: 0 })
+  }
+  const node = inspectCard ? (
+    <InspectView cards={[inspectCard]} index={0} onIndex={() => {}} onClose={() => setInspectCard(null)} />
+  ) : null
+  return { onCtx, node }
+}
 
 const A = '/assets'
 
@@ -19,6 +36,7 @@ export function RewardScreen() {
   const proceed = useGame(s => s.proceedFromReward)
   const mpSkipCard = useGame(s => s.mpSkipCard)
   const net = useGame(s => s.net)
+  const insp = useInspectCard()
 
   if (!run?.reward || !run.combat) return null
   const r = run.reward
@@ -63,7 +81,9 @@ export function RewardScreen() {
                 const locked = tookMyCard && !taken
                 const rar = CARDS[cid]?.rarity
                 return (
-                  <div key={cid} className="sts-card-in relative" style={{ animationDelay: `${i * 0.12}s` }}>
+                  <div key={cid} className="sts-card-in relative" style={{ animationDelay: `${i * 0.12}s` }}
+                    data-inspect={cid}
+                    onContextMenu={insp.onCtx(cid, 'rw_')}>
                     {/* 原版 NCardRareGlow / NCardUncommonGlow：稀有金晕 / 罕见蓝晕，1s 淡入至 0.9 */}
                     {!tookMyCard && (rar === 'rare' || rar === 'uncommon') && (
                       <div className={`sts-reward-glow ${rar === 'rare' ? 'sts-reward-glow-rare' : 'sts-reward-glow-uncommon'}`} />
@@ -116,6 +136,8 @@ export function RewardScreen() {
           </div>
         )}
       </div>
+      {/* 右键检视层（原版 SingleCardViewPopup，zIndex 320 覆盖全屏） */}
+      {insp.node}
     </div>
   )
 }

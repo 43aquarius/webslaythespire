@@ -11,6 +11,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useGame } from '@/store/gameStore'
 import { CardView } from './CardView'
+import { CardInstance } from '@/game/types'
+import { InspectView } from './Overlays_inspect'
 import { RELICS } from '@/game/relics'
 import { POTIONS } from '@/game/potions'
 import { EVENTS } from '@/game/events'
@@ -172,6 +174,14 @@ export function ShopScreen() {
 
 function ShopScene({ run, shop, gold, mp, myIdx, buyCard, buyRelic, buyPotion, buyRemoval, leave, shopFail }: any) {
   const wrapRef = useRef<HTMLDivElement>(null)
+  // 第三十二批：商店卡右键检视（原版 ShopScreen.update:
+  // justClickedRight → cardPopup.open(hoveredCard) 单卡版，无翻页箭头；左键仍为购买；hoveredCard 不滤 sold——售出卡也可检视）
+  const [inspectCard, setInspectCard] = useState<CardInstance | null>(null)
+  const onCtx = (i: number, cardId: string) => (e: React.MouseEvent) => {
+    e.preventDefault()
+    if (inspectCard) return   // 已开检视：忽略新右键（原版 isPopupOpen 屏蔽输入）
+    setInspectCard({ uid: 'shop_' + i, id: cardId, upgraded: 0 })
+  }
   // —— 商人手：hover 槽位跟随，1s 无悬停退场（原版 updateHand/notHoveredTimer） ——
   const [handX, setHandX] = useState<number | null>(null)
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -250,7 +260,7 @@ function ShopScene({ run, shop, gold, mp, myIdx, buyCard, buyRelic, buyPotion, b
           const canAfford = gold >= item.price
           return (
             <ShopSlot key={i} kind="card" idx={i} sold={item.sold} onBuy={() => buyCard(i)} onHover={onHover}>
-              <div className="relative">
+              <div className="relative" data-inspect={item.cardId} data-sidx2={i} onContextMenu={onCtx(i, item.cardId)}>
                 <CardView card={{ uid: 'shop_' + i, id: item.cardId, upgraded: 0 }} width={148} dimmed={item.sold} />
                 {item.discount && !item.sold && <SaleTag />}
               </div>
@@ -316,6 +326,10 @@ function ShopScene({ run, shop, gold, mp, myIdx, buyCard, buyRelic, buyPotion, b
         <div className="sts-body sts-num" style={{ position: 'absolute', left: '50%', bottom: 24, transform: 'translateX(-50%)', color: '#c8d8e8', fontSize: 13 }}>
           联机模式：各自购买 · 队友 {run.players[1 - myIdx]?.gold ?? '-'} 金币
         </div>
+      )}
+      {/* 右键检视层（原版 SingleCardViewPopup，zIndex 320 覆盖全屏） */}
+      {inspectCard && (
+        <InspectView cards={[inspectCard]} index={0} onIndex={() => {}} onClose={() => setInspectCard(null)} />
       )}
     </div>
   )

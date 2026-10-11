@@ -1695,6 +1695,7 @@ function updateRewardScreen(run: RunState) {
       if (!el) {
         el = document.createElement('div')
         el.dataset.cid = cid
+        el.dataset.inspect = cid   // 第三十二批：右键检视锚点（与 act=takeCard 独立；选中态保留）
         el.style.animationDelay = `${i * 0.12}s`
         // 原版 NCardRareGlow/NCardUncommonGlow：稀有金晕 / 罕见蓝晕（1s 淡入至 0.9）
         const rar0 = CARDS[cid]?.rarity
@@ -1961,6 +1962,7 @@ function updateShopScreen(run: RunState) {
       if (!el) {
         el = document.createElement('div')
         el.dataset.sidx = String(i)
+        el.dataset.inspect = item.cardId   // 第三十二批：右键检视锚点（hoveredCard 不滤 sold——售出卡也可检视）
         el.innerHTML = `<div class="shop-card-pos" style="position:relative"></div>`
         cardsEl.appendChild(el)
       }
@@ -2239,12 +2241,32 @@ let inspectTicked = false   // 原版 isViewingUpgrade：默认 false，翻页�
 let inspectGen = 0
 let inspectDir = 0
 let inspectClosing = false
+// 第三十二批：奖励屏/商店卡右键检视（原版 CardRewardScreen/ShopScreen.update:
+// justClickedRight → cardPopup.open(hoveredCard) 单卡版，无翻页箭头；单卡源与牌堆源分立）
+let inspectExtra: CardInstance[] | null = null
 
 function pileCardsOf(run: RunState, pile: string): CardInstance[] {
   if (pile === 'draw') return [...(run.combat ? AP(run.combat).drawPile : [])].reverse()
   if (pile === 'discard') return [...(run.combat ? AP(run.combat).discardPile : [])].reverse()
   if (pile === 'exhaust') return [...(run.combat ? AP(run.combat).exhaustPile : [])]
   return run.deck
+}
+
+// 检视卡来源统一入口：外部单卡（奖励屏/商店右键）优先，其次牌堆弹窗
+function inspectCardsAll(st: ReturnType<typeof g>): CardInstance[] {
+  if (inspectExtra) return inspectExtra
+  return st.pileView && st.run ? pileCardsOf(st.run, st.pileView) : []
+}
+
+// 原版 open(card) 单卡版：isViewingUpgrade=false、无翻页组（箭头端点隐藏）
+function inspectOpenCard(card: CardInstance) {
+  if (inspectUid || inspectClosing) return   // 已开检视：忽略（原版 isPopupOpen 屏蔽输入）
+  inspectExtra = [card]
+  inspectUid = card.uid
+  inspectTicked = false
+  inspectGen = 0
+  inspectDir = 0
+  inspectRerender()
 }
 
 // 原版 allowUpgradePreview：非诅咒(color!=CURSE)且非状态(type!=STATUS)
@@ -2341,8 +2363,8 @@ function inspectRerender() {
 
 function doInspectStep(d: number) {
   const st = g()
-  if (!st.pileView || !st.run || inspectClosing) return
-  const cards = pileCardsOf(st.run, st.pileView)
+  if ((!st.pileView && !inspectExtra) || !st.run || inspectClosing) return
+  const cards = inspectCardsAll(st)
   const idx = cards.findIndex(c => c.uid === inspectUid)
   const i = idx + d
   if (i < 0 || i >= cards.length) return
@@ -2356,8 +2378,8 @@ function doInspectStep(d: number) {
 function doInspectToggle() {
   if (!inspectUid || inspectClosing) return
   const st = g()
-  if (!st.run || !st.pileView) return
-  const cards = pileCardsOf(st.run, st.pileView)
+  if (!st.run && !inspectExtra) return
+  const cards = inspectCardsAll(st)
   const card = cards.find(c => c.uid === inspectUid)
   if (!card || !scvAllowUpgrade(card)) return
   inspectTicked = !inspectTicked
@@ -2371,12 +2393,13 @@ function doInspectClose() {
   inspectTicked = false
   inspectClosing = false
   inspectGen = 0
+  inspectExtra = null
   inspectRerender()
 }
 
 function overlayHtml(st: ReturnType<typeof g>): { html: string; sig: string } {
   const run = st.run
-  if (!run) return { html: '', sig: '' }
+  if (!run) return { html: '', sig: 'none' }
   // 防御：combat 结构不完整（缺 players/activeIdx）时跳过预见层，避免整个渲染循环崩溃
   const apOk = !!run.combat && Array.isArray(run.combat.players) && !!run.combat.players[run.combat.activeIdx]
   if (apOk && AP(run.combat).pendingScry) {
@@ -2417,6 +2440,11 @@ function overlayHtml(st: ReturnType<typeof g>): { html: string; sig: string } {
         ${inspectUid ? inspectLayerHtml(cards) : ''}
       </div>`
     }
+  }
+  // 第三十二批：外部单卡检视（奖励屏/商店右键），独立分支（与 pileView 互斥；背板拦截原屏点击）
+  if (inspectExtra && inspectUid) {
+    const sig = `inspx:${inspectUid}:${inspectTicked ? 1 : 0}:${inspectGen}`
+    return { sig, html: inspectLayerHtml(inspectExtra) }
   }
   if (st.select) {
     const sel = st.select
@@ -2462,7 +2490,7 @@ function overlayHtml(st: ReturnType<typeof g>): { html: string; sig: string } {
       </div>`
     }
   }
-  return { html: '', sig: '' }
+  return { html: '', sig: 'none' }  // 第三十二批修复：空态 sig 必须非空——inspectRerender 强置 __sig='' 后，空态若返回 '' 则 ''!=='' 为假，DOM 残留旧检视层（外部单卡源关闭即命中此路径）
 }
 
 function renderOverlays(st: ReturnType<typeof g>) {
@@ -3005,7 +3033,8 @@ function setupKeyboard() {
     if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA')) return
     const st = g()
     // 检视屏导航（原版 NInspectCardScreen：←/→ 切卡，Enter/空格 升级预览）
-    if (inspectUid && st.pileView) {
+    // 第三十二批：守卫扩展到外部单卡源（奖励屏/商店右键），与牌堆源等权
+    if (inspectUid && (st.pileView || inspectExtra)) {
       if (e.key === 'ArrowLeft') { doInspectStep(-1); e.preventDefault(); return }
       if (e.key === 'ArrowRight') { doInspectStep(1); e.preventDefault(); return }
       if (e.key === 'Enter' || e.key === ' ') { doInspectToggle(); e.preventDefault(); return }
@@ -3264,6 +3293,27 @@ document.addEventListener('click', (e) => {
     const st = g()
     if (st.selectedCardUid || st.selectedPotionIdx !== null) g().cancelSelection()
   }
+})
+
+// ============ 右键检视（第三十二批：原版 CardRewardScreen/ShopScreen justClickedRight → cardPopup.open） ============
+// data-inspect 锚点：奖励屏卡（data-cid 容器）与商店卡（data-sidx 容器，售出保留）；左键语义（选卡/购买）不受影响
+document.addEventListener('contextmenu', (e) => {
+  const t = e.target as HTMLElement
+  const el = t.closest('[data-inspect]') as HTMLElement | null
+  if (!el) {
+    // 检视开着时屏蔽层上默认菜单（原版 isPopupOpen 屏蔽输入），空白处放行浏览器菜单
+    if (document.querySelector('.inspect-root')) e.preventDefault()
+    return
+  }
+  e.preventDefault()
+  if (inspectUid) return   // 已开检视：忽略新右键
+  const id = el.dataset.inspect!
+  // 商店卡（#shop-cards 内，data-sidx=槽位）→ uid shop_i；奖励屏卡 → uid rw_cid（与展示卡 r_/s 前缀区分）
+  const inShop = el.closest('#shop-cards')
+  const card: CardInstance = inShop
+    ? { uid: 'shop_' + (el.dataset.sidx ?? '0'), id, upgraded: 0 }
+    : { uid: 'rw_' + id, id, upgraded: 0 }
+  inspectOpenCard(card)
 })
 
 // ============ 悬浮提示（鼠标 + 触屏） ============
