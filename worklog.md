@@ -715,3 +715,26 @@ Stage Summary:
 - 重大既有 bug 入库：Next useRoomFade 旧定时器回写 shown 竞态（画面卡死在旧屏）；修复=targetRef 收敛
 - 方法论入库：①端口查杀用 ss 不用 lsof（改名进程逃逸）②双端口启动顺序（start_prod 的 pkill 连杀）③跨屏重置语义挂 store 的 run.screen（房间过渡不重挂载）④选择器勿多包一层 div ⑤新老测试参数风格(argv URL vs mode) ⑥VLM 前先"正常流可用+重载注入"两步复现法
 - 后续候选（承队列）：奖励屏与商店卡的右键检视入口（原版 CardRewardScreen/ShopScreen 均可 open(card)）/ 房间切换渐变过渡未落地项已由本批 useRoomFade 加固部分覆盖 / 敌人受击/死亡音效按敌种细分
+---
+Task ID: 33
+Agent: main
+Task: 会话恢复（摘要滞后校准，第五次）+ 第三十二批：奖励屏与商店卡的右键检视入口（原版 CardRewardScreen/ShopScreen open(card)，两版本）
+
+Work Log:
+- 【会话恢复】交接摘要滞留"第25批待启动"，git 考古：本地 dc2a86d(第二十批 amend) 与远端 3620fe1 树一致仅权限位差异，远端已推进至第三十一批 1a579bb（前会话上下文丢失期间推送）→ 按既定经验"远端为唯一权威" reset --hard 对齐；生产环境恢复(.next 全丢→build+start_prod :3000)；冒烟 regression16 + batch20 12+12 全绿。判定经验第五次验证：摘要滞后时以 worklog+git 为准
+- 【原版考证·全链路】CardRewardScreen.cardSelectUpdate:267 / ShopScreen.update:592-594（反编译仓库重新克隆）：hoveredCard 上 justClickedRight → cardPopup.open(hoveredCard)；open(card) 单卡版(153行)无 prev/next 翻页组（箭头端点隐藏）；左键语义独立（选卡/购买）；hoveredCard 不滤 sold——售出卡也可检视；open 时 isPopupOpen=true 屏蔽后续输入
+- 【Next 版】RewardScreen/ShopScreen：useInspectCard 局部态（inspectCard + onCtx preventDefault + 已开忽略）；卡行 wrapper data-inspect + onContextMenu；ShopScene 卡行（ShopSlot 内层 relative div）；InspectView 单卡（cards=[card] index=0 → 箭头自动隐藏）；Overlays_inspect 根 div 加 onContextMenu preventDefault（屏蔽层上默认菜单）
+- 【standalone 版】ui.ts：inspectExtra 外部单卡源（与牌堆源 pileCardsOf 分立）+ inspectCardsAll 统一入口 + inspectOpenCard（open(card) 单卡版语义）；overlayHtml 新独立分支（sig inspx:...，与 pileView 互斥）；奖励屏卡（updateRewardScreen 创建块 data-inspect=cid 常驻）与商店卡（updateShopScreen 创建块 data-inspect=cardId，sold 保留）；document contextmenu 全局委托（closest [data-inspect]→preventDefault→#shop-cards 判 uid shop_i / rw_cid）；键盘导航守卫扩展（inspectUid && (pileView || inspectExtra)——漏改即右键检视下 ←/→/空格失效，自查发现）
+- 【重大bug修复① standalone·本批引入路径】overlayHtml 空态 return {html:'',sig:''} 与 inspectRerender 强置 __sig='' 相等 → ''!=='' 为假 → renderOverlays 跳过更新 → 外部单卡源关闭（inspectExtra 清空+无 pileView）后 DOM 残留旧检视层；第三十批牌堆检视关闭不中招（pileView 常驻返回非空 sig）。修复：空态 sig='none'（两处）
+- 【重大bug修复② Next·既有bug·VLM 发现】InGameMenu Esc 监听只让行 pileView/select/busy——右键检视打开时（无 pileView）Esc 同时关检视+误开菜单（z-900 盖检视层 z-320）；VLM 图2 验收发现"游戏主菜单弹窗覆盖卡牌之上"，二次 VLM 确认内容（菜单/继续游戏/设置/放弃本局/返回主菜单）。修复：与 page.tsx 同款 stsInspect 让行标记（InGameMenu Esc 分支）
+- 【测试基建】start_test_server.sh：:3100 独立启动器（复刻 start_prod.sh double-fork：setsid+exec+文件重定向），根治两类事故——普通 nohup&disown 被会话收割、start_prod pkill 连杀 :3100（须顺序 start_prod(:3000) 先、start_test_server(:3100) 后）；npm run build 重建 .next 后 :3000 陈旧进程白屏（curl 200 但 __sts undefined）——构建后必须重启
+- 【test_batch32 双版本 16+16】A 锚点（3 卡 data-inspect）B 奖励屏右键（开+preventDefault/卡名描述/无箭头/不触发选卡/升级绿+6→9/已开不切换/Esc 关/关后重开）C 商店右键（特卖卡/层上右键屏蔽/售出卡可检视/关后左键购买正常）D 截图+复验。测试技术：dispatchEvent 返回 false=被 preventDefault；contextmenu 派发 MouseEvent button:2；测试 patch 须同步顶层 r.gold 与 players[0].gold（buyCard 用顶层）；RewardScreen 守卫要求 run.combat 非 null（mutate 回奖励屏勿漏）
+- 【全套回归全绿】batch32 16+16 / regression 16 / regression5 412 / bugcheck 29+29 / batch12 29+19 / batch13 25+25 / batch14 19+18 / batch15 31+28 / batch16 30+31 / batch18 41+45 / batch20 12+12 / batch21 34+42 / batch22 22+20 / batch23 37+37 / batch25 16+16 / batch27 13+13 / batch28 13+13 / batch29 13+13 / batch30 34+34 / batch31 32+32 / mptest 23 / fulltest 全流程 gameover
+- 【VLM 验收】首轮 4 图发现图2 主菜单弹窗（→InGameMenu Esc 修复）；修复后复验 4/4：五层结构无错位/文字清晰不重叠/单卡无箭头/背板半透明原界面隐约可见/画面纯净无弹窗——全部符合原版 SingleCardViewPopup 观感
+- 【版本】单文件 44.91MB；生产 :3000 已部署（含 InGameMenu 修复构建）
+
+Stage Summary:
+- 检视能力补齐至奖励屏与商店（原版 CardRewardScreen/ShopScreen 右键 open(card) 单卡版精确复刻），第三十批检视屏与第三十一批商店屏在此收口衔接
+- 两大既有/新引入 bug 入库：①sig 空态与强置空相等的 DOM 残留（"强制更新"技巧的隐藏反例——强置值必须与可能的空态值不等）②Esc 多监听者竞态（新增遮罩层时须排查全部既有 Esc 监听的让行条件，page.tsx/InGameMenu 两处让行标记不同源是隐患温床）
+- 测试基建入库：:3100 double-fork 独立启动器；npm run build 后必须重启 :3000；老式(argv[2]=URL)与新式(argv[2]=mode)测试参数地图（batch12-16/fulltest 老式、batch18+ 新式）
+- 后续候选（承队列）：敌人受击/死亡音效按敌种细分 / 房间切换渐变过渡剩余项 / 牌堆弹窗检视的双版本行为统一审计
