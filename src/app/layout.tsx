@@ -3,42 +3,18 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
-// 原版字体（反编译游戏文件）: 标题/卡名 = Kreon-Bold (英文) + SourceHanSerifSC-Bold (中文)
-// 正文 = Kreon-Regular + SourceHanSerifSC-Medium（原版简中 zhs 字体方案）
-const titleFont = localFont({
-  variable: "--font-title",
+// 原版字体（FontHelper.java 权威考证，第二十八批）：
+// ZHS 语言下全部文字（卡名27px/描述24px/类型行17px/检视大图48px/能量数字76px）统一用
+// font/zhs/NotoSansMonoCJKsc-Regular.otf；prepFont 第二参是线性过滤而非粗体；
+// ZHS_BOLD_FONT(SourceHanSerifSC-Bold) 为从未被引用的死常量——旧实现误把宋体当主字体已纠正。
+// Kreon 仅 ENG 语言路线使用，中文站不引用（保留文件作为资产完备性）。
+const zhMonoFont = localFont({
+  variable: "--font-zh-mono",
   src: [
-    { path: "../../public/assets/fonts/kreon-bold.woff2", weight: "700", style: "normal" },
-    { path: "../../public/assets/fonts/kreon-regular.woff2", weight: "400", style: "normal" },
+    { path: "../../public/assets/fonts/NotoSansMonoCJKsc-Regular.woff2", weight: "400", style: "normal" },
   ],
   preload: false,
-});
-
-const zhTitleFont = localFont({
-  variable: "--font-zh-title",
-  src: [
-    { path: "../../public/assets/fonts/SourceHanSerifSC-Bold.woff2", weight: "700", style: "normal" },
-    { path: "../../public/assets/fonts/SourceHanSerifSC-Medium.woff2", weight: "500", style: "normal" },
-  ],
-  preload: false,
-});
-
-const bodyFont = localFont({
-  variable: "--font-body",
-  src: [
-    { path: "../../public/assets/fonts/kreon-regular.woff2", weight: "400", style: "normal" },
-    { path: "../../public/assets/fonts/kreon-bold.woff2", weight: "700", style: "normal" },
-  ],
-  preload: false,
-});
-
-const zhBodyFont = localFont({
-  variable: "--font-zh-body",
-  src: [
-    { path: "../../public/assets/fonts/SourceHanSerifSC-Medium.woff2", weight: "500", style: "normal" },
-    { path: "../../public/assets/fonts/SourceHanSerifSC-Bold.woff2", weight: "700", style: "normal" },
-  ],
-  preload: false,
+  adjustFontFallback: false, // 不生成 Arial 调整 fallback 面（其 data URI 在部分环境 error；我们的链已有 Noto Sans SC/系统兜底）
 });
 
 export const metadata: Metadata = {
@@ -66,7 +42,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <body
-        className={`${titleFont.variable} ${zhTitleFont.variable} ${bodyFont.variable} ${zhBodyFont.variable} antialiased`}
+        className={`${zhMonoFont.variable} antialiased`}
         style={{ background: "#050302", overflow: "hidden" }}
       >
         {children}

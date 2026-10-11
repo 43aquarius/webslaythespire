@@ -125,10 +125,17 @@
 }
 
 /* ============ 杀戮尖塔游戏样式 ============ */
-/* 字体 = 原版游戏方案 (FontHelper.java): 英文 Kreon + 简中 SourceHanSerifSC */
-:root {
-  --sts-font-title: var(--font-zh-title), var(--font-title), "SourceHanSerifSC", "Noto Serif SC", serif;
-  --sts-font-body: var(--font-zh-body), var(--font-body), "SourceHanSerifSC", "Noto Serif SC", serif;
+/* 字体 = 原版游戏方案 (FontHelper.java 权威考证，第二十八批)：
+   ZHS 语言全部文字统一 NotoSansMonoCJKsc-Regular（黑体等宽，含拉丁/数字半宽）。
+   旧实现"英文 Kreon + 简中 SourceHanSerifSC"系误读——SourceHanSerifSC 是 ZHS_BOLD_FONT
+   死常量从未被引用，Kreon 仅 ENG 路线。标题粗体观感用 CSS 伪粗近似原版 FreeType 描边。
+   ⚠ 变量必须定义在 body 上：next/font 的 --font-zh-mono 挂在 body（layout.tsx variable），
+   :root(html) 无法向内解析后代变量——旧版定义在 :root 导致 var 链 guaranteed-invalid，
+   全站实际一直退回 Tailwind 默认 sans（本批修复）。 */
+body {
+  --sts-font-title: var(--font-zh-mono), "Noto Sans Mono CJK SC", "Noto Sans SC", sans-serif;
+  --sts-font-body: var(--font-zh-mono), "Noto Sans Mono CJK SC", "Noto Sans SC", sans-serif;
+  font-family: var(--sts-font-body); /* 原版全场景 mono：全局默认即主字体（未挂类文字不再落系统 sans） */
 }
 
 .sts-title { font-family: var(--sts-font-title); }
@@ -454,12 +461,6 @@
 /* ============ 动画还原包（第九批） ============ */
 
 /* 敌人待机浮动（呼吸感） */
-@keyframes sts-idle-bob {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-7px) scale(1.012); }
-}
-.sts-idle-bob { animation: sts-idle-bob 2.6s ease-in-out infinite; }
-
 /* 抽牌：从抽牌堆（左下）飞入 */
 @keyframes sts-draw-in {
   /* 原版：从抽牌堆弧线飞入，带变暗(原版卡牌飞行时渐黑)+旋转；两段弧线 */
@@ -535,6 +536,43 @@
 }
 .sts-btn-ready { animation: sts-btn-ready 1.6s ease-in-out infinite; }
 
+/* ===== 第二十二批：结束回合按钮原版化（EndTurnButton.render 复刻） =====
+   三态素材：常量板 endturn/button.png / 悬停亮轮廓衬底 endturn/hover.png / 无可出牌发光 endturn/glow.png
+   文字色（Settings）：CREAM #fff6e2 / GOLD #efc851 / 悬停 CYAN #00ffff / 禁用 LIGHT_GRAY #b3b3b3 */
+.sts-endturn {
+  border: none; background: transparent; padding: 0; cursor: pointer;
+  transition: transform 0.08s ease-out;
+}
+.sts-endturn.enemy, .sts-endturn.off { cursor: default; }
+.sts-endturn .et-hover {
+  position: absolute; inset: 0; display: block;
+  background: url('/assets/endturn/hover.png') center/contain no-repeat;
+  opacity: 0; transition: opacity 0.15s ease-out;
+}
+.sts-endturn .et-plate {
+  position: absolute; inset: 0; display: block;
+  background: url('/assets/endturn/button.png') center/contain no-repeat;
+}
+.sts-endturn.glow .et-plate { background-image: url('/assets/endturn/glow.png'); }
+/* 原版：敌方回合 GRAYSCALE shader；isDisabled → DISABLED_COLOR(0.7) */
+.sts-endturn.enemy .et-plate { filter: grayscale(1) brightness(0.8); }
+.sts-endturn.off .et-plate { filter: grayscale(0.6) brightness(0.72); }
+.sts-endturn .et-text {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 25px; color: #fff6e2; letter-spacing: 2px;
+  text-shadow: 0 0 4px rgba(0,0,0,0.9), 2px 2px 0 rgba(20,10,4,0.85);
+  pointer-events: none;
+}
+.sts-endturn.glow .et-text { color: #efc851; }
+.sts-endturn.off .et-text { color: #b3b3b3; }
+.sts-endturn.enemy .et-text { color: #fff6e2; }
+/* 悬停（原版 hover：亮轮廓衬底 + CYAN 文字 + 上浮2px；按下下压2px） */
+.sts-endturn:not(.enemy):not(.off):hover .et-hover { opacity: 1; }
+.sts-endturn:not(.enemy):not(.off):hover .et-text { color: #00ffff; }
+.sts-endturn.glow:not(.enemy):not(.off):hover .et-text { color: #00ffff; }
+.sts-endturn:not(.enemy):not(.off):hover { transform: translateY(-2px); }
+.sts-endturn:not(.enemy):not(.off):active { transform: translateY(2px); }
+
 /* 药水投掷（弧线飞行后碎裂） */
 @keyframes sts-potion-throw {
   0% { transform: translate(0, 0) scale(0.7); opacity: 1; }
@@ -543,6 +581,50 @@
   100% { transform: translate(var(--ptx, 500px), var(--pty, 240px)) scale(1.6); opacity: 0; }
 }
 .sts-potion-throw { animation: sts-potion-throw 0.5s cubic-bezier(.4,0,.7,1) forwards; }
+
+/* ===== 第二十三批：原版 TopPanel 顶栏全套 =====
+   bar.png 底板 + 心/钱袋 hover 1.2x（renderHP/renderGold）
+   右上图标 hover：CYAN 染色 + 25% 白叠层（复刻 libGDX setColor(CYAN)×白纹理 + 白α.25 二次绘制）
+   settings 齿轮：平时 300°/s 旋转，hover 定格 270°（原版 settingsAngle） */
+.tp-ico { position: relative; display: block; }
+.tp-ico img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.tp-stat:hover .tp-ico { transform: scale(1.2); }
+.tp-ico { transition: transform 0.12s ease-out; transform-origin: center; }
+/* 右上图标（deck/settings）：mix-blend color 染青 + screen 提亮 */
+.tp-tico, .tp-deck { isolation: isolate; }
+.tp-tico .tint, .tp-deck .tint {
+  position: absolute; inset: 0; background: #0ff; mix-blend-mode: color;
+  opacity: 0; pointer-events: none; transition: opacity 0.12s;
+}
+.tp-tico .tint2, .tp-deck .tint2 {
+  position: absolute; inset: 0; background: #fff; mix-blend-mode: screen;
+  opacity: 0; pointer-events: none; transition: opacity 0.12s;
+}
+.tp-tico:hover .tint, .tp-deck:hover .tint { opacity: 0.95; }
+.tp-tico:hover .tint2, .tp-deck:hover .tint2 { opacity: 0.25; }
+/* 齿轮：300°/s 常转；hover 定格 270°（原版 -90°+360°） */
+.tp-tico.settings > img { animation: tp-spin 1.2s linear infinite; }
+.tp-tico.settings:hover > img { animation: none; transform: rotate(270deg); }
+@keyframes tp-spin { to { transform: rotate(360deg); } }
+
+/* ===== 能量VFX（原版 EnergyPanel.renderVfx：2s 双图反向旋转） =====
+   图1 50°→110°+水平镜像 / 图2 0°→-60°；α 0.5→0、scale 1→0.1（exp10In≈cubic(.64,0,.78,0)）
+   加色混合（770,1=SRC_ALPHA,ONE）→ CSS screen */
+.sts-energy-vfx { position: absolute; inset: -25%; pointer-events: none; isolation: isolate; }
+.sts-energy-vfx img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; mix-blend-mode: screen; will-change: transform, opacity;
+}
+.sts-energy-vfx .vfx1 { animation: sts-evfx1 2s cubic-bezier(.64, 0, .78, 0) forwards; }
+.sts-energy-vfx .vfx2 { animation: sts-evfx2 2s cubic-bezier(.64, 0, .78, 0) forwards; }
+@keyframes sts-evfx1 {
+  0% { transform: rotate(50deg) scaleX(-1) scale(1); opacity: 0.5; }
+  100% { transform: rotate(110deg) scaleX(-1) scale(0.1); opacity: 0; }
+}
+@keyframes sts-evfx2 {
+  0% { transform: rotate(0deg) scale(1); opacity: 0.5; }
+  100% { transform: rotate(-60deg) scale(0.1); opacity: 0; }
+}
 
 /* 药水碎裂闪光 */
 @keyframes sts-potion-shatter {
@@ -634,58 +716,48 @@
 .sts-shuffle-card:nth-child(7) { --sx: -124px; --sy: -14px; --sr: -178deg; }
 .sts-shuffle-card:nth-child(8) { --sx: 126px; --sy: -14px; --sr: 172deg; }
 
-/* 检视屏（原版 NInspectCardScreen：大卡 + 黑0.9背板 + 金箭头导航 + 升级预览勾选框） */
-.sts-inspect-backdrop {
+/* ===== 检视屏（第三十批：原版 PC SingleCardViewPopup 复刻） ===== */
+/* 背板：黑 0→0.9 pow2In 0.25s（原版 updateFade: fadeTimer 0.25, a=pow2In(0.9,0,t*4)） */
+.scv-backdrop {
   position: absolute; inset: 0;
-  background: rgba(0, 0, 0, 0.9);
-  animation: sts-inspect-backdrop-in 0.25s ease-out both;
+  background: #000;
+  animation: scv-fade-in 0.25s cubic-bezier(0.42, 0, 1, 1) both;  /* pow2In ≈ ease-in */
 }
-.sts-inspect-backdrop.closing { animation: sts-inspect-backdrop-out 0.25s ease-in both; }
-@keyframes sts-inspect-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes sts-inspect-backdrop-out { from { opacity: 1; } to { opacity: 0; } }
-/* 大卡入场：黑→亮淡入 0.25s + 0.875→1 缩放 0.15s BackOut(延迟0.1s)（原版开屏参数） */
-.sts-inspect-card-in {
-  animation: sts-inspect-card-fade 0.25s ease-out both, sts-inspect-card-scale 0.15s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s both;
+@keyframes scv-fade-in { from { opacity: 0; } to { opacity: 0.9; } }
+/* 1024 画布图层：全画布烘焙图 inset:0 同盒渲染（与 CardView 512 画布架构同构） */
+.scv-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; user-select: none; }
+.scv-art { position: absolute; pointer-events: none; user-select: none; }
+/* 翻页箭头（原版 POPUP_ARROW 256×scale @ W/2±400s；hover=白50%加色混合重绘 → CSS brightness 近似） */
+.scv-arrow { position: absolute; width: 213px; height: 213px; cursor: pointer; z-index: 5; }
+.scv-arrow img { width: 100%; height: 100%; display: block; }
+.scv-arrow-next img { transform: scaleX(-1); }
+.scv-arrow:hover img { filter: brightness(1.85); }
+/* 升级查看（原版 CHECKBOX 64 + 文案 cardTitleFont 27 @ (W/2, 70s from bottom)；hover 蓝 #87ceeb / 平时金 #efc851） */
+.scv-upgrade-toggle {
+  position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 14px; cursor: pointer; z-index: 5;
+  padding: 6px 12px;
 }
-@keyframes sts-inspect-card-fade { from { filter: brightness(0); opacity: 0; } to { filter: brightness(1); opacity: 1; } }
-@keyframes sts-inspect-card-scale { from { scale: 0.875; } to { scale: 1; } }
-/* 导航切卡：自 ±100px 滑入 0.25s ExpoOut（原版 navigate 参数） */
-.sts-inspect-nav-left { animation: sts-inspect-nav-in-l 0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.sts-inspect-nav-right { animation: sts-inspect-nav-in-r 0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }
-@keyframes sts-inspect-nav-in-l { from { translate: -100px 0; } to { translate: 0 0; } }
-@keyframes sts-inspect-nav-in-r { from { translate: 100px 0; } to { translate: 0 0; } }
-/* 金色箭头（原版 NGoldArrowButton：hover brightness1.2+1.1×，press brightness0.7，复归 0.5s ExpoOut / 亮度 1s） */
-.sts-inspect-arrow {
-  display: flex; align-items: center; justify-content: center;
-  width: 76px; height: 76px; cursor: pointer;
-  filter: brightness(0.9);
-  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), filter 1s cubic-bezier(0.16, 1, 0.3, 1);
+.scv-checkbox { position: relative; width: 53px; height: 53px; flex: none; }
+.scv-checkbox img { width: 100%; height: 100%; display: block; }
+.scv-tick-img { position: absolute; inset: 0; }
+.scv-upgrade-label {
+  font-size: 22.5px; color: #efc851; letter-spacing: 2px;
+  text-shadow: 2px 2px 0 #000, 0 0 8px rgba(0, 0, 0, 0.6);
 }
-.sts-inspect-arrow:hover { filter: brightness(1.2); transform: scale(1.1); transition: filter 0.05s linear, transform 0.05s linear; }
-.sts-inspect-arrow:active { filter: brightness(0.7); transform: scale(1); }
-/* 箭头入场：自 ±100px BackOut 0.25s 延迟 0.1s + 黑→亮淡入（原版 arrowIn） */
-.sts-inspect-arrow-in-l { animation: sts-inspect-arrow-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s both; --adx: -100px; }
-.sts-inspect-arrow-in-r { animation: sts-inspect-arrow-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s both; --adx: 100px; }
-@keyframes sts-inspect-arrow-in {
-  from { translate: var(--adx, 100px) 0; filter: brightness(0); opacity: 0; }
-  to { translate: 0 0; filter: brightness(0.9); opacity: 1; }
+.scv-upgrade-toggle:hover .scv-upgrade-label { color: #87ceeb; }
+/* 关键词 tips（原版 renderTips queuePowerTips @ W/2+340s, 420s from bottom） */
+.scv-tips {
+  position: absolute; left: 1083px; top: 548px; width: 360px;
+  display: flex; flex-direction: column; gap: 10px; z-index: 4;
+  animation: scv-fade-in 0.25s ease-out both;
 }
-/* 升级预览勾选框（原版 NTickbox：hover ×1.05+brightness1.2（0.05s），press ×0.95+brightness0.8，复归 0.5s ExpoOut） */
-.sts-inspect-tick {
-  display: flex; align-items: center; gap: 10px; cursor: pointer;
-  filter: brightness(1); scale: 1;
-  transition: scale 0.5s cubic-bezier(0.16, 1, 0.3, 1), filter 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+.scv-tip {
+  background: rgba(16, 9, 4, 0.94);
+  border: 2px solid #6b5433; border-radius: 6px;
+  padding: 10px 14px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.65), inset 0 0 12px rgba(0, 0, 0, 0.4);
 }
-.sts-inspect-tick:hover { scale: 1.05; filter: brightness(1.2); transition: scale 0.05s linear, filter 0.05s linear; }
-.sts-inspect-tick:active { scale: 0.95; filter: brightness(0.8); }
-.sts-tickbox {
-  width: 40px; height: 40px; flex: none;
-  border: 2.5px solid #a8834e; border-radius: 7px;
-  background: radial-gradient(ellipse at 35% 30%, #3a2a1a, #14100a 75%);
-  display: flex; align-items: center; justify-content: center;
-}
-.sts-tickbox.on { border-color: #ffd76a; box-shadow: 0 0 10px rgba(255, 205, 90, 0.5), inset 0 0 8px rgba(255, 205, 90, 0.25); }
-.sts-tickbox-check { color: #ffd76a; font-size: 26px; font-weight: 900; text-shadow: 0 0 8px rgba(255, 205, 90, 0.8); line-height: 1; }
 
 /* 按钮滑入（原版 NConfirmButton/NBackButton：启用时自隐藏位滑入） */
 @keyframes sts-btn-slide-r { from { translate: 180px 0; opacity: 0; } to { translate: 0 0; opacity: 1; } }
@@ -1115,3 +1187,52 @@
 
 /* 涅奥眼睑帧切换（眨眼序列每帧瞬时替换） */
 .sts-lid-in { animation: none; }
+
+/* ============ 第三十一批：商店/宝箱原版化样式 ============ */
+/* 商店全屏地毯（原版 ShopScreen.render：rug 全屏 + updateRug lerp 滑入自底而升） */
+@keyframes sts-shop-rug-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.shop-rug { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.shop-rug > img { width: 100%; height: 100%; object-fit: cover; animation: sts-shop-rug-in 0.42s cubic-bezier(0.25, 1, 0.32, 1) both; }
+/* 卡牌行 / 遗物药水行 / 移除服务（原版布局：TOP_ROW 29.6% · purgeX=W*0.73） */
+.shop-row-cards { position: absolute; left: 0; right: 0; display: flex; gap: 1.6vw; justify-content: center; align-items: flex-start; }
+.shop-row-goods { position: absolute; left: 0; right: 0; display: flex; gap: 5vw; justify-content: center; align-items: flex-start; }
+.shop-purge { position: absolute; right: 2.5%; }
+.purge-silhouette { position: absolute; left: 8px; top: 10px; width: 100%; height: 86%;
+  background-image: url('/assets/frames/bgSkillRed.png'); background-size: 100% 100%;
+  filter: grayscale(1) brightness(0.5) opacity(0.8); border-radius: 10px;
+  box-shadow: inset 0 0 0 22px rgba(0, 0, 0, 0.25); }
+.purge-img { position: relative; margin: auto; }
+/* 商人手（原版 merchantHand 512x1024：hover 跟随 lerp*6，1s 无悬停退场） */
+.sts-shop-hand { position: absolute; bottom: 0; height: 46%; left: 50%;
+  transform: translate(-50%, 0); transition: left 0.3s cubic-bezier(0.16, 1, 0.3, 1), bottom 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none; z-index: 6; }
+.sts-shop-hand > img { height: 100%; width: auto; }
+.sts-shop-hand-idle { bottom: -46%; left: 50%; transform: translate(-50%, 0); }
+/* 特卖标签（原版 OnSaleTag：卡右上 128px + 加色混合闪烁 [0.083,0.75] 周期 1.8s cos 波形） */
+.sale-tag { position: absolute; right: -6%; top: -14%; width: 38%; z-index: 3; pointer-events: none; filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
+.sale-tag > img { width: 100%; }
+.sale-tag::after { content: ''; position: absolute; inset: 0; background-image: url('/assets/shop/saletag.webp'); background-size: 100% 100%;
+  mix-blend-mode: screen; animation: sts-saletag-shimmer 1.8s ease-in-out infinite; }
+@keyframes sts-saletag-shimmer { 0% { opacity: 0.083; } 50% { opacity: 0.75; } 100% { opacity: 0.083; } }
+/* 对话气泡（原版 ShopSpeechBubble：swingIn 弹入 + sin(t*4) 浮动 + 4s 生命周期尾段 0.3s 淡出） */
+@keyframes sts-bubble-in { 0% { transform: translateX(-50%) scale(1.12); opacity: 0; } 60% { transform: translateX(-50%) scale(0.97); opacity: 1; } 100% { transform: translateX(-50%) scale(1); opacity: 1; } }
+@keyframes sts-bubble-life { 0% { opacity: 0; } 2.5% { opacity: 1; } 92.5% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes sts-bubble-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
+.sts-speech-bubble { position: absolute; width: min(30vw, 300px); aspect-ratio: 1; transform: translateX(-50%);
+  pointer-events: none; z-index: 8; animation: sts-bubble-in 0.3s cubic-bezier(0.68, -0.4, 0.27, 1.35) both, sts-bubble-life 4.2s linear both; }
+.sts-speech-bubble > img { position: absolute; inset: 0; width: 100%; height: 100%; animation: sts-bubble-bob 1.57s ease-in-out infinite; }
+.sts-speech-text { position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%);
+  width: 78%; text-align: center; font-size: clamp(13px, 1.35vw, 19px); line-height: 1.45; color: #2c3540;
+  font-weight: 700; text-shadow: 0 1px 0 rgba(255,255,255,.6); }
+.sts-speech-word { display: inline; animation: sts-bubble-word-in 0.22s cubic-bezier(0.34, 1.8, 0.64, 1) both; }
+@keyframes sts-bubble-word-in { from { transform: scale(1.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+/* 离开按钮（原版 cancelButton NAMES[12]"离开" 右下角） */
+.shop-leave { position: absolute; right: 3%; bottom: 4%; z-index: 7; }
+/* 宝箱（原版 AbstractChest：CHEST_LOC = W/2+348s, floorY+192s → 68%/51%；512 画布素材） */
+.sts-chest-img { position: absolute; left: 68%; top: 51%; transform: translate(-50%, -50%);
+  width: clamp(180px, 24vw, 320px); aspect-ratio: 1; object-fit: contain; z-index: 3;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.55)); cursor: pointer; transition: filter 0.2s; }
+.sts-chest-img:hover { filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.55)) brightness(1.12); }
+.sts-chest-opened { filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.5)) saturate(0.85) brightness(0.92); cursor: default; }
+@keyframes sts-chest-pop-in { from { transform: translate(-50%, -50%) scale(1.25); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+.sts-chest-img { animation: sts-chest-pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both; }

@@ -31,14 +31,17 @@ async function main() {
   // 3. CSS
   const css = readFileSync(`${SA}/style.css`, 'utf-8')
 
-  // 3.5 字体：从 assets manifest 提取 woff2 → @font-face 注入（原版 Kreon + SourceHanSerifSC）
+  // 3.5 字体：从 assets manifest 提取 woff2 → @font-face 注入
+  //     （第二十八批 FontHelper.java 权威考证：ZHS 全部文字 = NotoSansMonoCJKsc；SourceHanSerifSC 系死常量已移除）
   const assetsObj = JSON.parse(assets) as Record<string, string>
   const fontFaces = Object.entries(assetsObj)
     .filter(([k]) => k.startsWith('fonts/') && k.endsWith('.woff2'))
     .map(([k, url]) => {
-      const fam = k.endsWith('SourceHanSerifSC-Bold.woff2') || k.endsWith('SourceHanSerifSC-Medium.woff2')
-        ? (k.includes('Bold') ? '\'SourceHan Serif SC\'' : '\'SourceHan Serif SC\'')
-        : '\'Kreon\''
+      const fam = k.startsWith('fonts/NotoSansMonoCJKsc')
+        ? "'NotoSansMonoCJKsc'"
+        : k.startsWith('fonts/kreon')
+          ? "'Kreon'"
+          : "'Kreon'"
       const weight = k.includes('Medium') ? '500' : (k.includes('Bold') || k.includes('bold')) ? '700' : '400'
       return `@font-face{font-family:${fam};font-weight:${weight};font-style:normal;src:url(${url}) format('woff2');}`
     })

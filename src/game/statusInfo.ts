@@ -65,6 +65,7 @@ export const STATUS_INFO: Record<string, { name: string; desc: string; buff?: bo
   artifact: { name: '反制', desc: '下 N 次受到的负面效果被无效化。', buff: true },
   thorns: { name: '尖刺', desc: '被攻击时对攻击者造成 N 点伤害。', buff: true },
   metallicize: { name: '金属化', desc: '回合结束时获得 N 点格挡。', buff: true },
+  platedArmor: { name: '镀金护甲', desc: '回合结束时获得等同层数的格挡。受攻击失去生命时，层数 -1。', buff: true },
   regen: { name: '回复', desc: '回合开始时回复 N 点生命，然后 -1。', buff: true },
   ritual: { name: '仪式', desc: '回合开始时获得 N 点力量。', buff: true },
   demonForm: { name: '恶魔形态', desc: '回合开始时获得 N 点力量。', buff: true },

@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "(1) 是。瓶中仙女是一个透明玻璃瓶，瓶内有一个发光的绿色小人（仙女）形象。\n(2) 是。邪教徒药水是深蓝色的月牙/新月造型瓶子。\n(3) 是。青铜液是带有尖刺/星形造型的瓶子，内部为黄色和青色液体。\n(4) 是。罐中幽灵是一个方形罐子，内部有一个紫色的幽灵（骷髅头）形象。\n(5) 是。钢铁精华是一个深绿色的铁砧造型瓶子。\n(6) 是。蛇油是一个绿色的蛇形（数字2形）瓶子。",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1791689670,
+  "id": "2026101111342767525e0fccd74a9d",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "2026101111342767525e0fccd74a9d",
+  "usage": {
+    "completion_tokens": 133,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 387,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 520
+  }
+}

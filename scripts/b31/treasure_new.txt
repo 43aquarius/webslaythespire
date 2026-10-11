@@ -1,0 +1,83 @@
+// ============ 宝箱界面（第三十一批原版化：三档宝箱图+开箱图+原版位置） ============
+// 原版考证（AbstractChest/SmallChest/MediumChest/LargeChest/TreasureRoom）：
+//   位置 CHEST_LOC=(W/2+348s, floorY+192s) → 68%/51%；512 画布素材 small/medium/large(+boss 备用)
+//   Small 75/25/0 +金50%25g · Medium 35/50/15 +金35%50g · Large 0/75/25 +金50%75g（游戏层 openTreasure 已落地）
+//   开箱换 openedImg；遗物展示/拾取沿用第六批两步语义（.sts-chest-relic / hover 2.1 / press 1.9 / 稀有度光晕）
+export function TreasureScreen() {
+  const run = useGame(s => s.run)
+  const openTreasure = useGame(s => s.openTreasure)
+  const confirmTreasure = useGame(s => s.confirmTreasure)
+  const [relicSt, setRelicSt] = useState<'' | 'hover' | 'press'>('')
+
+  if (!run) return null
+  const treasureRelic = run.pendingTreasureRelic
+  const opened = treasureRelic !== undefined
+  const def = treasureRelic ? RELICS[treasureRelic] : null
+  const rarity = def?.rarity as 'common' | 'uncommon' | 'rare' | undefined
+  // 三档宝箱（旧档无 chestSize 回退 small；入房掷档 act1-3=50/33/17，act4=中箱）
+  const size = run.chestSize ?? 'small'
+  return (
+    <div className="w-full h-full relative select-none"
+      style={{ background: 'radial-gradient(ellipse at 50% 75%, #4a3a10 0%, #160e04 60%, #080402 100%)' }}>
+      <TopHud />
+      {/* 宝箱本体（原版 CHEST_LOC 68%/51%；开箱换 opened 图，已开不再可点） */}
+      <img
+        key={`chest-${size}-${opened}`}
+        src={`${A}/chests/${size}${opened ? 'Opened' : ''}.webp`}
+        alt="宝箱"
+        draggable={false}
+        className={`sts-chest-img ${opened ? 'sts-chest-opened' : ''}`}
+        data-chest={size}
+        data-chest-opened={opened ? '1' : '0'}
+        style={{ pointerEvents: opened ? 'none' : 'auto' }}
+        onClick={() => !opened && openTreasure()}
+      />
+      <div className="w-full h-full flex flex-col items-center justify-center gap-8" style={{ paddingTop: 60 }}>
+      {!opened ? (
+        <>
+          <div className="sts-title" style={{ fontSize: 44, color: '#ffd980', textShadow: '3px 3px 0 #000', marginTop: '46vh' }}>宝箱</div>
+          <div className="sts-body" style={{ fontSize: 15, color: '#e8d8c0' }}>点击宝箱开启</div>
+          <button
+            className="sts-btn sts-title"
+            style={{ fontSize: 20 }}
+            onClick={openTreasure}
+          >
+            打开宝箱
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="sts-title" style={{ fontSize: 40, color: '#ffd980', textShadow: '3px 3px 0 #000' }}>
+            {def ? '获得了遗物！' : '箱子是空的……'}
+          </div>
+          {def && (
+            <div className="relative flex flex-col items-center gap-4">
+              {/* 稀有度光晕（原版 chestRelicGlow：rare 金 / uncommon 绿 / common 蓝，脉冲） */}
+              <div className={`sts-chest-glow-${rarity && rarity in { common: 1, uncommon: 1, rare: 1 } ? rarity : 'common'}`}
+                style={{ position: 'absolute', width: 340, height: 340, left: '50%', top: '50%', transform: 'translate(-50%,-50%)', pointerEvents: 'none' }} />
+              <Tip tip={<><b>{def.name}</b><br /><span style={{ color: '#d8c8a8' }}>{def.desc}</span></>}>
+                <div
+                  className={`sts-chest-relic ${relicSt === 'hover' ? 'sts-hot' : relicSt === 'press' ? 'sts-press' : ''}`}
+                  onPointerEnter={() => setRelicSt('hover')}
+                  onPointerLeave={() => setRelicSt('')}
+                  onPointerDown={() => setRelicSt('press')}
+                  onPointerUp={() => { if (relicSt === 'press') { setRelicSt('hover'); confirmTreasure() } }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <img src={`${A}/relics/${treasureRelic}.png`} alt={def.name} width={140} height={140} draggable={false}
+                    style={{ filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.6))' }} />
+                </div>
+              </Tip>
+              <div className="sts-title" style={{ fontSize: 26, color: '#ffe9a0', textShadow: '2px 2px 0 #000' }}>{def.name}</div>
+              <div className="sts-body" style={{ fontSize: 15, color: '#d8c8a8', maxWidth: 420, textAlign: 'center', lineHeight: 1.6 }}>{def.desc}</div>
+            </div>
+          )}
+          <button className="sts-btn sts-title" style={{ fontSize: 20 }} onClick={confirmTreasure}>
+            {def ? '拿走' : '离开'}
+          </button>
+        </>
+      )}
+      </div>
+    </div>
+  )
+}

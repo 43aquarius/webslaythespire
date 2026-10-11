@@ -7,6 +7,23 @@ import { RELICS } from '@/game/relics'
 import { useEffect, useRef, useState } from 'react'
 import { POTIONS } from '@/game/potions'
 import { Tip, RelicIcon, PotionSlot, TopHud } from './Shared'
+import { CardInstance } from '@/game/types'
+import { InspectView } from './Overlays_inspect'
+
+// 第三十二批：奖励屏卡牌右键检视（原版 CardRewardScreen.cardSelectUpdate:
+// justClickedRight → CardCrawlGame.cardPopup.open(hoveredCard) 单卡版，无翻页箭头；左键仍为选卡）
+function useInspectCard() {
+  const [inspectCard, setInspectCard] = useState<CardInstance | null>(null)
+  const onCtx = (cid: string, uidPrefix: string) => (e: React.MouseEvent) => {
+    e.preventDefault()
+    if (inspectCard) return   // 已开检视：忽略新右键（原版 isPopupOpen 屏蔽输入）
+    setInspectCard({ uid: uidPrefix + cid, id: cid, upgraded: 0 })
+  }
+  const node = inspectCard ? (
+    <InspectView cards={[inspectCard]} index={0} onIndex={() => {}} onClose={() => setInspectCard(null)} />
+  ) : null
+  return { onCtx, node }
+}
 
 const A = '/assets'
 
@@ -19,6 +36,7 @@ export function RewardScreen() {
   const proceed = useGame(s => s.proceedFromReward)
   const mpSkipCard = useGame(s => s.mpSkipCard)
   const net = useGame(s => s.net)
+  const insp = useInspectCard()
 
   if (!run?.reward || !run.combat) return null
   const r = run.reward
@@ -63,7 +81,9 @@ export function RewardScreen() {
                 const locked = tookMyCard && !taken
                 const rar = CARDS[cid]?.rarity
                 return (
-                  <div key={cid} className="sts-card-in relative" style={{ animationDelay: `${i * 0.12}s` }}>
+                  <div key={cid} className="sts-card-in relative" style={{ animationDelay: `${i * 0.12}s` }}
+                    data-inspect={cid}
+                    onContextMenu={insp.onCtx(cid, 'rw_')}>
                     {/* 原版 NCardRareGlow / NCardUncommonGlow：稀有金晕 / 罕见蓝晕，1s 淡入至 0.9 */}
                     {!tookMyCard && (rar === 'rare' || rar === 'uncommon') && (
                       <div className={`sts-reward-glow ${rar === 'rare' ? 'sts-reward-glow-rare' : 'sts-reward-glow-uncommon'}`} />
@@ -116,6 +136,8 @@ export function RewardScreen() {
           </div>
         )}
       </div>
+      {/* 右键检视层（原版 SingleCardViewPopup，zIndex 320 覆盖全屏） */}
+      {insp.node}
     </div>
   )
 }
@@ -147,6 +169,8 @@ export function BossRelicScreen() {
   return (
     <div className="w-full h-full relative flex flex-col items-center justify-center gap-8 select-none"
       style={{ background: 'radial-gradient(ellipse at 50% 35%, #3a2214 0%, #140a06 65%, #080402 100%)' }}>
+      {/* 第二十三批：顶栏（原版 TopPanel 在所有房间屏常驻） */}
+      <TopHud />
       <div className="sts-title" style={{ fontSize: 40, color: '#ffd980', textShadow: '3px 3px 0 #000' }}>
         击败了首领！选择你的战利品
       </div>
@@ -202,6 +226,8 @@ export function RestScreen() {
   return (
     <div className={`w-full h-full relative flex flex-col items-center justify-center gap-6 select-none ${healing ? 'sts-rest-desat' : ''}`}
       style={{ backgroundImage: `url(${A}/bg/${campBg}.jpg)`, backgroundSize: 'cover', backgroundPosition: 'center 30%' }}>
+      {/* 第二十三批：顶栏（原版 TopPanel 在所有房间屏常驻，含篝火） */}
+      <TopHud />
       <div className="absolute inset-0" style={{ background: 'rgba(6,3,2,0.35)' }} />
       {healing && [0, 1, 2, 3].map(k => (
         <div key={k} className="sts-smoke-puff" style={{ animationDelay: `${k * 0.42}s`, left: `${46 + k * 2}%`, top: '46%' }} />
@@ -244,8 +270,11 @@ export function RestScreen() {
   )
 }
 
-// ============ 宝箱界面（第六批原版还原：开箱 → 遗物 2× 展示+稀有度光晕 → 拾取） ============
-// 原版 NTreasureRoomRelicHolder：120px 图标 2× 展示，hover 2.1（0.05s）/ press 1.9 / 常态 2.0（0.4s Expo Out）；稀有度光晕脉冲
+// ============ 宝箱界面（第三十一批原版化：三档宝箱图+开箱图+原版位置） ============
+// 原版考证（AbstractChest/SmallChest/MediumChest/LargeChest/TreasureRoom）：
+//   位置 CHEST_LOC=(W/2+348s, floorY+192s) → 68%/51%；512 画布素材 small/medium/large(+boss 备用)
+//   Small 75/25/0 +金50%25g · Medium 35/50/15 +金35%50g · Large 0/75/25 +金50%75g（游戏层 openTreasure 已落地）
+//   开箱换 openedImg；遗物展示/拾取沿用第六批两步语义（.sts-chest-relic / hover 2.1 / press 1.9 / 稀有度光晕）
 export function TreasureScreen() {
   const run = useGame(s => s.run)
   const openTreasure = useGame(s => s.openTreasure)
@@ -257,21 +286,29 @@ export function TreasureScreen() {
   const opened = treasureRelic !== undefined
   const def = treasureRelic ? RELICS[treasureRelic] : null
   const rarity = def?.rarity as 'common' | 'uncommon' | 'rare' | undefined
+  // 三档宝箱（旧档无 chestSize 回退 small；入房掷档 act1-3=50/33/17，act4=中箱）
+  const size = run.chestSize ?? 'small'
   return (
-    <div className="w-full h-full relative flex flex-col items-center justify-center gap-8 select-none"
+    <div className="w-full h-full relative select-none"
       style={{ background: 'radial-gradient(ellipse at 50% 75%, #4a3a10 0%, #160e04 60%, #080402 100%)' }}>
       <TopHud />
+      {/* 宝箱本体（原版 CHEST_LOC 68%/51%；开箱换 opened 图，已开不再可点） */}
+      <img
+        key={`chest-${size}-${opened}`}
+        src={`${A}/chests/${size}${opened ? 'Opened' : ''}.webp`}
+        alt="宝箱"
+        draggable={false}
+        className={`sts-chest-img ${opened ? 'sts-chest-opened' : ''}`}
+        data-chest={size}
+        data-chest-opened={opened ? '1' : '0'}
+        style={{ pointerEvents: opened ? 'none' : 'auto' }}
+        onClick={() => !opened && openTreasure()}
+      />
       <div className="w-full h-full flex flex-col items-center justify-center gap-8" style={{ paddingTop: 60 }}>
       {!opened ? (
         <>
-          <div className="sts-title" style={{ fontSize: 44, color: '#ffd980', textShadow: '3px 3px 0 #000' }}>宝箱</div>
-          <button
-            className="transition-transform hover:scale-105 active:scale-95"
-            onClick={openTreasure}
-            style={{ filter: 'drop-shadow(0 0 26px rgba(255,200,60,0.55))' }}
-          >
-            <img src={`${A}/mapicons/treasure.png`} alt="宝箱" width={180} height={180} draggable={false} />
-          </button>
+          <div className="sts-title" style={{ fontSize: 44, color: '#ffd980', textShadow: '3px 3px 0 #000', marginTop: '46vh' }}>宝箱</div>
+          <div className="sts-body" style={{ fontSize: 15, color: '#e8d8c0' }}>点击宝箱开启</div>
           <button
             className="sts-btn sts-title"
             style={{ fontSize: 20 }}

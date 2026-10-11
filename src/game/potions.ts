@@ -74,6 +74,14 @@ export const POTIONS: Record<string, PotionDef> = {
     id: 'cultistPotion', name: '邪教徒药水', nameEn: 'Cultist Potion', rarity: 'common',
     desc: '获得 1 层仪式。', color: '#6a4a8a', target: 'none',
   },
+  essenceOfSteel: {
+    id: 'essenceOfSteel', name: '钢铁精华', nameEn: 'Essence of Steel', rarity: 'uncommon',
+    desc: '获得 4 层镀金护甲。', color: '#008080', target: 'none',
+  },
+  sneckoOil: {
+    id: 'sneckoOil', name: '蛇油', nameEn: 'Snecko Oil', rarity: 'rare',
+    desc: '抽 5 张牌。手牌中所有牌的费用随机化（0-3）。', color: '#7fff00', target: 'none',
+  },
 }
 
 export function potionPool(): string[] {

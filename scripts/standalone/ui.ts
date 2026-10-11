@@ -2,10 +2,11 @@
 // 架构：1600×900 舞台等比缩放 + 屏幕切换时构建骨架 + 状态更新时仅差异更新区域
 // 修复：innerHTML 全量重建导致的画面闪动；补上选牌/牌堆遮罩渲染
 import { useGame } from '@/store/gameStore'
-import { CARDS, cardCost, cardDesc, cardDescParts, cardValues, cardColor } from '@/game/cards'
+import { CARDS, cardCost, cardDesc, cardDescParts, cardValues, cardColor, isStatusCard } from '@/game/cards'
 import { ENEMIES } from '@/game/enemies'
 import { RELICS } from '@/game/relics'
 import { POTIONS } from '@/game/potions'
+import { POTION_LAYERS, POTION_PLACEHOLDER_COLOR, potionLayerKey, POTION_PLACEHOLDER_KEY } from '@/game/potionLayers'
 import { enemyDisplayDamage, AP } from '@/game/engine'
 import { EVENTS } from '@/game/events'
 import { CHARACTER_INFO } from '@/game/run'
@@ -276,14 +277,7 @@ const COLOR_FRAME_BG: Record<string, Record<string, string>> = {
   colorless: { attack: 'frames/bgAttackRed.png', skill: 'frames/bgSkillRed.png', power: 'frames/bgPowerRed.png' },
 }
 const COLOR_ORB: Record<string, string> = { red: 'cardRedOrb', green: 'cardGreenOrb', blue: 'cardBlueOrb', purple: 'cardPurpleOrb', colorless: 'cardRedOrb' }
-const TYPEICON_BASE: Record<string, string> = { red: '', green: 'silent', blue: 'defect', purple: 'watcher', colorless: '' }
-function typeIconKey(color: string, type: string, rarity: string): string {
-  const base = TYPEICON_BASE[color] || ''
-  let rar = raritySuffix(rarity)
-  if (type === 'power' && rar === 'Common') rar = 'Uncommon'
-  if (!base) return 'typeicons/' + type + rar + '.png'
-  return 'typeicons/' + base + type + rar.toLowerCase() + '.png'
-}
+// 原版类型文案（ZHS ui.json SingleCardViewPopup.TEXT[0..2]）；类型行改纯文字渲染（原版 renderType 无图标）
 const TYPE_NAME: Record<string, string> = { attack: '攻击', skill: '技能', power: '能力' }
 
 // 卡面内容（不含外层 .sts-card 包装，供手牌做差异更新）
@@ -330,8 +324,8 @@ function cardInner(card: CardInstance, width = 148, opts?: { unaffordable?: bool
   <div class="sts-title card-name" style="font-size:${width * 0.088}px;color:${up ? '#7fff00' : rar === 'Rare' ? '#ffd98a' : '#ffe9c4'};${up ? 'text-shadow:1px 1px 0 #1b6131,0 0 6px rgba(10,50,20,.9)' : ''}">${esc(def.name)}</div>
   ${cost !== -99 ? `<img class="clayer" src="${A('frames/' + orb + '.png')}" alt="">
   <div class="sts-title card-cost" style="font-size:${width * 0.115}px;color:${costColor};text-shadow:${costShadow}">${cost === -1 ? 'X' : cost}</div>` : ''}
+  <div class="card-type-row"><span class="sts-body" style="font-size:${width * 0.057}px">${TYPE_NAME[def.type] || def.type}</span></div>
   <div class="sts-body card-desc" style="font-size:${width * 0.076}px">${up ? '<span style="color:#7fe08a">+ </span>' : ''}${descHtml}</div>
-  <div class="card-type-row"><img src="${A(typeIconKey(color, def.type, def.rarity))}" alt=""><span class="sts-title" style="font-size:${width * 0.062}px">${TYPE_NAME[def.type]}</span></div>
   ${up ? '<div class="sts-title card-up">✦</div>' : ''}</div>`
 }
 
@@ -434,15 +428,32 @@ function relicIcon(id: string, size = 34, flash = false): string {
   </span>`
 }
 
+// ============ 原版药水分层渲染（第二十一批：复刻 AbstractPotion.render 层序） ============
+// liquid(纯色mask着色) → hybrid(可选) → spots(可选) → glass(白，原图)；空槽 = 占位剪影 @ 白75%
+function potionLayersHtml(pid: string | null, w?: number, h?: number): string {
+  const size = w && h ? `width:${w}px;height:${h}px;` : 'width:100%;height:100%;'
+  if (!pid) {
+    return `<span class="pot-layers" data-pot="empty" style="position:relative;display:inline-block;${size}"><i class="pot-layer" data-layer="placeholder" style="position:absolute;inset:0;-webkit-mask:url(${A(POTION_PLACEHOLDER_KEY)}) center/contain no-repeat;mask:url(${A(POTION_PLACEHOLDER_KEY)}) center/contain no-repeat;background:${POTION_PLACEHOLDER_COLOR}"></i></span>`
+  }
+  const spec = POTION_LAYERS[pid]
+  if (!spec) return `<span class="pot-layers" data-pot="${pid}" style="position:relative;display:inline-block;${size}"></span>`
+  const L = (layer: string, color: string) => `<i class="pot-layer" data-layer="${layer}" style="position:absolute;inset:0;-webkit-mask:url(${A(potionLayerKey(spec.shape, layer))}) center/contain no-repeat;mask:url(${A(potionLayerKey(spec.shape, layer))}) center/contain no-repeat;background:${color}"></i>`
+  return `<span class="pot-layers" data-pot="${pid}" style="position:relative;display:inline-block;${size}">
+    ${spec.liquid ? L('liquid', spec.liquid) : ''}${spec.hybrid ? L('hybrid', spec.hybrid) : ''}${spec.spots ? L('spots', spec.spots) : ''}
+    <img data-layer="glass" src="${A(potionLayerKey(spec.shape, 'glass'))}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain">
+  </span>`
+}
+
 function potionHtml(pid: string | null, idx: number, combat: boolean, acquired = false): string {
   const sel = combat && g().selectedPotionIdx === idx
-  if (!pid) return `<span class="pslot" style="width:38px;height:44px"></span>`
+  // 空槽/未知id：原版行为 = 占位剪影（POTION_PLACEHOLDER @ 白75%）
+  if (!pid) return `<span class="pslot" style="width:46px;height:53px">${potionLayersHtml(null)}</span>`
   const def = POTIONS[pid]
-  // 防御：未知药水 id 渲染为空槽（与 Next.js 版一致，避免渲染循环崩溃）
-  if (!def) return `<span class="pslot" style="width:38px;height:44px"></span>`
+  // 防御：未知药水 id 渲染为占位槽（与 Next.js 版一致，避免渲染循环崩溃）
+  if (!def) return `<span class="pslot" style="width:46px;height:53px">${potionLayersHtml(null)}</span>`
   // 原版 NPotion：hover 弹跳（DoBounce）/ 获得入场（PlayNewlyAcquiredAnimation 0.1s淡入+40px上浮0.35s BackOut）
   return `<span class="pslot has ${sel ? 'sel' : ''} ${acquired ? 'sts-pot-in' : ''}" data-act="potion" data-idx="${idx}" data-tip="<b>${esc(def.name)}</b><br><span style='color:#d8c8a8'>${esc(def.desc)}</span>">
-    <img src="${A('potions/' + pid + '.png')}" alt="">
+    ${potionLayersHtml(pid)}
     ${combat ? `<i class="pdisc" data-act="potionDiscard" data-idx="${idx}">✕</i>` : ''}
   </span>`
 }
@@ -483,27 +494,42 @@ let combatShineOn = false
 let combatShineTimers: ReturnType<typeof setTimeout>[] = []
 
 function topHudShell(): string {
-  // 参照原版：左上 头像+血量+金币+药水+遗物 / 右上 牌组+层数（避开右上控制按钮）
-  return `<div class="top-hud"><div class="hud-row">
-    <div class="hud-left-col">
-      <div class="hud-id-row">
-        <span class="hud-portrait" id="hud-portrait" data-tip=""><img src="" alt=""></span>
-        <div class="hud-hp-gold">
-          ${hpNumShell('hud-hp', 21)}
-          <div class="gold-stat sts-body sts-num" id="hud-gold"></div>
-        </div>
-      </div>
-      <span class="pots-row" id="hud-potions"></span>
+  // 第二十三批：原版 TopPanel 全套复刻 —— bar底板 + 单行(名字/心+HP/钱袋+金币/药水带/层旗/遗物) + 右上deck+settings
+  // 保留 id 兼容既有测试：hud-hp/hud-gold/hud-potions/hud-relics/hud-deck-count/hud-floor + .deck-btn/.pots-row
+  return `<div class="top-hud">
+    <img class="tp-bar" src="${A('topbar/bar.png')}" alt="">
+    <div class="tp-row">
+      <span class="tp-name" id="hud-name" data-tip=""></span>
+      <span id="hud-hp" class="tp-stat">
+        <span class="tp-ico"><img src="${A('topbar/hp.png')}" alt="hp"></span>
+        <span class="hp-txt">
+          <span class="block-badge hud-block" style="display:none"><img src="${A('status/block.png')}" alt=""><i></i></span>
+          <b class="hp-num-val"></b>
+          <span class="hp-num-name" style="display:none"></span>
+        </span>
+      </span>
+      <span id="hud-gold" class="tp-stat">
+        <span class="tp-ico"><img src="${A('topbar/gold.png')}" alt="gold"></span>
+        <span class="gold-txt"><span class="gold-val sts-num"></span><span class="gold-mate" style="display:none"></span></span>
+      </span>
+      <span id="hud-potions" class="tp-pots">
+        <img class="tp-potbox" src="${A('topbar/potionbox.png')}" alt="">
+        <span class="pots-row"></span>
+      </span>
+      <span id="hud-floor" class="tp-stat tp-floor" style="display:none" data-tip=""></span>
       <span class="relics hud-relics" id="hud-relics"></span>
     </div>
-    <div class="hud-right">
-      <button class="sts-btn deck-btn" data-act="openPile" data-pile="deck" data-tip="<b>查看牌组</b>">
-        <img src="${A('frames/cardRedOrb.png')}" alt=""><b class="sts-num" id="hud-deck-count"></b>
+    <div class="tp-icons">
+      <button class="tp-tico deck-btn" data-act="openPile" data-pile="deck" data-tip="<b>查看牌组</b>">
+        <img src="${A('topbar/deck.png')}" alt="deck"><i class="tint"></i><i class="tint2"></i>
+        <b class="sts-num" id="hud-deck-count"></b>
       </button>
-      <div class="floor-stat" id="hud-floor" style="display:none"></div>
-      <div id="hud-mp-hp" style="display:none"></div>
+      <button class="tp-tico settings" data-act="toggleMenu" data-tip="<b>设置</b>">
+        <img src="${A('topbar/settings.png')}" alt="settings"><i class="tint"></i><i class="tint2"></i>
+      </button>
     </div>
-  </div></div>`
+    <div id="hud-mp-hp" style="display:none"></div>
+  </div>`
 }
 
 function updateHud(run: RunState, combat: boolean) {
@@ -520,26 +546,44 @@ function updateHud(run: RunState, combat: boolean) {
   }
   setText(deck, String(me.deck.length))
   const myBlock = combat && run.combat && run.combat.activeIdx === myIdx ? AP(run.combat).block : 0
-  // 头像 + 悬浮名（角色变化时才换图）
-  const po = document.getElementById('hud-portrait')
-  if (po) {
-    const img = po.querySelector('img') as HTMLImageElement | null
-    const want = A('hero/' + me.character + '.png')
-    if (img && img.getAttribute('src') !== want) img.src = want
-    po.setAttribute('data-tip', `<b>${esc(me.name)}${mp ? '（你）' : ''}</b>`)
+  // 名字（白）+ 称号（灰）+ data-tip 玩家名（第二十三批：原版 TopPanel.renderName，角色变化时才重写）
+  const nameEl = document.getElementById('hud-name')
+  if (nameEl) {
+    const cd = CHARACTER_INFO[me.character] || CHARACTER_INFO.ironclad
+    const want = `${cd.name}|${cd.nameEn}`
+    if (nameEl.dataset.v !== want) {
+      nameEl.dataset.v = want
+      nameEl.innerHTML = `<b>${esc(cd.name)}</b><i>${esc(cd.nameEn)}</i>`
+    }
+    nameEl.setAttribute('data-tip', `<b>${esc(me.name)}${mp ? '（你）' : ''}</b>`)
   }
   updateHpNum(document.getElementById('hud-hp'), me.hp, me.maxHp, myBlock)
+  // 层旗 + CREAM 数字（原版 renderDungeonInfo：TP_FLOOR + floorNum；战斗中也显示）
   const floorEl = document.getElementById('hud-floor')
   if (floorEl) {
-    if (combat) floorEl.style.display = 'none'
-    else { floorEl.style.display = ''; setText(floorEl, `第 ${run.act} 幕 · 第 ${run.visitedNodes.length} 层${mp ? ' · 联机合作' : ''}`) }
+    const fl = run.visitedNodes.length
+    const wantF = `${run.act}|${fl}`
+    if (floorEl.dataset.v !== wantF) {
+      floorEl.dataset.v = wantF
+      floorEl.innerHTML = `<span class="tp-ico"><img src="${A('topbar/floor.png')}" alt="floor"></span><b class="floor-val sts-num">${fl}</b>`
+    }
+    floorEl.style.display = ''
+    floorEl.setAttribute('data-tip', `<b>第 ${run.act} 幕 · 第 ${fl} 层</b>`)
   }
-  // 金币逐级计数（原版 NTopBarGold.UpdateGoldAnim：0.25+0.15s 延迟后按步长 75/10/1 递变，10-110ms 间隔，0.25s 后结算）
+  // 金币逐级计数（原版 NTopBarGold）+ 三态色（第二十三批：原版 renderGold ==金/花费中红/获得中绿）
   const goldEl = document.getElementById('hud-gold')
+  const goldVal = goldEl?.querySelector('.gold-val') as HTMLElement | null
+  const goldMate = goldEl?.querySelector('.gold-mate') as HTMLElement | null
   const paintGold = () => {
-    if (!goldEl) return
-    const mate = mp ? `（队友 ${run.players[1 - myIdx]?.gold ?? '-'}）` : ''
-    setText(goldEl, `💰 ${goldAnim.label}${mate}`)
+    if (!goldEl || !goldVal) return
+    // 三态：display(逐级值)==gold → 金 #efc851 / >gold(花费中) → 红 #ff6563 / <gold(获得中) → 绿 #7fff00
+    // 注意：用 goldAnim.cur（最新值）而非闭包 me——动画循环跨多次 updateHud，闭包 me 是旧引用（第二十三批修复）
+    goldVal.style.color = goldAnim.label === goldAnim.cur ? '#efc851' : goldAnim.label > goldAnim.cur ? '#ff6563' : '#7fff00'
+    setText(goldVal, String(goldAnim.label))
+    if (goldMate) {
+      if (mp) { goldMate.style.display = ''; setText(goldMate, `（队友 ${run.players[1 - myIdx]?.gold ?? '-'}）`) }
+      else goldMate.style.display = 'none'
+    }
   }
   if (goldAnim.cur < 0) { goldAnim.cur = me.gold; goldAnim.label = me.gold }
   if (me.gold !== goldAnim.cur) {
@@ -564,15 +608,20 @@ function updateHud(run: RunState, combat: boolean) {
     }
   }
   paintGold()
-  // 药水：入场标记 + 退场 ghost（原版 NPotion：使用 scale→0 0.2s Back In / 丢弃上浮 100px 0.4s Back In）
+  // 药水：写入 .pots-row 子容器（保留 tp-potbox 背景框；第二十三批修复：此前 setHtml 整体覆盖将框删掉）
   const potRow = document.getElementById('hud-potions')
-  if (potRow) {
+  const potSlots = potRow ? potRow.querySelector('.pots-row') as HTMLElement : null
+  if (potRow && potSlots) {
+    // 药水带背景框动态宽（原版 draw 宽 100+slots×76×scale ≈ 83+N×63）
+    const wantW = `${Math.round(83 + me.potions.length * 63)}px`
+    if (potRow.style.width !== wantW) potRow.style.width = wantW
     const ghosts: { idx: number; pid: string; kind: 'use' | 'discard' }[] = []
     for (let i = 0; i < prevPotions.length; i++) {
       if (prevPotions[i] && !me.potions[i]) ghosts.push({ idx: i, pid: prevPotions[i]!, kind: lastPotAct })
     }
-    setHtml(potRow, me.potions.map((p, i) => potionHtml(p, i, combat, !!p && !prevPotions[i])).join(''))
+    setHtml(potSlots, me.potions.map((p, i) => potionHtml(p, i, combat, !!p && !prevPotions[i])).join(''))
     // 药水带满失败抖动（原版 NPotionContainer.PlayAddFailedAnim：3·sin(5t)·sin(t/2) px，t 0→2π，0.5s）
+    // 第二十三批：抖动挂 #hud-potions 容器整体（框+槽一起，batch16 断言查容器 getAnimations）
     if (st.potionBeltFail > lastBeltFailSeen) {
       lastBeltFailSeen = st.potionBeltFail
       potRow.animate?.(Array.from({ length: 25 }, (_, i) => {
@@ -583,9 +632,9 @@ function updateHud(run: RunState, combat: boolean) {
     for (const gh of ghosts) {
       const el = document.createElement('span')
       el.className = `pslot has sts-pot-ghost-${gh.kind}`
-      el.style.cssText = `width:38px;height:44px;position:absolute;left:${gh.idx * 44}px;top:0;pointer-events:none;z-index:5`
-      el.innerHTML = `<img src="${A('potions/' + gh.pid + '.png')}" alt="" style="width:100%;height:100%;object-fit:contain">`
-      potRow.appendChild(el)
+      el.style.cssText = `width:46px;height:53px;position:absolute;left:${14 + gh.idx * 63}px;top:8px;pointer-events:none;z-index:5`
+      el.innerHTML = potionLayersHtml(gh.pid)
+      potSlots.appendChild(el)
       setTimeout(() => el.remove(), 500)
     }
     prevPotions = [...me.potions]
@@ -595,7 +644,7 @@ function updateHud(run: RunState, combat: boolean) {
   if (inCombat && !combatShineOn) {
     combatShineOn = true
     const bounce = (k: number) => {
-      const row = document.getElementById('hud-potions')
+      const row = document.querySelector('#hud-potions .pots-row')
       const slot = row?.children[k] as HTMLElement | null
       slot?.animate?.([
         { transform: 'translateY(0)', easing: 'cubic-bezier(.61,1,.88,1)' },
@@ -625,7 +674,7 @@ function updateHud(run: RunState, combat: boolean) {
   for (const id of relics) {
     if (!seenRelics.has(id) && seenRelics.size > 0) relicFlashUntil[id] = nowMs + 1900
   }
-  setHtml(document.getElementById('hud-relics'), relics.map(id => relicIcon(id, 34, (relicFlashUntil[id] || 0) > nowMs)).join(''))
+  setHtml(document.getElementById('hud-relics'), relics.map(id => relicIcon(id, 56, (relicFlashUntil[id] || 0) > nowMs)).join(''))
   seenRelics = new Set(relics)
   // 联机：队友血量（78/80 样式小字，右上角）
   const mini = document.getElementById('hud-mp-hp')
@@ -1079,7 +1128,7 @@ function buildCombatScreen(run: RunState): string {
   <button class="pile-btn" id="pile-discard" data-act="openPile" data-pile="discard" style="right:26px;bottom:158px"><b>0</b><span>弃牌堆</span></button>
   <span id="exhaust-holder"></span>
   <div class="energy" id="energy-box"><img src="${A('frames/' + (ENERGY_ORB[hero] || 'redEnergy') + '.png')}" alt=""><span id="energy-num"></span></div>
-  <button class="sts-btn end-turn sts-title" data-act="endTurn" id="end-turn-btn"></button>
+  <button class="sts-endturn" data-act="endTurn" id="end-turn-btn"><img class="et-hover" src="${A('endturn/hover.png')}" alt=""><img class="et-plate" src="${A('endturn/button.png')}" alt=""><span class="et-text"></span></button>
   <div class="hand-row" id="hand-row"></div>
   <div id="turn-banner-holder"></div>
   <div id="banner-holder"></div>
@@ -1134,7 +1183,7 @@ function updateEnemies(run: RunState) {
       const stateDelay = freshCombat ? 1.3 + ((eIdx * 37 + (e.uid.charCodeAt(e.uid.length - 1) || 0)) % 41) / 100 : 0
       el.innerHTML = `
         <div class="intent-slot"></div>
-        <div class="sprite"><img class="idle-bob" src="${A('enemies/' + def.sprite + '.png')}" alt="" style="width:${sw}px;height:${sw}px;animation-delay:${(eIdx % 5) * 0.45}s"></div>
+        <div class="sprite"><img src="${A('enemies/' + def.sprite + '.webp')}" alt="" style="width:${sw}px;height:${sw}px"></div>
         <div class="enemy-info" style="animation:sts-state-in .5s cubic-bezier(.2,.8,.3,1) ${stateDelay}s backwards">
           <div class="ename">${esc(def.name)}</div>
           ${hpBarShell('', def.boss ? 280 : 170)}
@@ -1414,16 +1463,22 @@ function updateCombatScreen(run: RunState) {
     }
     const eImg = energyBox.querySelector('img') as HTMLImageElement | null
     if (eImg) eImg.style.filter = en === 0 ? 'brightness(.45) saturate(.6)' : ''
-    const prev = (energyBox as any).__energy
-    if (typeof prev === 'number' && en > prev) {
-      energyBox.dataset.burst = String(Date.now())
-      energyBox.animate?.([
-        { transform: 'scale(1)', filter: 'brightness(1)' },
-        { transform: 'scale(1.3)', filter: 'brightness(2.1)', offset: 0.3 },
-        { transform: 'scale(1)', filter: 'brightness(1)' },
-      ], { duration: 480, easing: 'ease-out' })
+    // 第二十三批：原版 EnergyPanel.setEnergy 在回合开始触发（与旧能量值无关）
+    // 触发条件：phase player 且 turn 递增（含首回合）
+    const cTurn = c.turn || 0
+    const prevTurn = (energyBox as any).__turn
+    if (c.phase === 'player' && (typeof prevTurn !== 'number' || cTurn > prevTurn)) {
+      ;(energyBox as any).__turn = cTurn
+      // 原版 EnergyPanel.renderVfx —— 双图反向旋转 2s（α .5→0，scale 1→.1，加色混合）
+      const old = energyBox.querySelector('.sts-energy-vfx')
+      if (old) (old as HTMLElement).remove()
+      const vfx = document.createElement('span')
+      vfx.className = 'sts-energy-vfx'
+      vfx.innerHTML = `<img class="vfx1" src="${A('topbar/energy-vfx.png')}" alt=""><img class="vfx2" src="${A('topbar/energy-vfx.png')}" alt="">`
+      energyBox.appendChild(vfx)
+      setTimeout(() => vfx.remove(), 2200)
     }
-    ;(energyBox as any).__energy = en
+    ;(energyBox as any).__turn = cTurn
   }
   const pd = document.getElementById('pile-draw')
   if (pd) setText(pd.querySelector('b'), String(AP(c).drawPile.length))
@@ -1435,12 +1490,18 @@ function updateCombatScreen(run: RunState) {
   if (et) {
     const mpE = c.players.length > 1
     const myTurnE = !mpE || st.net.myIdx === c.activeIdx
-    const dis = c.phase !== 'player' || st.busy || !myTurnE
-    et.disabled = dis || c.combatOver
-    et.style.opacity = dis ? '0.5' : '1'
-    const etCls = 'sts-btn end-turn sts-title' + (!dis && !c.combatOver ? ' ready' : '')
+    // 第二十二批：原版三态复刻（EndTurnButton.render）——enemy=灰度图+奶白字，off=DISABLED色+浅灰字，glow=无可出牌发光+金字
+    const enemyPhase = c.phase !== 'player'
+    const off = !enemyPhase && (st.busy || !myTurnE || c.combatOver)
+    const me = AP(c)
+    const glowing = !enemyPhase && !off && me.hand.length > 0 && me.hand.every(h => cardCost(h) > me.energy)
+    et.disabled = enemyPhase || off
+    const etCls = 'sts-endturn' + (glowing ? ' glow' : '') + (enemyPhase ? ' enemy' : '') + (off ? ' off' : '')
     if (et.className !== etCls) et.className = etCls
-    setText(et, c.phase === 'player' ? (mpE && !myTurnE ? '队友回合…' : '结束回合') : '敌方回合…')
+    const plate = et.querySelector('.et-plate') as HTMLImageElement | null
+    const plateSrc = glowing ? A('endturn/glow.png') : A('endturn/button.png')
+    if (plate && plate.getAttribute('src') !== plateSrc) plate.src = plateSrc
+    setText(et.querySelector('.et-text'), c.phase === 'player' ? (mpE && !myTurnE ? '队友回合…' : '结束回合') : '敌方回合…')
   }
   // 回合切换横幅（原版参数动画）
   turnBanner(c.phase, c.turn)
@@ -1661,6 +1722,7 @@ function updateRewardScreen(run: RunState) {
       if (!el) {
         el = document.createElement('div')
         el.dataset.cid = cid
+        el.dataset.inspect = cid   // 第三十二批：右键检视锚点（与 act=takeCard 独立；选中态保留）
         el.style.animationDelay = `${i * 0.12}s`
         // 原版 NCardRareGlow/NCardUncommonGlow：稀有金晕 / 罕见蓝晕（1s 淡入至 0.9）
         const rar0 = CARDS[cid]?.rarity
@@ -1712,33 +1774,70 @@ function updateRewardScreen(run: RunState) {
   if (btn) setText(btn, run.combat?.isBoss ? '继续' : '返回地图')
 }
 
-// ============ 商店界面（第六批：槽位 hover 缩放/购买失败抖动/价格原版配色 + 顶栏 HUD 常驻） ============
+// ============ 商店界面（第三十一批原版化：全屏地毯 + 商人手 + 原版价格 + 特卖标签 + 移除服务 + 对话气泡） ============
+// 原版考证（ShopScreen.java）：rug 全屏 + merchantHand hover 跟随/1s 退场；价格=金币图标+数字（WHITE/FA8072/87CEEB）；
+// 特卖标签 cos 闪烁；purge512 + 1/4 黑剪影 + sold_out；speechBubble3 弹入浮动 4.2s；文案 ZHS characters.json
+const SHOP_TEXT = {
+  welcome: '~欢迎~\n~欢迎！~',
+  cantBuy: [
+    '哎呀呀，\n这点金币可不够啊。',
+    '嘿兄弟，你没 钱 啊！',
+    '没钱啦？',
+    '你的金币不够。',
+    '这个你买不起。',
+    '我这儿不是做慈善的。',
+  ],
+  buyMsg: [
+    '~谢~  ~啦~',
+    '又一笔买卖……\n嚯嚯嚯！\n有得 赚！',
+    '成交！',
+    '概不退换。',
+    '祝你顺利啊。',
+  ],
+  idle: [
+    '嗨！\n买点什么吧！\n买买买！',
+    '你的发型很不错哦',
+    '看起来你还挺闲？',
+    '你是狗党还是猫党？',
+    '你看起来很 ~危险~ 啊，\n嘿嘿……',
+    '慢慢看……\n……\n……不慢也行',
+    '你喜欢这张地毯吗？\n可惜这个不卖',
+    '要支持我这样的小店啊！',
+    '面具就是酷，我也是同党啊！',
+    '你有没有看见我的送货员？',
+    '多留会儿，听听音乐啊！',
+    '一个人前进太危险了！把你的钱都给我吧！',
+    '买点儿啥吧',
+    '~哈~  ~欠~',
+    '我喜欢金币。',
+    '我最喜欢的颜色是蓝色。\n你呢？',
+  ],
+}
+
 function buildShopScreen(): string {
-  return `<div class="screen shop-bg">
+  return `<div class="screen shop-screen" data-scr="shop" style="position:relative;overflow:hidden">
+  <div class="shop-rug"><img src="${A('shop/rug.webp')}" alt=""></div>
   ${topHudShell()}
-  <div class="center-col hud-pad" style="padding:96px 16px 26px;gap:22px">
-    <div class="row" style="gap:20px;align-items:center">
-      <img src="${A('mapicons/shop.png')}" width="88" height="88" style="filter:drop-shadow(0 0 20px rgba(255,180,80,.4))">
-      <div><div class="big-title sts-title" style="font-size:38px">商店</div>
-      <div class="sts-body" style="color:#c8b090;font-size:14px">「看看有没有中意的？」</div></div>
-      <div class="sts-body" style="color:#ffd980;font-size:20px;margin-left:24px" id="shop-gold"></div>
-    </div>
-    <div class="row" style="flex-wrap:wrap;justify-content:center;gap:18px" id="shop-cards"></div>
-    <div class="row" style="flex-wrap:wrap;justify-content:center;gap:34px;align-items:flex-start">
-      <div class="row" style="gap:14px;flex-wrap:wrap" id="shop-relics"></div>
-      <div class="row" style="gap:14px;flex-wrap:wrap" id="shop-potions"></div>
-    </div>
-    <button class="sts-btn sts-btn-gold sts-title sts-shop-slot" data-act="buyRemoval" id="shop-removal" style="font-size:18px"></button>
-    <button class="sts-btn sts-title" data-act="leaveShop" style="font-size:22px">离开商店</button>
+  <div class="shop-row-cards" style="top:21%"><div class="row" style="flex-wrap:wrap;justify-content:center;gap:1.6vw" id="shop-cards"></div></div>
+  <div class="shop-row-goods" style="top:48%">
+    <div class="row" style="gap:14px;flex-wrap:wrap;justify-content:center" id="shop-relics"></div>
+    <div class="row" style="gap:14px;flex-wrap:wrap;justify-content:center" id="shop-potions"></div>
   </div>
+  <div class="shop-purge" style="top:55%"><div id="shop-removal" class="sts-shop-slot"></div></div>
+  <div class="sts-shop-hand sts-shop-hand-idle" id="shop-hand"><img src="${A('shop/hand.webp')}" alt=""></div>
+  <div id="shop-bubble-host"></div>
+  <button class="sts-btn sts-title shop-leave" data-act="leaveShop" style="font-size:22px">离开</button>
 </div>`
 }
 
-// 价格标签（原版 NMerchantSlot：#FF5555 买不起 / #7FFF00 打折 / #FFF6E2 正常）
+// 价格（原版：金币图标 + 数字；#FFFFFF 可买 / #FA8072 SALMON 买不起 / #87CEEB SKY 特卖）
 function shopPriceTag(sold: boolean, price: number, gold: number, discount?: boolean): string {
-  if (sold) return `<span class="price-tag">已售出</span>`
-  const color = gold < price ? '#FF5555' : discount ? '#7FFF00' : '#FFF6E2'
-  return `<span class="price-tag ${gold >= price ? 'ok' : ''}" style="color:${color}">💰 ${price}${discount ? ` <i style="font-style:normal;color:#7FFF00;font-size:12px">5折</i>` : ''}</span>`
+  if (sold) return `<span class="shop-price" style="display:inline-flex;min-height:26px"></span>`
+  const color = gold < price ? '#FA8072' : discount ? '#87CEEB' : '#FFFFFF'
+  return `<span class="shop-price" data-afford="${gold >= price ? 1 : 0}" data-sale="${discount ? 1 : 0}" style="display:inline-flex;align-items:center;gap:4px;min-height:26px">
+    <img src="${A('topbar/gold.png')}" width="20" height="20" style="filter:drop-shadow(0 1px 0 #000)">
+    <span class="sts-num" style="color:${color};font-size:19px;font-weight:700;text-shadow:1px 1px 0 #000">${price}</span>
+  </span>`
 }
 
 // 购买失败槽位抖动（原版 NMerchantSlot：x=sin(p·2π)·10，p=(1-(1-t)²)·2 Quad Out 采样 25 帧，0.4s）
@@ -1759,16 +1858,130 @@ function watchShopFail() {
   }), { duration: 400 })
 }
 
+// —— 商人手 hover 跟随（原版 updateHand：hover 槽位 lerp*6 跟随 / 1s 无悬停退场） ——
+let shopHandOnce = false
+let shopHandTimer: ReturnType<typeof setTimeout> | null = null
+function setupShopHand() {
+  if (shopHandOnce) return
+  shopHandOnce = true
+  document.addEventListener('mouseover', ev => {
+    const t = ev.target as HTMLElement | null
+    if (!t) return
+    const root = t.closest?.('.shop-screen') as HTMLElement | null
+    if (!root) return
+    const slot = t.closest?.('[data-sidx],[data-ridx],[data-pidx],[data-act="buyRemoval"]') as HTMLElement | null
+    const hand = document.getElementById('shop-hand')
+    if (!hand) return
+    if (shopHandTimer) { clearTimeout(shopHandTimer); shopHandTimer = null }
+    // 手跟随未售罄槽位（sold 类统一标记卡/遗物/药水/移除已用）；
+    // 位置用布局像素：getBoundingClientRect 含舞台 scale，需除回（scale = 显示宽/布局宽）
+    if (slot && !slot.classList.contains('sold')) {
+      const w = root.getBoundingClientRect()
+      const b = slot.getBoundingClientRect()
+      const k = w.width > 0 && root.offsetWidth > 0 ? w.width / root.offsetWidth : 1
+      hand.classList.remove('sts-shop-hand-idle')
+      hand.style.left = `${(b.left + b.width / 2 - w.left) / k}px`
+    } else {
+      if (!shopHandTimer) shopHandTimer = setTimeout(() => hand.classList.add('sts-shop-hand-idle'), 1000)
+    }
+  })
+  document.addEventListener('mouseout', ev => {
+    const t = ev.target as HTMLElement | null
+    if (!t) return
+    const root = t.closest?.('.shop-screen') as HTMLElement | null
+    if (!root) return
+    const hand = document.getElementById('shop-hand')
+    if (!hand || hand.classList.contains('sts-shop-hand-idle')) return
+    if (shopHandTimer) clearTimeout(shopHandTimer)
+    shopHandTimer = setTimeout(() => hand.classList.add('sts-shop-hand-idle'), 1000)
+  })
+}
+
+// —— 对话气泡（原版 ShopSpeechBubble：1.5s 欢迎 → 40-60s 闲聊；买不起/成交即时覆盖） ——
+let shopBubbleN = 0
+let shopWelcomeSaid = false
+let shopSpeechTimer: ReturnType<typeof setTimeout> | null = null
+let shopSoldSeen = -1
+let shopFailSeenSpeech = 0
+function shopSpeak(msgs: string[]) {
+  const host = document.getElementById('shop-bubble-host')
+  if (!host) return
+  const msg = msgs[Math.floor(Math.random() * msgs.length)]
+  const side = Math.random() < 0.5 ? 'L' : 'R'
+  const x = 34 + Math.random() * 32
+  shopBubbleN++
+  const words = msg.split(/(\s+)/).filter(w => w !== '')
+  // 逐词弹出：初始只挂 0 词，计时器逐步加入（BUMP_IN 近似）
+  host.innerHTML = `<div class="sts-speech-bubble" data-bubble-side="${side}" style="left:${x}%">
+    <img src="${A('shop/bubble.webp')}" alt=""${side === 'R' ? '' : ' style="transform:scaleX(-1)"'}>
+    <div class="sts-speech-text sts-body" id="shop-bubble-text"></div>
+  </div>`
+  const textEl = host.querySelector('#shop-bubble-text') as HTMLElement | null
+  let i = 0
+  const step = () => {
+    if (!textEl || !host.firstElementChild) return
+    if (i >= words.length) return // 生命周期统一 4400ms（ttl），打字结束不提前移除（第三十一批：与 Next 版同构）
+    const w = words[i++].replace(/[#@~]/g, '')
+    const sp = document.createElement('span')
+    sp.className = 'sts-speech-word'
+    sp.style.whiteSpace = 'pre-wrap'
+    sp.textContent = w
+    textEl.appendChild(sp)
+    setTimeout(step, 260)
+  }
+  step()
+  // 4.4s 生命周期（原版 SPEECH_DURATION 3s+淡出尾；与文案长度无关）
+  const el = host.firstElementChild as HTMLElement
+  const ttl = setTimeout(() => el.remove(), 4400)
+  ;(el as any).__ttl = ttl
+}
+function watchShopSpeech(run: RunState) {
+  const shop = run.shop
+  if (!shop) return
+  // 欢迎（1.5s 后，每屏一次）
+  if (!shopWelcomeSaid) {
+    shopWelcomeSaid = true
+    if (shopSpeechTimer) clearTimeout(shopSpeechTimer)
+    shopSpeechTimer = setTimeout(() => {
+      shopSpeak([SHOP_TEXT.welcome])
+      // 闲聊循环 40-60s
+      const loop = () => {
+        shopSpeechTimer = setTimeout(() => { shopSpeak(SHOP_TEXT.idle); loop() }, 40000 + Math.random() * 20000)
+      }
+      loop()
+    }, 1500)
+  }
+  // 成交（sold 计数上升）
+  const soldCount = shop.cards.filter(c => c.sold).length + shop.relics.filter(c => c.sold).length + shop.potions.filter(c => c.sold).length + (shop.removalUsed ? 1 : 0)
+  if (shopSoldSeen < 0) shopSoldSeen = soldCount
+  else if (soldCount > shopSoldSeen) { shopSpeak(SHOP_TEXT.buyMsg); shopSoldSeen = soldCount }
+  else shopSoldSeen = soldCount
+  // 买不起（shopFail 独立计数，避免与 watchShopFail 的 shopFailSeen 同帧竞争）
+  const st = g()
+  if (st.shopFail && st.shopFail.ts !== shopFailSeenSpeech) {
+    shopFailSeenSpeech = st.shopFail.ts
+    shopSpeak(SHOP_TEXT.cantBuy)
+  }
+}
+function resetShopSpeech() {
+  shopWelcomeSaid = false
+  shopSoldSeen = -1
+  if (shopSpeechTimer) { clearTimeout(shopSpeechTimer); shopSpeechTimer = null }
+  const host = document.getElementById('shop-bubble-host')
+  if (host) host.innerHTML = ''
+}
+
 function updateShopScreen(run: RunState) {
   const shop = run.shop
   if (!shop) return
   updateHud(run, false)
   watchShopFail()
+  setupShopHand()
+  watchShopSpeech(run)
   const stS = g()
   const mpS = run.players.length > 1
   const meS = run.players[mpS ? stS.net.myIdx : 0] || run.players[0]
-  setText(document.getElementById('shop-gold'), mpS ? `💰 ${meS.gold}（队友 ${run.players[1 - (mpS ? stS.net.myIdx : 0)]?.gold ?? '-'}）` : `💰 ${run.gold}`)
-  // 卡牌（键控）
+  // 卡牌（键控）：卡 + 价格 + 特卖标签（discount → 右上 saletag）
   const cardsEl = document.getElementById('shop-cards')
   if (cardsEl) {
     shop.cards.forEach((item, i) => {
@@ -1776,15 +1989,17 @@ function updateShopScreen(run: RunState) {
       if (!el) {
         el = document.createElement('div')
         el.dataset.sidx = String(i)
-        el.dataset.act = 'buyCard'
-        el.dataset.idx = String(i)
-        el.innerHTML = cardHtml({ uid: 's' + i, id: item.cardId, upgraded: 0 }, 150) + `<span class="shop-price" style="margin-top:6px"></span>`
+        el.dataset.inspect = item.cardId   // 第三十二批：右键检视锚点（hoveredCard 不滤 sold——售出卡也可检视）
+        el.innerHTML = `<div class="shop-card-pos" style="position:relative"></div>`
         cardsEl.appendChild(el)
       }
+      const pos = el.firstElementChild as HTMLElement
       el.className = `shop-card sts-shop-slot ${item.sold ? 'sold' : ''}`
       if (item.sold) delete el.dataset.act
-      else el.dataset.act = 'buyCard'
-      setHtml(el.querySelector('.shop-price'), shopPriceTag(item.sold, item.price, meS.gold, item.discount))
+      else { el.dataset.act = 'buyCard'; el.dataset.idx = String(i) }
+      setHtml(pos, `${cardHtml({ uid: 's' + i, id: item.cardId, upgraded: 0 }, 148)}` +
+        (item.discount && !item.sold ? `<i class="sale-tag"><img src="${A('shop/saletag.webp')}" alt=""><img class="sale-tag-glow" src="${A('shop/saletag.webp')}" alt=""></i>` : '') +
+        `<div style="margin-top:6px">${shopPriceTag(item.sold, item.price, meS.gold, item.discount)}</div>`)
     })
   }
   // 遗物
@@ -1794,17 +2009,19 @@ function updateShopScreen(run: RunState) {
       const def = RELICS[item.relicId]
       let el = relicsEl.querySelector(`[data-ridx="${i}"]`) as HTMLElement | null
       if (!el) {
-        el = document.createElement('button')
-        el.className = 'sts-panel shop-item'
+        el = document.createElement('div')
         el.dataset.ridx = String(i)
         el.dataset.tip = `<b>${esc(def.name)}</b><br>${esc(def.desc)}`
-        el.innerHTML = `<img src="${A('relics/' + item.relicId + '.png')}" width="54" height="54">
-          <div class="sts-body" style="font-size:13px;color:#f5e5c8">${esc(def.name)}</div><span class="shop-price"></span>`
+        el.innerHTML = `<img src="${A('relics/' + item.relicId + '.png')}" width="62" height="62" style="filter:drop-shadow(0 3px 6px rgba(0,0,0,.55))">
+          <div class="shop-price" style="margin-top:4px"></div>`
         relicsEl.appendChild(el)
       }
-      el.className = `sts-panel shop-item sts-shop-slot ${item.sold ? 'sold' : ''}`
-      if (item.sold) delete el.dataset.act
-      else { el.dataset.act = 'buyRelic'; el.dataset.idx = String(i) }
+      el.className = `sts-shop-slot ${item.sold ? 'sold' : ''}`
+      el.style.display = 'flex'
+      el.style.flexDirection = 'column'
+      el.style.alignItems = 'center'
+      if (item.sold) { delete el.dataset.act; (el.firstElementChild as HTMLElement).style.filter = 'grayscale(1) opacity(.35)' }
+      else { el.dataset.act = 'buyRelic'; el.dataset.idx = String(i); (el.firstElementChild as HTMLElement).style.filter = '' }
       setHtml(el.querySelector('.shop-price'), shopPriceTag(item.sold, item.price, meS.gold))
     })
   }
@@ -1815,25 +2032,33 @@ function updateShopScreen(run: RunState) {
       const def = POTIONS[item.potionId]
       let el = potsEl.querySelector(`[data-pidx="${i}"]`) as HTMLElement | null
       if (!el) {
-        el = document.createElement('button')
-        el.className = 'sts-panel shop-item'
+        el = document.createElement('div')
         el.dataset.pidx = String(i)
         el.dataset.tip = `<b>${esc(def.name)}</b><br>${esc(def.desc)}`
-        el.innerHTML = `<img src="${A('potions/' + item.potionId + '.png')}" width="42" height="48">
-          <div class="sts-body" style="font-size:12px;color:#f5e5c8">${esc(def.name)}</div><span class="shop-price"></span>`
+        el.innerHTML = `${potionLayersHtml(item.potionId, 46, 52)}
+          <div class="shop-price" style="margin-top:4px"></div>`
         potsEl.appendChild(el)
       }
-      el.className = `sts-panel shop-item sts-shop-slot ${item.sold ? 'sold' : ''}`
-      if (item.sold) delete el.dataset.act
-      else { el.dataset.act = 'buyPotion'; el.dataset.idx = String(i) }
+      el.className = `sts-shop-slot ${item.sold ? 'sold' : ''}`
+      el.style.display = 'flex'
+      el.style.flexDirection = 'column'
+      el.style.alignItems = 'center'
+      if (item.sold) { delete el.dataset.act; (el.firstElementChild as HTMLElement).style.filter = 'grayscale(1) opacity(.35)' }
+      else { el.dataset.act = 'buyPotion'; el.dataset.idx = String(i); (el.firstElementChild as HTMLElement).style.filter = '' }
       setHtml(el.querySelector('.shop-price'), shopPriceTag(item.sold, item.price, meS.gold))
     })
   }
-  const rm = document.getElementById('shop-removal') as HTMLButtonElement | null
+  // 移除服务（原版 renderPurge：purge512 + 1/4 黑剪影；已用 → sold_out512 无价格）
+  const rm = document.getElementById('shop-removal')
   if (rm) {
-    rm.disabled = shop.removalUsed
-    rm.style.opacity = shop.removalUsed ? '0.4' : '1'
-    setText(rm, shop.removalUsed ? '移除服务已使用' : `🧹 移除一张牌 —— 💰 ${shop.removalPrice}`)
+    rm.className = `sts-shop-slot ${shop.removalUsed ? 'sold' : ''}`
+    if (shop.removalUsed) { delete rm.dataset.act; rm.removeAttribute('data-used') }
+    else { rm.dataset.act = 'buyRemoval'; rm.setAttribute('data-used', '0') }
+    setHtml(rm, `<div style="position:relative;width:190px;height:230px">
+        <img class="purge-silhouette" src="${A('frames/bgSkillRed.png')}" alt="">
+        <img class="purge-img" src="${A('shop/' + (shop.removalUsed ? 'soldout' : 'purge') + '.webp')}" width="190" height="190" style="object-fit:contain;position:relative;margin:auto;display:block">
+      </div>
+      <div style="margin-top:6px">${shopPriceTag(shop.removalUsed, shop.removalPrice, meS.gold)}</div>`)
   }
 }
 
@@ -1868,6 +2093,7 @@ function rRest(run: RunState): string {
   // 各幕原版篝火房背景（图集 campfire 区域）
   const campBg = run.act >= 4 ? 'campfire4' : run.act === 3 ? 'campfire3' : run.act === 2 ? 'campfire2' : 'campfire1'
   return `<div class="screen rest-bg center-col" style="background-image:url('${A('bg/' + campBg + '.jpg')}');background-size:cover;background-position:center 30%">
+  ${topHudShell()}
   <div class="shade" style="background:rgba(6,3,2,.35)"></div>
   <div class="smoke-slot" style="display:none"></div>
   <div class="big-title sts-title">篝火</div>
@@ -1887,25 +2113,33 @@ function rRest(run: RunState): string {
 </div>`
 }
 
-// ============ 宝箱两步（第六批原版还原：开箱 → 遗物 2× 展示+稀有度光晕 → 拾取；顶栏 HUD 常驻） ============
+// ============ 宝箱两步（第三十一批原版化：三档宝箱图+开箱图+原版 CHEST_LOC 68%/51%） ============
+// 原版考证（AbstractChest/SmallChest/MediumChest/LargeChest）：Small 75/25/0+金50%25 · Medium 35/50/15+金35%50 · Large 0/75/25+金50%75（openTreasure 已落地）
 let lastGoQuote = ''
 function rTreasure(run: RunState): string {
   const tr = run.pendingTreasureRelic
   const opened = tr !== undefined
   const def = tr ? RELICS[tr] : null
   const rarityCls = def && (def.rarity === 'rare' || def.rarity === 'uncommon') ? def.rarity : 'common'
+  const size = run.chestSize ?? 'small'
+  const chestImg = A(`chests/${size}${opened ? 'Opened' : ''}.webp`)
+  const chestEl = `<img src="${chestImg}" class="sts-chest-img ${opened ? 'sts-chest-opened' : ''}" data-chest="${size}" data-chest-opened="${opened ? 1 : 0}" alt="宝箱"${opened ? '' : ' data-act="openTreasure"'}>`
   if (!opened) {
-    return `<div class="screen treasure-bg center-col hud-pad">
+    return `<div class="screen treasure-bg hud-pad" style="position:relative">
     ${topHudShell()}
-    <div class="big-title sts-title">宝箱</div>
-    <button data-act="openTreasure" style="filter:drop-shadow(0 0 26px rgba(255,200,60,.55))">
-      <img src="${A('mapicons/treasure.png')}" width="180" height="180"></button>
-    <button class="sts-btn sts-title" data-act="openTreasure" style="font-size:20px">打开宝箱</button>
+    ${chestEl}
+    <div class="center-col" style="padding-top:46vh;gap:14px;align-items:center">
+      <div class="big-title sts-title">宝箱</div>
+      <div class="sts-body" style="color:#e8d8c0;font-size:15px">点击宝箱开启</div>
+      <button class="sts-btn sts-title" data-act="openTreasure" style="font-size:20px">打开宝箱</button>
+    </div>
   </div>`
   }
-  // 开箱后：遗物 2× 展示 + 稀有度光晕脉冲 + hover 2.1/press 1.9（原版 NTreasureRoomRelicHolder）
-  return `<div class="screen treasure-bg center-col hud-pad">
+  // 开箱后：开箱图 + 遗物 2× 展示 + 稀有度光晕脉冲 + hover 2.1/press 1.9（原版 NTreasureRoomRelicHolder）
+  return `<div class="screen treasure-bg hud-pad" style="position:relative">
   ${topHudShell()}
+  ${chestEl}
+  <div class="center-col" style="padding-top:60px;gap:14px;align-items:center">
   <div class="big-title sts-title">${def ? '获得了遗物！' : '箱子是空的……'}</div>
   ${def ? `<div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:12px">
     <div class="sts-chest-glow-${rarityCls}" style="position:absolute;width:340px;height:340px;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none"></div>
@@ -1916,6 +2150,7 @@ function rTreasure(run: RunState): string {
     <div class="sts-body" style="font-size:15px;color:#d8c8a8;max-width:420px;text-align:center;line-height:1.6">${esc(def.desc)}</div>
   </div>` : ''}
   <button class="sts-btn sts-title" data-act="confirmTreasure" style="font-size:20px">${def ? '拿走' : '离开'}</button>
+  </div>
 </div>`
 }
 
@@ -2027,12 +2262,15 @@ let scryMarked: Set<string> = new Set()
 // 战斗内升级预览选中的卡 uid（原版 NUpgradePreview；空 = 未预览）
 let armPreviewUid: string | null = null
 
-// ============ 检视屏状态（原版 NInspectCardScreen：大卡+金箭头+升级预览勾选） ============
+// ============ 检视屏状态（第三十批：原版 PC SingleCardViewPopup 复刻） ============
 let inspectUid: string | null = null
-let inspectTicked = false
+let inspectTicked = false   // 原版 isViewingUpgrade：默认 false，翻页保留（openPrev/openNext tmp 传递）
 let inspectGen = 0
 let inspectDir = 0
 let inspectClosing = false
+// 第三十二批：奖励屏/商店卡右键检视（原版 CardRewardScreen/ShopScreen.update:
+// justClickedRight → cardPopup.open(hoveredCard) 单卡版，无翻页箭头；单卡源与牌堆源分立）
+let inspectExtra: CardInstance[] | null = null
 
 function pileCardsOf(run: RunState, pile: string): CardInstance[] {
   if (pile === 'draw') return [...(run.combat ? AP(run.combat).drawPile : [])].reverse()
@@ -2041,29 +2279,107 @@ function pileCardsOf(run: RunState, pile: string): CardInstance[] {
   return run.deck
 }
 
-// 检视层 HTML：黑0.9背板 + 大卡（切卡±100px滑入）+ 金箭头（端点隐藏）+ 升级预览勾选框
+// 检视卡来源统一入口：外部单卡（奖励屏/商店右键）优先，其次牌堆弹窗
+function inspectCardsAll(st: ReturnType<typeof g>): CardInstance[] {
+  if (inspectExtra) return inspectExtra
+  return st.pileView && st.run ? pileCardsOf(st.run, st.pileView) : []
+}
+
+// 原版 open(card) 单卡版：isViewingUpgrade=false、无翻页组（箭头端点隐藏）
+function inspectOpenCard(card: CardInstance) {
+  if (inspectUid || inspectClosing) return   // 已开检视：忽略（原版 isPopupOpen 屏蔽输入）
+  inspectExtra = [card]
+  inspectUid = card.uid
+  inspectTicked = false
+  inspectGen = 0
+  inspectDir = 0
+  inspectRerender()
+}
+
+// 原版 allowUpgradePreview：非诅咒(color!=CURSE)且非状态(type!=STATUS)
+function scvAllowUpgrade(card: CardInstance): boolean {
+  const def = CARDS[card.id]
+  return !!def && !def.curse && !isStatusCard(card.id)
+}
+
+// 检视屏关键词 tips（原版 GameDictionary.keywords → renderTips @ W/2+340s, 420s）
+const SCV_KEYWORDS: Record<string, string> = {
+  '消耗': '打出后，这张牌将在本场战斗中移除。',
+  '虚无': '回合结束时，消耗这张牌。',
+  '固有': '在每场战斗开始时，这张牌就在你的手牌中。',
+  '保留': '这张牌不会被弃置。回合结束时将其保留在手牌中。',
+}
+function scvTips(card: CardInstance): { name: string; desc: string }[] {
+  const def = CARDS[card.id]
+  if (!def) return []
+  const text = `${def.desc} ${def.upDesc || ''}`
+  const out: { name: string; desc: string }[] = []
+  const seen = new Set<string>()
+  for (const [kw, desc] of Object.entries(SCV_KEYWORDS)) {
+    if (text.includes(kw) && !seen.has(kw)) { out.push({ name: kw, desc }); seen.add(kw) }
+  }
+  for (const info of Object.values(STATUS_INFO)) {
+    if (info.name.length >= 2 && text.includes(info.name) && !seen.has(info.name)) {
+      out.push({ name: info.name, desc: info.desc }); seen.add(info.name)
+    }
+  }
+  return out.slice(0, 5)
+}
+
+// 检视屏大卡（1024 画布盒：bg/大图插画/frame/banner 烘焙为 1024 全画布图 inset:0 同盒渲染）
+// 布局：原版 1920×1080 ×5/6 → 舞台 1600×900；字号 = 画布宽 × 原版字号/1024
+function scvCardHtml(card: CardInstance, viewingUpgrade: boolean, canvasW = 853): string {
+  const def = CARDS[card.id]
+  if (!def) return ''
+  const cursed = !!def.curse
+  const status = isStatusCard(card.id)
+  const colorRaw = cursed || status ? 'colorless' : (def.color || 'red')
+  const color = colorRaw.charAt(0).toUpperCase() + colorRaw.slice(1)
+  const rar = def.rarity === 'rare' ? 'Rare' : def.rarity === 'uncommon' ? 'Uncommon' : 'Common'
+  const typeCap = def.type.charAt(0).toUpperCase() + def.type.slice(1)
+  const bg = cursed ? A('scv/bgSkillCurse.webp') : A(`scv/bg${typeCap}${color}.webp`)
+  const frame = A(`scv/frame${typeCap}${rar}.webp`)
+  const banner = A(`scv/banner${rar}.webp`)
+  const orb = A(`scv/orb${color}.webp`)
+  const cost = cardCost(card)
+  const f = (n: number) => Math.round(canvasW * n / 1024)
+  const typeName = def.type === 'attack' ? '攻击' : def.type === 'power' ? '能力' : '技能'
+  // 描述：底端锚定，行距 1.53×cap≈1.07；查看升级版时动态值全绿（原版 upgradedD/B/M → GREEN_TEXT）
+  const segs = cardDescParts(card, undefined, viewingUpgrade ? (_idx: number, v: number) => ({ v, color: '#7fff00' }) : undefined)
+    .map(s => s.c ? `<span style="color:${s.c};font-weight:700">${esc(s.t)}</span>` : esc(s.t)).join('')
+  const pct = (p: number) => `${(p * 100).toFixed(2)}%`
+  return `<div class="scv-card" style="width:${canvasW}px;height:${canvasW}px">
+    <img class="scv-layer" data-scv="bg" src="${bg}" alt="">
+    <img class="scv-art" data-scv="art" src="${A(`scvart/${card.id}.webp`)}" alt="${esc(def.name)}" style="left:${pct(0.207)};top:${pct(0.173)};width:${pct(0.586)};height:${pct(0.445)}">
+    <img class="scv-layer" data-scv="frame" src="${frame}" alt="">
+    <img class="scv-layer" data-scv="banner" src="${banner}" alt="">
+    ${cost !== -99 ? `<img class="scv-art" data-scv="orb" src="${orb}" alt="" style="left:${pct(0.156)};top:${pct(0.049)};width:${pct(0.16)};height:${pct(0.16)}">
+    <div class="sts-title" data-scv="cost" style="position:absolute;left:${pct(0.175)};top:${pct(0.049)};width:${pct(0.14)};height:${pct(0.16)};display:flex;align-items:center;justify-content:center;font-size:${f(76)}px;color:#fff6e2;text-shadow:3px 3px 0 #000">${cost === -1 ? 'X' : cost}</div>` : ''}
+    <div class="sts-title" data-scv="name" style="position:absolute;left:${pct(0.10)};width:${pct(0.80)};top:${pct(0.146)};height:${pct(0.052)};display:flex;align-items:center;justify-content:center;font-size:${f(46)}px;line-height:1.05;overflow:hidden;color:${viewingUpgrade ? '#7fff00' : '#fff6e2'};text-shadow:2px 2px 0 #000,0 0 10px rgba(0,0,0,.8)">${esc(def.name)}</div>
+    <div data-scv="type" style="position:absolute;left:${pct(0.10)};width:${pct(0.80)};top:${pct(0.522)};height:${pct(0.034)};display:flex;align-items:center;justify-content:center"><span class="sts-body" style="font-size:${f(34)}px;color:#595959;letter-spacing:1px;text-shadow:0 1px 1px rgba(0,0,0,.35)">${typeName}</span></div>
+    <div class="sts-body" data-scv="desc" style="position:absolute;left:${pct(0.10)};width:${pct(0.80)};top:${pct(0.558)};height:${pct(0.235)};font-size:${f(48)}px;line-height:1.07;color:#fff6e2;text-shadow:2px 2px 2px #000;text-align:center;display:flex;align-items:flex-end;justify-content:center;overflow:hidden"><div style="width:100%">${segs}</div></div>
+  </div>`
+}
+
+// 检视层 HTML：黑0.9背板(pow2In 0.25s) + 1024大卡 + POPUP_ARROW 翻页（端点隐藏）+
+// CHECKBOX/TICK「看升级版」（诅咒/状态卡隐藏）+ 关键词 tips；点击卡外/Esc 关闭
 function inspectLayerHtml(cards: CardInstance[]): string {
   const idx = Math.max(0, cards.findIndex(c => c.uid === inspectUid))
   const card = cards[idx]
   if (!card) return ''
-  const shown: CardInstance = inspectTicked
-    ? { ...card, upgraded: Math.max(1, card.upgraded + 1) }
-    : card.upgraded > 0 ? { ...card, upgraded: card.upgraded - 1 } : card
-  const animCls = inspectGen === 0 ? 'inspect-card-in' : (inspectDir < 0 ? 'inspect-nav-l' : 'inspect-nav-r')
-  const arrow = (left: boolean) => `<svg width="52" height="52" viewBox="0 0 52 52" fill="none"><path d="${left ? 'M33 10 L17 26 L33 42' : 'M19 10 L35 26 L19 42'}" stroke="#e8b855" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`
-  return `<div class="inspect-root" onclick="event.stopPropagation()">
-    <div class="inspect-backdrop ${inspectClosing ? 'closing' : ''}" data-act="inspectClose"></div>
-    <div class="inspect-body">
-      <div class="inspect-card-wrap ${animCls}" key="insp-${inspectGen}">${cardHtml(shown, 300)}</div>
-      ${idx > 0 ? `<div class="inspect-arrow inspect-arr-in-l" data-act="inspectStep" data-dir="-1" title="上一张 (←)">${arrow(true)}</div>` : ''}
-      ${idx < cards.length - 1 ? `<div class="inspect-arrow inspect-arr-in-r" data-act="inspectStep" data-dir="1" title="下一张 (→)">${arrow(false)}</div>` : ''}
-      <div class="inspect-tick" data-act="inspectToggle">
-        <div class="tickbox ${inspectTicked ? 'on' : ''}">${inspectTicked ? '<span class="tickbox-check">✓</span>' : ''}</div>
-        <span class="sts-title" style="font-size:17px;color:${inspectTicked ? '#ffd76a' : '#c8b090'};text-shadow:2px 2px 0 #000;letter-spacing:2px">查看升级</span>
-      </div>
-      <div class="inspect-count">${idx + 1} / ${cards.length}</div>
-      <div class="inspect-hint">←/→ 切换 · 空格升级预览 · Esc 关闭</div>
-    </div>
+  const allowUp = scvAllowUpgrade(card)
+  const shown: CardInstance = inspectTicked ? { ...card, upgraded: card.upgraded + 1 } : card
+  const tips = scvTips(card)
+  return `<div class="inspect-root">
+    <div class="scv-backdrop" data-act="inspectClose"></div>
+    <div class="scv-card-center">${scvCardHtml(shown, inspectTicked)}</div>
+    ${idx > 0 ? `<div class="scv-arrow" data-act="inspectStep" data-dir="-1" title="上一张 (←)"><img src="${A('scv/arrow.webp')}" alt=""></div>` : ''}
+    ${idx < cards.length - 1 ? `<div class="scv-arrow scv-arrow-next" data-act="inspectStep" data-dir="1" title="下一张 (→)"><img src="${A('scv/arrow.webp')}" alt=""></div>` : ''}
+    ${allowUp ? `<div class="scv-upgrade-toggle" data-act="inspectToggle" title="查看升级后的数值 (空格)">
+      <div class="scv-checkbox"><img src="${A('scv/checkbox.webp')}" alt="">${inspectTicked ? `<img class="scv-tick-img" src="${A('scv/tick.webp')}" alt="">` : ''}</div>
+      <span class="sts-title scv-upgrade-label">看升级版</span>
+    </div>` : ''}
+    ${tips.length ? `<div class="scv-tips">${tips.map(t => `<div class="scv-tip"><div class="sts-title" style="font-size:21px;color:#ffd76a;text-shadow:2px 2px 0 #000">${esc(t.name)}</div><div class="sts-body" style="font-size:16px;color:#e8dcc8;line-height:1.4">${esc(t.desc)}</div></div>`).join('')}</div>` : ''}
   </div>`
 }
 
@@ -2074,34 +2390,43 @@ function inspectRerender() {
 
 function doInspectStep(d: number) {
   const st = g()
-  if (!st.pileView || !st.run || inspectClosing) return
-  const cards = pileCardsOf(st.run, st.pileView)
+  if ((!st.pileView && !inspectExtra) || !st.run || inspectClosing) return
+  const cards = inspectCardsAll(st)
   const idx = cards.findIndex(c => c.uid === inspectUid)
   const i = idx + d
   if (i < 0 || i >= cards.length) return
   inspectDir = d
   inspectGen++
   inspectUid = cards[i].uid
-  inspectTicked = cards[i].upgraded > 0
+  // 原版 openPrev/openNext：翻页保留 isViewingUpgrade（tmp 传递）
   inspectRerender()
 }
 
 function doInspectToggle() {
   if (!inspectUid || inspectClosing) return
+  const st = g()
+  if (!st.run && !inspectExtra) return
+  const cards = inspectCardsAll(st)
+  const card = cards.find(c => c.uid === inspectUid)
+  if (!card || !scvAllowUpgrade(card)) return
   inspectTicked = !inspectTicked
   inspectRerender()
 }
 
 function doInspectClose() {
   if (!inspectUid || inspectClosing) return
-  inspectClosing = true
+  // 原版 close()：直接关闭（无退场动画）
+  inspectUid = null
+  inspectTicked = false
+  inspectClosing = false
+  inspectGen = 0
+  inspectExtra = null
   inspectRerender()
-  setTimeout(() => { inspectUid = null; inspectClosing = false; inspectGen = 0; inspectRerender() }, 240)
 }
 
 function overlayHtml(st: ReturnType<typeof g>): { html: string; sig: string } {
   const run = st.run
-  if (!run) return { html: '', sig: '' }
+  if (!run) return { html: '', sig: 'none' }
   // 防御：combat 结构不完整（缺 players/activeIdx）时跳过预见层，避免整个渲染循环崩溃
   const apOk = !!run.combat && Array.isArray(run.combat.players) && !!run.combat.players[run.combat.activeIdx]
   if (apOk && AP(run.combat).pendingScry) {
@@ -2134,7 +2459,7 @@ function overlayHtml(st: ReturnType<typeof g>): { html: string; sig: string } {
     return {
       sig,
       html: `<div class="overlay" data-act="closePile">
-        <div class="sts-panel" style="padding:22px;max-width:1440px;max-height:800px;display:flex;flex-direction:column;align-items:center;gap:14px" onclick="event.stopPropagation()">
+        <div class="sts-panel" style="padding:22px;max-width:1440px;max-height:800px;display:flex;flex-direction:column;align-items:center;gap:14px">
           <div class="sts-title" style="font-size:24px;color:#ffd980">${titles[pile]} <small style="font-size:15px;color:#a89070">(${cards.length})</small></div>
           <div class="sel-cards" style="max-height:620px">${grid || '<div class="sts-body">空空如也</div>'}</div>
           <button class="sts-btn slide-btn-r" data-act="closePile">关闭</button>
@@ -2142,6 +2467,11 @@ function overlayHtml(st: ReturnType<typeof g>): { html: string; sig: string } {
         ${inspectUid ? inspectLayerHtml(cards) : ''}
       </div>`
     }
+  }
+  // 第三十二批：外部单卡检视（奖励屏/商店右键），独立分支（与 pileView 互斥；背板拦截原屏点击）
+  if (inspectExtra && inspectUid) {
+    const sig = `inspx:${inspectUid}:${inspectTicked ? 1 : 0}:${inspectGen}`
+    return { sig, html: inspectLayerHtml(inspectExtra) }
   }
   if (st.select) {
     const sel = st.select
@@ -2187,7 +2517,7 @@ function overlayHtml(st: ReturnType<typeof g>): { html: string; sig: string } {
       </div>`
     }
   }
-  return { html: '', sig: '' }
+  return { html: '', sig: 'none' }  // 第三十二批修复：空态 sig 必须非空——inspectRerender 强置 __sig='' 后，空态若返回 '' 则 ''!=='' 为假，DOM 残留旧检视层（外部单卡源关闭即命中此路径）
 }
 
 function renderOverlays(st: ReturnType<typeof g>) {
@@ -2506,6 +2836,12 @@ function sigScreen(sig: string, build: () => string) {
 }
 
 function updateScreen(scr: string, run: RunState | null) {
+  // 商店气泡生命周期：离屏重置（欢迎语重播 / 清理闲聊定时器）
+  {
+    const a = app as any
+    if (a.__shopSeen && scr !== 'shop') { a.__shopSeen = false; resetShopSpeech() }
+    if (scr === 'shop') a.__shopSeen = true
+  }
   if (!run) {
     if (scr === 'mpLobby') {
       sigScreen(lobbySig(), () => rMpLobby())
@@ -2724,7 +3060,8 @@ function setupKeyboard() {
     if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA')) return
     const st = g()
     // 检视屏导航（原版 NInspectCardScreen：←/→ 切卡，Enter/空格 升级预览）
-    if (inspectUid && st.pileView) {
+    // 第三十二批：守卫扩展到外部单卡源（奖励屏/商店右键），与牌堆源等权
+    if (inspectUid && (st.pileView || inspectExtra)) {
       if (e.key === 'ArrowLeft') { doInspectStep(-1); e.preventDefault(); return }
       if (e.key === 'ArrowRight') { doInspectStep(1); e.preventDefault(); return }
       if (e.key === 'Enter' || e.key === ' ') { doInspectToggle(); e.preventDefault(); return }
@@ -2767,6 +3104,12 @@ const ACTIONS: Record<string, (el: HTMLElement) => void> = {
   gotoMenu: (el) => g().gotoMenuScreen(el.dataset.screen as any),
   continueRun: () => g().continueRun(),
   closeMenu: () => g().toggleMenu(false),
+  // 第二十三批：顶栏 settings 齿轮（原版 TopPanel.renderSettingsIcon 位）
+  toggleMenu: () => {
+    const st = g()
+    if (!st.run) return
+    st.toggleMenu()
+  },
   menuSettings: () => {
     // 菜单内快捷设置：切换面板显示
     const panel = document.getElementById('ingame-menu-settings')
@@ -2888,11 +3231,7 @@ const ACTIONS: Record<string, (el: HTMLElement) => void> = {
     inspectGen = 0
     inspectDir = 0
     inspectClosing = false
-    const st = g()
-    if (st.run && st.pileView) {
-      const c = pileCardsOf(st.run, st.pileView).find(x => x.uid === inspectUid)
-      inspectTicked = !!c && c.upgraded > 0
-    }
+    inspectTicked = false   // 原版 open(): isViewingUpgrade = false
     inspectRerender()
   },
   inspectStep: (el) => doInspectStep(Number(el.dataset.dir || 1)),
@@ -2963,7 +3302,14 @@ const ACTIONS: Record<string, (el: HTMLElement) => void> = {
 }
 
 document.addEventListener('click', (e) => {
-  const el = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null
+  const t = e.target as HTMLElement
+  let el = t.closest('[data-act]') as HTMLElement | null
+  // 第三十批修复：panel/检视层内的点击不得触发 .overlay 根的 closePile（原 inline stopPropagation 语义
+  // 移到委托内——inline 版本会连 data-act 冒泡一起挡死，导致单文件版检视屏从来打不开的既有 bug）
+  if (el && el.classList.contains('overlay') && t.closest('.sts-panel, .inspect-root')) {
+    e.stopPropagation()
+    return
+  }
   if (el && el.dataset.act && ACTIONS[el.dataset.act]) {
     e.stopPropagation()
     ACTIONS[el.dataset.act](el)
@@ -2974,6 +3320,27 @@ document.addEventListener('click', (e) => {
     const st = g()
     if (st.selectedCardUid || st.selectedPotionIdx !== null) g().cancelSelection()
   }
+})
+
+// ============ 右键检视（第三十二批：原版 CardRewardScreen/ShopScreen justClickedRight → cardPopup.open） ============
+// data-inspect 锚点：奖励屏卡（data-cid 容器）与商店卡（data-sidx 容器，售出保留）；左键语义（选卡/购买）不受影响
+document.addEventListener('contextmenu', (e) => {
+  const t = e.target as HTMLElement
+  const el = t.closest('[data-inspect]') as HTMLElement | null
+  if (!el) {
+    // 检视开着时屏蔽层上默认菜单（原版 isPopupOpen 屏蔽输入），空白处放行浏览器菜单
+    if (document.querySelector('.inspect-root')) e.preventDefault()
+    return
+  }
+  e.preventDefault()
+  if (inspectUid) return   // 已开检视：忽略新右键
+  const id = el.dataset.inspect!
+  // 商店卡（#shop-cards 内，data-sidx=槽位）→ uid shop_i；奖励屏卡 → uid rw_cid（与展示卡 r_/s 前缀区分）
+  const inShop = el.closest('#shop-cards')
+  const card: CardInstance = inShop
+    ? { uid: 'shop_' + (el.dataset.sidx ?? '0'), id, upgraded: 0 }
+    : { uid: 'rw_' + id, id, upgraded: 0 }
+  inspectOpenCard(card)
 })
 
 // ============ 悬浮提示（鼠标 + 触屏） ============
@@ -3072,19 +3439,11 @@ function setupControls() {
   })
 
   const wrap = document.createElement('div')
-  wrap.style.cssText = 'position:absolute;top:10px;right:10px;z-index:500;display:flex;gap:6px;align-items:center'
+  // 第二十三批：改竖排（原横排 ~130px 宽会遮挡顶栏 settings/deck 图标区 right:104）
+  wrap.style.cssText = 'position:absolute;top:10px;right:10px;z-index:500;display:flex;flex-direction:column;gap:6px;align-items:center'
 
-  // 齿轮菜单按钮（游戏内）
-  const gearBtn = document.createElement('button')
-  gearBtn.className = 'sts-btn'
-  gearBtn.style.cssText = 'font-size:15px;padding:4px 10px;min-width:38px'
-  gearBtn.textContent = '⚙'
-  gearBtn.title = '菜单 (Esc)'
-  gearBtn.addEventListener('click', () => {
-    const st = g()
-    if (st.run) st.toggleMenu(true)
-  })
-  wrap.appendChild(gearBtn)
+  // 第二十三批：齿轮菜单入口移至顶栏 settings 齿轮（topHudShell）；此处不再创建旧 ⚙ 按钮
+  // （旧按钮 top:10 right:10 与顶栏 settings 图标位置重叠）
 
   // 旋转 180 度按钮（仅触屏设备；点击后整个画面翻转 180 度，适配手机倒拿场景）
   if (typeof matchMedia !== 'undefined' && matchMedia('(hover: none)').matches) {
@@ -3132,7 +3491,7 @@ function setupControls() {
   btn.textContent = music.muted || music.volume === 0 ? '🔇' : '🎵'
   btn.title = '音乐音量'
   const panel = document.createElement('div')
-  panel.style.cssText = 'position:absolute;right:48px;top:0;display:none;align-items:center;gap:8px;background:rgba(12,8,5,.92);border:1px solid #6b4a2e;border-radius:8px;padding:8px 12px;box-shadow:0 4px 16px rgba(0,0,0,.6)'
+  panel.style.cssText = 'position:absolute;right:130px;top:0;display:none;align-items:center;gap:8px;background:rgba(12,8,5,.92);border:1px solid #6b4a2e;border-radius:8px;padding:8px 12px;box-shadow:0 4px 16px rgba(0,0,0,.6)'
   const slider = document.createElement('input')
   slider.type = 'range'; slider.min = '0'; slider.max = '1'; slider.step = '0.05'; slider.value = String(music.volume)
   slider.style.cssText = 'width:110px;accent-color:#c8a060'

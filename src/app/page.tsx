@@ -25,6 +25,10 @@ const ROOM_FADE_OUT_MS = 1100, ROOM_FADE_IN_MS = 800
 function useRoomFade(actual: string): { shown: string; phase: 'none' | 'out' | 'in'; seq: number } {
   const [state, setState] = useState({ shown: actual, phase: 'none' as 'none' | 'out' | 'in', seq: 0 })
   const timers = useRef<ReturnType<typeof setTimeout>[]>([])
+  // 第三十一批加固：快速连续切换房间时，旧 600ms/1.1s 定时器会把 shown 写回旧目标导致画面卡死
+  // （单次切换不受影响；此修复使任何时刻触发的定时器都收敛到最新目标）
+  const targetRef = useRef(actual)
+  targetRef.current = actual
   useEffect(() => {
     if (actual === state.shown) return
     if (state.phase === 'in') {
@@ -35,7 +39,8 @@ function useRoomFade(actual: string): { shown: string; phase: 'none' | 'out' | '
     timers.current.forEach(clearTimeout); timers.current = []
     setState(s => ({ shown: s.shown, phase: 'out', seq: s.seq + 1 }))
     timers.current.push(setTimeout(() => {
-      setState(s => ({ shown: actual, phase: 'in', seq: s.seq + 1 }))
+      // 读最新目标：期间若又切房，此定时器作废前的值会被后续定时器覆盖为最新（收敛不回退）
+      setState(s => ({ shown: targetRef.current, phase: 'in', seq: s.seq + 1 }))
     }, ROOM_FADE_OUT_MS))
     timers.current.push(setTimeout(() => {
       setState(s => (s.phase === 'in' ? { ...s, phase: 'none' } : s))

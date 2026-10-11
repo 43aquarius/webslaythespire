@@ -118,6 +118,7 @@ export interface CardInstance {
   id: string
   upgraded: number      // 0 = 未升级；>0 = 升级次数
   freeThisTurn?: boolean // 药水墨牌：本回合 0 费
+  costRoll?: number      // 蛇油：战斗内费用随机化（0-3，战斗卡为副本不外泄）
   limitBreakExhaust?: boolean
 }
 
@@ -409,6 +410,8 @@ export interface RunState {
   eventsSeen: string[]
   removalCount: number
   pendingTreasureRelic?: string | null  // 宝箱两步：undefined=未开箱 null=空箱（原版 NTreasureRoom 开箱后遗物展示再拾取；存 run 内随联机快照同步）
+  chestSize?: 'small' | 'medium' | 'large'  // 第三十一批：原版三档宝箱（AbstractDungeon.getRandomChest；入房时掷定，act1-3=50/33/17，act4=0/100/0 TheEnding）
+  chestGold?: number | null  // 开箱金币奖励（原版 goldReward：开箱时结算；null=无金币字段未初始化语义同 undefined 区分用）
   eliteKilled: number
   monsterKilled: number
   goldEarned: number

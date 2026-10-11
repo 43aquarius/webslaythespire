@@ -10,16 +10,30 @@ OUT = '/home/z/my-project/scripts/standalone/assets.json'
 # 第十八批新增: campfire/events/title 需内联（篝火按钮/事件插画/漂云）
 PLANS = {
     'cardart': (None, 'PASSTHROUGH', None),  # 已离线烘焙为 512 画布 WebP（带透明，与边框同盒渲染）→ 直接内联
-    'enemies': (420, 'PNG', None),   # 敌人需要透明
+    # 第三十批：检视屏（SingleCardViewPopup）——1024 画布大卡框架（bg/frame/banner/orb）+ UI 三件套，
+    # 已离线烘焙为全画布 WebP → 直接内联；scvart = 1024Portraits 225 张 500x380 高清插画（webp q80）
+    'scv': (None, 'PASSTHROUGH', None),
+    'scvart': (None, 'PASSTHROUGH', None),
+    'enemies': (None, 'WEBP_ONLY', None),  # 第二十七批：原版 idle 动画 WebP（动图直通；静态 png 已废弃删除）
+    # 第三十一批：商店（rug 全屏/purge/soldout/hand/saletag/bubble）+ 宝箱（三档+开箱），
+    # 均为离线烘焙 WebP（共约 210KB）→ 直接内联
+    'shop': (None, 'PASSTHROUGH', None),
+    'chests': (None, 'PASSTHROUGH', None),
     'frames': (None, 'PNG', None),   # 卡框保持
     'hero': (None, 'PNG', None),
     'intent': (None, 'PNG', None),
     'mapicons': (140, 'PNG', None),
     'neow': (640, 'PNG', None),      # 涅奥鲸鱼+眨眼眼睑(第十八批)
-    'potions': (None, 'PNG', None),
+    # 第二十一批：原版药水分层（64px mask 图层，需保真不缩放）；旧 wiki 单图已在第二十一批移除
+    'potionlayers': (None, 'PNG', None),
+    # 第二十二批：结束回合按钮三态（256px 原版 topPanel 素材，保真）
+    'endturn': (None, 'PNG', None),
+    # 第二十三批：顶栏全套（bar 1920x128 + 心/钱袋/层旗/deck/settings 64 + 能量VFX 256 + 药水带框 274x106）
+    # 共约 33KB，全部保真直接内联（PASSTHROUGH）
+    'topbar': (None, 'PASSTHROUGH', None),
     'relics': (110, 'PNG', None),
     'status': (72, 'PNG', None),
-    'typeicons': (None, 'PNG', None),
+    # typeicons 目录已移除（第二十五批：类型行改原版纯文字渲染，wiki 徽章弃用）
     'bg': (None, None, None),        # jpg 保持
     'campfire': (128, 'PNG', None),  # 原版篝火按钮(sleep/smith)
     'title': (900, 'PNG', None),     # 原版漂云(仅 3 张在用)
@@ -63,6 +77,9 @@ for d, (maxside, fmt, quality) in PLANS.items():
     for f in sorted(os.listdir(dp)):
         if not f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
             continue
+        # 第二十七批：enemies 桶只收 .webp 动图（.png 已全部替换删除）
+        if d == 'enemies' and not f.lower().endswith('.webp'):
+            continue
         # 第十八批：已被原版图替换的旧背景不再内联（combat1-4/campfire*/event*/menubg 在用）
         if d == 'bg' and f in ('combat.jpg', 'menu.jpg'):
             continue
@@ -75,10 +92,11 @@ for d, (maxside, fmt, quality) in PLANS.items():
         img = Image.open(path)
 
         if f.lower().endswith('.webp') or fmt == 'PASSTHROUGH':
-            # WebP（带透明）：直接内联不再重编码
+            # 直接内联不再重编码；MIME 按扩展名（第二十三批：topbar 为 PNG，cardart 为 WebP）
             with open(path, 'rb') as fp:
                 data = fp.read()
-            mime = 'image/webp'
+            ext = f.lower().rsplit('.', 1)[-1]
+            mime = 'image/webp' if ext == 'webp' else 'image/jpeg' if ext in ('jpg', 'jpeg') else 'image/png'
         else:
             if fmt == 'JPEG' or path.lower().endswith(('.jpg', '.jpeg')):
                 im = img.convert('RGBA')

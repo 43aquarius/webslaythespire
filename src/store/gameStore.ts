@@ -801,7 +801,15 @@ export const useGame = create<GameStore>((set, get) => {
           break
         case 'treasure':
           r.screen = 'treasure'
-          sfx.play('chestOpen')
+          // 第三十一批：入房掷宝箱档位（原版 AbstractDungeon.getRandomChest：act1-3=50/33/17，act4=0/100/0 TheEnding）
+          // 入房不播 chestOpen（原版 CHEST_OPEN 在点击开箱时播）
+          {
+            const roll = Math.random()
+            r.chestSize = r.act >= 4
+              ? 'medium'
+              : roll < 0.50 ? 'small' : roll < 0.83 ? 'medium' : 'large'
+            r.chestGold = null
+          }
           break
         case 'event': {
           let pool = Object.keys(EVENTS_POOL).filter(id => !r.eventsSeen.includes(id))
@@ -1632,15 +1640,51 @@ export const useGame = create<GameStore>((set, get) => {
     }),
 
     // ============ 宝箱两步（原版 NTreasureRoom：开箱 → 遗物 2× 展示+稀有度光晕 → 拾取；存 run 内随联机快照同步） ============
+    // 第三十一批：对齐原版 AbstractChest.randomizeReward/open —— 按档位掷遗物档与金币奖励
+    //   SmallChest  COMMON 75/UNCOMMON 25/RARE 0  GOLD 50% 25g
+    //   MediumChest COMMON 35/UNCOMMON 50/RARE 15 GOLD 35% 50g
+    //   LargeChest  COMMON 0 /UNCOMMON 75/RARE 25 GOLD 50% 75g
+    // 适配说明：本项目遗物库（RelicRarity）无 rare 档（原版有），rare 掷中折叠并入 uncommon 池
+    //   → small 75/25 · medium 35/65 · large 0/100（保持“大箱必出高阶”原版精神）
+    // 金币在开箱时立即入账（原版加入奖励屏；我们无奖励屏环节，直接结算+toast）
     openTreasure: fwd('openTreasure', () => {
       const { run } = get()
       if (!run || run.pendingTreasureRelic !== undefined) return
       const owned = new Set(run.relics)
-      const pool = Object.values(RELICS).filter(x => (x.rarity === 'common' || x.rarity === 'uncommon') && !owned.has(x.id))
+      const size = run.chestSize ?? 'small'
+      // 档位掷点（原版 roll<COMMON→common；roll<COMMON+UNCOMMON→uncommon；else rare→折叠 uncommon）
+      const COMMON = size === 'small' ? 75 : size === 'medium' ? 35 : 0
+      const UNCOMMON = size === 'small' ? 25 : size === 'medium' ? 65 : 100
+      const GOLD_CHANCE = size === 'small' ? 50 : size === 'medium' ? 35 : 50
+      const GOLD_AMT = size === 'small' ? 25 : size === 'medium' ? 50 : 75
+      const roll = Math.floor(Math.random() * 100)
+      const relicTier: 'common' | 'uncommon' = roll < COMMON ? 'common' : 'uncommon'
+      let pool = Object.values(RELICS).filter(x => (x.rarity === relicTier) && !owned.has(x.id))
+      // 保底：该档位池空时降级取
+      if (!pool.length) pool = Object.values(RELICS).filter(x => (x.rarity === 'common' || x.rarity === 'uncommon') && !owned.has(x.id))
       const relicId = pool.length ? pool[Math.floor(Math.random() * pool.length)].id : null
       const r = clone(run)
+      const actor = actorIdx(r)
+      setRunActive(r, actor)
+      // 金币奖励（原版 addGoldToRewards：开箱即定）
+      const goldRoll = Math.floor(Math.random() * 100)
+      let goldGot = 0
+      if (goldRoll < GOLD_CHANCE) {
+        // 原版 random(AMT*0.9, AMT*1.1) 取整
+        goldGot = Math.round(GOLD_AMT * (0.9 + Math.random() * 0.2))
+        r.players[actor].gold += goldGot
+        r.gold = r.players[actor].gold
+        r.players[actor].goldEarned = (r.players[actor].goldEarned ?? 0) + goldGot
+        r.goldEarned = r.players[actor].goldEarned
+      }
+      r.chestGold = goldGot
       r.pendingTreasureRelic = relicId
-      set({ run: r })
+      sfx.play('chestOpen')
+      set({
+        run: r,
+        toast: goldGot ? `打开宝箱：获得 ${goldGot} 金币${relicId ? ' 和遗物' : ''}` : (relicId ? null : '箱子是空的'),
+      })
+      if (goldGot || !relicId) setTimeout(() => { if (get().toast) set({ toast: null }) }, 2200)
     }),
 
     confirmTreasure: fwd('confirmTreasure', () => {
@@ -1915,5 +1959,6 @@ if (typeof window !== 'undefined') {
   ;(window as any).__STS_CARDS = CARDS
   ;(window as any).__STS_COST = cardCost
   ;(window as any).__STS_EVENTS = EVENTS_POOL
+  ;(window as any).__STS_RELICS = RELICS  // 第三十一批：宝箱档位测试（id→rarity 无 DOM 滞后）
 }
 

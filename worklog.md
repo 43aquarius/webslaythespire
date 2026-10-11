@@ -453,3 +453,288 @@ Stage Summary:
 - 原版地图boss专属图标落地：开图即知本幕boss(预决定)、专属图标+名称提示、进战斗遭遇严格一致、幕推进重掷、旧档兼容 —— 两版本同步,12+12项E2E+全套回归全绿
 - sts2-web研究第七批结论：sts2-web自身剩余候选(检视屏大图/收集页)价值成本比低,本批转向原版一代反编译源挖掘(boss图标为原版独有行为,sts2-web无此数据),与用户"原版还原"目标更契合
 - 后续候选：药水分层合成(glass+liquid+spots+outline,原版渲染管线)/敌人Spine骨骼动画/结束回合按钮与顶栏原版UI素材替换
+
+---
+Task ID: 22
+Agent: main
+Task: 第二十一批：原版药水分层合成落地（两版本）+ batch18 导航脆弱性根治
+
+Work Log:
+- 承第二十批后续候选：本批落地药水分层合成（原版渲染管线），顶栏素材替换留作下批
+- 反编译仓库 /tmp 被会话清理 → 重新克隆 Li-Binghui/MySlayTheSpire
+- 管线研究：AbstractPotion.render 层序 = liquid(着色)→hybrid(可选)→spots(可选)→glass(白)；PotionSlot 空槽渲染 POTION_PLACEHOLDER @ PLACEHOLDER_COLOR(白75%)；render/renderOutline 仅弃用界面用 outline，正常药水带不含 outline 层
+- 双构造器形态发现：新版类用 super(PotionSize, PotionColor)（色由 initializeColor 映射），LiquidBronze/CultistPotion 用旧版显式 new Color(int)；提取脚本双形态解析
+- libGDX Color(int) 字节序定论：RRGGBBAA（R最高字节）——GREEN_TEXT=0x7FFF7FFF→#7fff7f 语义验证（LSB序会得粉色，荒谬）；LiquidBronze/CultistPotion int 色经此换算得 #e2b821/#18bcc0、#2853bc/#1c2c60
+- 权威数据修正两处直觉：attackPotion=card形+FIRE色（非card+ATTACK色）、dexterityPotion=S形+GREEN色（非STEROID）；18药水实际用到11种形状
+- 图层复制：89张（13形状×最多5层，moon/spiky/eye/anvil无spots）+placeholder，扁平命名 {shape}_{layer}.png（make_assets是单层os.listdir，子目录不收）
+- 渲染技术：CSS mask + background-color 复刻 libGDX sb.setColor×白纹理；Next=maskImage长写法(React)，standalone=mask速记法(HTML串)；glass为img原图
+- 落地三渲染点×2版本：药水带(Shared PotionSlot/ui.ts potionHtml)、获取toast(Shared potGhosts/ui.ts ghost)、商店(ShopScreen/ui.ts shop)；空槽从虚线圈改原版占位剪影
+- 旧wiki药水单图20张 git rm（无残留引用），make_assets 移除 potions 计划；单文件 37.79→37.70MB
+- 【重大排障①服务器存活】next build 直接调用跳过项目 build 脚本的 cp -r public → standalone 404；且 nohup bun 随 bash 会话回收死亡——必须用 scripts/start_prod.sh（double-fork+setsid）
+- 【重大排障②导航根治】batch21 首跑卡角色选择屏：出发按钮需先点角色卡；且 Neow DOM 文案正则法对随机选项集不稳定——两处统一修复（选角屏先点铁甲战士；涅奥改 store API chooseNeow(1)+resolveSelect，batch16 模式），batch18 同步改造
+- 测试基建：B区相对fetch需在页面打开后执行（about:blank 上 fetch 必失败）；agent-browser glassSrc 断言 standalone 须测 data: 前缀（文件名不存在）
+- test_batch21 双版本：Next 34/34 + standalone 42/42；VLM 四场景×2版本验收（火焰红球橙顶/仙女白形/邪教徒蓝月/迅捷深蓝青斑/毒药绿+深绿斑/青铜金铜+青蓝/商店卡形红/幽灵白形/空槽剪影可见/无破图无溢出）
+- 全套回归：regression 16/412、bugcheck 29+29、batch10 19+13、batch12 29+19、batch13 25+25、batch14 19+18、batch15 31+28、batch16 30+31、batch18 41+45、batch20 12、mptest 23（时序偶发复跑过）、fulltest 全流程 gameover
+- 版本：v1.14→v1.15 未改版本号（本批为资源/渲染层，无功能变化）——生产服务器已重建+start_prod 重启
+
+Stage Summary:
+- 原版药水分层合成全链路落地：18药水×权威形状/着色×双版本，渲染管线与着色值严格对齐反编译源
+- 关键技术入库：libGDX Color(int)=RRGGBBAA；mask+background 等效 libGDX 着色；make_assets 单层目录限制
+- 测试可靠性：Neow 导航改 store API（不再依赖DOM文案）；角色选择屏需先选角色
+- 后续候选：结束回合按钮与顶栏原版UI素材(topPanel 34张已勘察)/敌人Spine骨骼动画/检视屏大图
+
+---
+Task ID: 23
+Agent: main
+Task: 第二十二批：结束回合按钮原版化（topPanel 三态素材 + EndTurnButton.render 复刻，两版本）
+
+Work Log:
+- 素材勘察：ui/topPanel 含 endTurnButton/endTurnHover/endTurnButtonGlow(256x256, 纯图形无文字, VLM确认=深色六边形宝石+金边) + bar.png(顶栏1920x128) + 34张图标——本批只取按钮三态，顶栏留后续
+- 渲染层序复刻（EndTurnButton.java render）：hover 轮廓图先绘(衬底)→主图后绘(常量板/glow板)→文字层最后；hover上浮tmpY+2→CSS translateY(-2px)，按下-2→translateY(2px)
+- 语义复刻：isGlowing=AbstractPlayer.useCard后手牌无可出牌时置位——本版实时计算 hand.every(cardCost>energy)；敌方回合GRAYSCALE shader→filter:grayscale(1)；isDisabled→DISABLED_COLOR(0.7)
+- 色值换算（Settings int，RRGGBBAA）：CREAM#fff6e2/GOLD#efc851；libGDX CYAN#00ffff/LIGHT_GRAY#b3b3b3
+- 双版本实现差异：Next=CSS background-image三态(globals.css)；standalone=img标签(data URL) + 更新器JS切换src与className（style.css同套状态规则）
+- 尺寸定位：208x208 画布 contain（内容区238x113@256画布≈居中），right:88 bottom:104；文字25px居中(板心≈画布中心)
+- 【测试技术】敌方回合为短窗口：外部轮询每回合exec往返数百毫秒会错过——改浏览器内40ms setInterval采样(className列表+首次enemy时刻computed filter/text快照)；E1-E3由此稳定捕获；agent-browser原生hover命令驱动悬停态（hover别的元素恢复）
+- test_batch22：Next 22/22 + standalone 20/20；全套回归：regression 16+16/412+412、bugcheck 29+29、batch12 29+19、batch13 25+25、batch14 19+18、batch15 31+28、batch16 30+31(③入场动画偶发复跑过)、batch18 41+45、batch20 12、batch21 34+42、mptest 23、fulltest gameover
+- VLM验收：Next四态(常态/悬停青字轮廓/发光金字/敌方灰度)全部符合；standalone前三态符合，敌态截图因窗口<exec往返未捕获（紧循环24×90ms重试亦未中）——功能性由E1-E3浏览器内采样断言覆盖，视觉由Next同款CSS规则+VLM灰度确认覆盖
+- 排障记录：JSON转义地狱再现——正则字面量`\\/`经Write工具成双反斜杠导致esbuild Syntax error（出现两次：batch21 C区与batch22 B区），修复模式=文件内须为单反斜杠`\/`；模板字符串内`\\s`发往浏览器则正确
+- 旧 .end-turn.ready box-shadow脉动动画废除（原版无此效果），@keyframes保留历史参考
+
+Stage Summary:
+- 结束回合按钮从CSS文字按钮升级为原版三态素材+完整状态机（发光语义=无可出牌），双版本同步
+- 浏览器内采样捕获短窗口状态的技术入测试库；敌方回合时长本身是引擎既有特性（不同战斗敌人动作数不同），未改动
+- 后续候选：顶栏bar.png+图标全套(34张已勘察，改动面大需拆批)/药水占位与能量VFX/检视屏
+
+---
+Task ID: 24
+Agent: main
+Task: 第二十三批：原版顶栏全套复刻（TopPanel bar/图标/布局/色系/hover语义 + EnergyPanel 能量VFX，两版本）
+
+Work Log:
+- 研究反编译仓库 TopPanel.java/EnergyPanel.java/Settings.java/FontHelper.java：提取 TOPBAR_H=128/ICON 64/INFO_TEXT_Y=H-24 等布局常量与 JAVA int 色（RRGGBBAA）——SALMON #fa8072 / GOLD #efc851 / RED #ff6563 / GREEN #7fff00 / CREAM #fff6e2 / LIGHT_GRAY #b3b3b3；panelName 34/topPanelInfo 26/topPanelAmount 24
+- 布局复刻（1920×1080→1600×900 等比 5/6）：bar 107px 全宽 + 单行——名字白28+称号灰15(nameX=20,原版 titleX 紧随) / 心53(hover1.2x)+HP文字SALMON22 / 钱袋53(hover1.2x)+金币三态色 / 药水带(potionSelectBox 274x106→动态宽83+N×63) / 层旗53+CREAM层数 / 遗物带56居中 / 右上 deck(数量20px)+settings
+- 金币三态色复刻 renderGold：displayGold(逐级值)==gold→金#efc851 / >gold(花费中)→红#ff6563 / <gold(获得中)→绿#7fff00——与既有逐级计数动画天然组合
+- 右上图标 hover 复刻：CYAN 染色 + 25%白叠层 = mix-blend-mode:color #0ff + screen 白α.25（等效 libGDX setColor×白纹理+二次绘制）；settings 齿轮 300°/s 常转(tp-spin 1.2s)，hover 定格 rotate(270°)
+- 能量VFX 复刻 EnergyPanel.renderVfx：双图反向旋转(图1 50°→110°+水平镜像/图2 0°→-60°)，α.5→0、scale1→.1(exp10In≈cubic-bezier(.64,0,.78,0))，加色混合(770,1)→CSS screen；触发语义=回合开始(phase player&turn递增,复刻 setEnergy)——旧 burst scale 动画废除
+- 素材：topbar/ 9张(bar/hp/gold/floor/deck/settings/energy-vfx/potionbox)从反编译仓库提取；make_assets 增 PASSTHROUGH 目录并修 MIME 按扩展名推断(原写死 webp，PNG 标 webp 会破图)
+- 屏幕覆盖补全：RestScreen/BossRelicScreen 原无顶栏→补 TopHud（原版 TopPanel 所有房间屏常驻）
+- 【修复既有 bug】useGoldLabel 快速连续变化死锁：cleanup 杀旧循环后新 effect 因 running=true 提前 return，无人重启→label 停中途；删 cleanup 改为旧循环读同一 st.current 自动处理累计 add
+- 旧入口清理：Next InGameMenu/standalone 控制簇的独立 ⚙ 按钮删除（与顶栏 settings 齿轮重叠）；standalone 控制簇横排改竖排（横排 ~130px 宽遮挡顶栏图标区）；音乐面板 right:48→130
+- standalone 修复：药水 setHtml 从覆盖整个 #hud-potions 改为写入 .pots-row（保留 tp-potbox 框）；满带抖动挂回容器整体（框+槽一起抖+batch16 断言查容器 getAnimations）；gold 三态改用 goldAnim.cur（原闭包 me 是旧引用，跨 updateHud 失效）
+- 测试技术：rotate(270°) computed matrix 断言 matrix(0,-1,1,0)；data URL 模式资源断言用类名+naturalWidth（无路径文本）；hover 命令的 covered 检查=elementFromPoint，需 pointer-events 到位(.tp-stat 曾漏)
+- test_batch23 双版本 37+37 全绿；bugcheck 更新两处断言（头像→.tp-name/#hud-name；血量红→SALMON G≤160）后 29+29
+- 全套回归：regression 16/412+412、bugcheck 29+29、batch10 19+13、batch12 29+20(std 回能断言更新为 VFX 语义,历史基线19)、batch13 25+6/batch14 19+5/batch15 31+8(std 三套为 HEAD 相同历史现状,worktree 对照证实)、batch16 30+30(抖动挂载修复)、batch18 41+45、batch20 12+12、batch21 34+42、mptest 25、fulltest 全流程 gameover(含 rest:smith/商店/宝箱)
+- VLM 验收（zai.chat.completions.createVision）：双版本 8 项(底板/单行布局/hover1.2x/金币红/齿轮定格/VFX/篝火屏顶栏/无破图) 全部符合
+- 单文件 37.79MB；生产服务器已重建重启
+
+Stage Summary:
+- 顶栏从自创布局(头像+垂直堆叠)升级为原版 TopPanel 完整复刻：bar 底板+单行+原版图标素材+原版色系+hover 语义+能量VFX，双版本同步
+- 关键技术入库：mix-blend-mode:color 等效 libGDX setColor 着色；EnergyPanel VFX 触发语义=回合开始 setEnergy；Java Color(int) RRGGBBAA 换算（Settings 常量）
+- 既有 bug 修复入库：useGoldLabel 连续变化死锁（cleanup 竞态）
+- 后续候选：batch13/14/15 standalone 断言的 img[src*=] 路径匹配在 data URL 下失效（历史技术债,需统一改类名断言）/敌人Spine骨骼动画/检视屏大图
+
+---
+Task ID: 25
+Agent: main
+Task: 第二十四批：原版敌人立绘（Spine 合成）+ 选角屏素材原版化（两版本）
+
+Work Log:
+- 任务链承接：batch18 双版本 41+45 修复收尾 + 9d4a125 验证（确认为孤儿提交：与 3f511e8 同父的兄弟、无分支引用、仅存 reflog；第十八批内容早已由 3f511e8 规范提交并推送，远程=4af2ab0 无需处理）
+- 资源盘点结论：历史批次已原版化 cardart/frames/status/relics/intent/mapicons/potionlayers/endturn/topbar/bg/campfire/events/neow/fonts/sfx/audio/title(尺寸吻合验证)/maporig(第十五批已提取)；仍非原版=enemies(52张wiki渲染图)/hero(wiki小图)/charbg(同名但哈希不同)/typeicons(wiki 32px徽章,原版为文字渲染,留候选)
+- 关键发现：原版敌人=Spine 骨骼动画(skeleton.atlas/json/png)，非单张立绘；原版选角屏=选中角色全屏 Portrait.jpg(1920x1200)+Button.png，无独立透明立绘
+- Spine 3.4.02 合成器 scripts/spine_compose.py 从零实现：libGDX atlas 解析(region/rotate90顺时针还原)、骨骼层级世界变换(2x3仿射递归)、region 附件四角仿射、mesh 附件三角形纹理映射(PIL transform+三点解仿射)、加权顶点格式[boneCount,(boneIdx,x,y,weight)*cnt]（179=25×5+6×9 破解验证）、简单 mesh 分支(len==2n 直接坐标)、slot tint、两骨 IK 余弦定理解算(余弦定理+父系换算+子树重算)
+- 排障记录：仿射 AABB 平移符号(减号→加号，patch 全透明根因)；MaxFilter mask 膨胀在细长三角形灾难(改源三角形外扩1px消缝)；mesh UV v 方向实验定论 v*h(渲染覆盖11806≥贴图非透明11553)；IK p0 坐标系混淆(apply(pw,...)是世界系，父系解算需直接用局部平移——修复后误差29-70px→0.00px)；矩阵元组(c,f)才是平移(tgt[3]误用d元素)
+- VLM 误判证伪方法论：VLM 在小尺寸对比图上反复误报"躯干缺失/部件脱节/翅膀残影"，全部由像素证据链推翻(投影无空白带/渲染覆盖率≥贴图非透明总数/scipy填洞检测<350px)——bbox 与 spine 元数据 setup 边界六敌抽验精确匹配<0.1px 是数学正确性的铁证；jawworm IoU 0.15 为姿态差异(setup+IK=待机姿态 vs wiki=攻击帧)非渲染错误
+- 52 敌人映射表（开发代号考据）：centurion=romeo/sphericGuardian=tank/writhingMass=spaghetti/shieldGremlin=femaleGremlin/sneakyGremlin=thiefGremlin/mystic=healer/reptomancer=reptile/fungibeast=fungi/gremlinNob=nobGremlin/redlouse=louseRed/spikeSlime=slimeAlt/gremlinLeader=gremlinleader/taskmaster=slaverMaster/dagger=mage_dagger/giantHead=head/acidslime=slime；特殊：hexaghost 非 Spine(core+6plasma 环绕合成)、byrd 双骨架(flying/grounded 选 flying)、corruptHeart 取 npcs/heart
+- 选角屏：charbg 四张替换为 charSelect/*Portrait.jpg(原版全屏图)；hero 四张由 characters/*/idle 骨架合成(铁甲349x251/寂静258x233/缺陷237x221/观者374x296，VLM 验收三合格+watcher"躯干分离"为紫袍中缝设计误判,空洞检测1.5%)
+- 截图工具 bug 修复：换敌 setState 必须分配新 uid——standalone 手动 DOM 按 euid 查询更新，uid 重复导致黑块+敌人缺失（Next 版 React key 冲突表现为状态错乱）
+- 构建链：make_assets(enemies 420px PNG 内联) → build.ts(36.40MB 单文件) → next build + start_prod.sh
+- VLM 游戏内验收：Next 战斗3组(邪教徒+颚虫+真菌兽/拉格维林/五哥布林)立绘完整清晰无破图比例合理；双版本选角屏原版场景图正常；standalone uid 修复后同验通过
+- 全套回归：regression16+16、bugcheck29+29、batch10 19、batch12 29、batch13 25、batch14 19、batch15 30+1(⑤b墨迹,历史时序偶发)、batch16 30、batch18 41+45、batch20 12、batch21 34+42、mptest(联机时序波动)、fulltest gameover
+- batch15/16 需 :3100 端口服务（.next/standalone 复制起 PORT=3100）；测试后已清理
+
+Stage Summary:
+- 敌人立绘从 wiki 渲染图全量升级为原版 Spine 骨架合成（setup-pose+IK），52 敌人+4 角色立绘，选角屏背景原版化——"很多资源不是原本的"需求收尾（剩余候选：typeicons 徽章图标改文字渲染）
+- 核心技术入库：Spine 3.4 json/atlas 解析与 setup-pose 合成全链路（region/mesh/加权/IK）；加权顶点编码格式；合成质量验证三件套(bbox 元数据匹配/覆盖率对照/空洞检测)
+- 方法论入库：VLM 小图误判需像素证据链证伪；换敌测试必须重分配 uid
+- 后续候选：typeicons 原版文字化/敌人 idle 多帧动画(三帧 scenes 图集或 Spine 动画帧采样)/检视屏大图/商店宝箱 UI 素材
+
+---
+Task ID: 26
+Agent: main
+Task: 会话恢复与状态对齐（用户"继续"）：前会话上下文耗尽时已超前完成第二十一~二十四批并推送，本会话同步本地 + 恢复生产环境
+
+Work Log:
+- 恢复上下文时摘要仍停留在"第十八批测试修复中"，但 git/worklog 考古显示前会话实际已推进至第二十四批：本地领先一个未推送提交 dc2a86d(第二十批)，远端 origin/main=34da092 领先本地五提交(3620fe1同内容第二十批 + 第二十一~二十四批 + Task25日志，均43aquarius署名)
+- 本地 dc2a86d 与远端 3620fe1 内容完全一致(31文件仅权限位差异，远端还含 eb2fd17 boss.png 755→644 权限修正)——判定远端为权威谱系，git reset --hard origin/main 丢弃本地重复提交，零丢失
+- 环境状态核验发现回归：沙箱重启后 .next 生产构建全丢(仅 .next/dev 残留，:3000 被开发服务器顶替)，standalone 单文件 36.40MiB 完好(与 Task25 记录一致)
+- 恢复生产环境：杀 dev 进程(1083/1084/1097+postcss) → npm run build(standalone 输出) → start_prod.sh，:3000 生产服务器 READY
+- start_prod.sh 版本 grep 恒空属预期(第十七批已删主菜单角标文字，脚本残留 informational 检查，无碍，留待后续顺手清理)
+- 冒烟验证(针对新构建)：regression 16/16 全绿；test_batch20 next 12 + standalone 12 全绿(boss专属图标/预决定/旧档兼容双模式通过)
+- 本会话未做功能改动：第二十一~二十四批(药水分层合成/结束回合按钮/顶栏复刻/敌人Spine立绘+选角屏)的内容与验证由前会话完成，详见 Task 22-25 日志
+
+Stage Summary:
+- 本地与远端谱系对齐(34da092)，生产服务器在 :3000 以第二十四批源码重建并通过双版本冒烟
+- 判定经验入库：会话恢复先做 git 双向考古(本地未推送 vs 远端超前后再 reset)，防止用旧本地覆盖远端新成果；摘要滞后于实际进度时以 worklog+git 为准
+- 后续候选(承 Task 25)：typeicons 原版文字化/敌人 idle 多帧动画/检视屏大图/商店宝箱 UI 素材
+
+---
+Task ID: 27
+Agent: main
+Task: 第二十六批：typeicons 原版文字化（renderType 纯文字渲染 + 位置修正 + 描述底端锚定）+ 沙箱回滚事故恢复
+
+Work Log:
+- 【沙箱回滚事故】本会话两轮"继续"之间沙箱被整体回滚至前会话死亡点（dc2a86d/origin ref=3620fe1），Task 26 的 reset+push 被回退且 Tasks 21-25 成果从本地消失；真实 GitHub 远端完好（93ed89e 含全部成果）。恢复路径：先在旧基线上提交本批修改(087ddfc) → git rebase --onto origin/main dc2a86d 只重放本批提交（避免误重放 dc2a86d 本体）→ 二进制工件冲突取 ours（远端版）后重建 → 合并树完整性验证（test_batch21-23 就位/顶栏/敌人52/charbg/BOSS_ICON 全在）
+- 【原版行为考证——推翻既有实现】反编译 AbstractCard.renderType：类型文字位于卡中心下方22px=55.5% from top，即插画窗底缘与描述文字之间，而非我们一直放的位置（卡底 89-97.5%）！ZHS "攻击" 34px<48px → typeWidth=0.42<1.1 → renderDynamicFrame 不画（动态框仅英文等宽文本语言）；无任何图标（wiki 32px 徽章为 wiki 自创，原版无此物）。证据链：代码（★★★★★）+ wiki 合成卡 Red-Bash 灰盾位 54-59%（★★★★）+ VLM 对检视屏/手牌截图的误判证伪（STS2 卡有类型板属二代设计，"Snakebite/Aggression"非一代卡池——423 卡名单查无）
+- 【重要方法论】VLM 位置读数需像素证据复核：本批 VLM 三次改口（底部白字带底板→中部灰盾→插线下方灰字），最终由逐行像素剖面+行数分布收敛；STS1 检索截图常混入 STS2/MOD（先查 423 卡名单验明正身）
+- 【实现·Next.js】CardView.tsx：删除 COLOR_TYPEICON/typeIconUrl/wiki 徽章 img；类型行改纯文字 span（TYPE_NAME 攻击/技能/能力，ZHS ui.json SingleCardViewPopup.TEXT 权威文案），定位 top py(0.530) 高 ph(0.050)（中心 55.5% from top），色 #595959（0.35 灰=CardTypeColor），字号 width*0.057（原版 17px/420 等比），字体族 sts-body；DOM 序置于 desc 前（原版 renderType 先于 renderDescription，重叠时描述覆盖类型，同原版 z 序）
+- 【实现·描述底端锚定】原版 desc 块以底端为锚（多行向上生长），我们此前垂直居中导致 3-4 行卡上侵类型行；改 alignItems flex-end + paddingBottom ph(0.06)（块底=81% from top）+行距 1.28→1.15（原版 pitch 1.45×cap≈5.87% 卡高，我们 5.43% 字号×1.15=6.25% 兼顾中文呼吸感）；4 行卡（16 张 39-40 字 desc）块顶 59% 仍低于类型行底 58% 之外——实测 C2 不重叠
+- 【实现·standalone】ui.ts 删 typeIconKey/TYPEICON_BASE，cardInner 类型行同规格（top 52.55%/高 4.09% 画布百分比，与 Next py 换算一致）；style.css .card-type-row/.card-desc 同步；DOM 序 cardInner 中类型行移至 desc 前
+- 【素材弃用】public/assets/typeicons/ 32 张 wiki 徽章删除；make_assets.py 去掉 typeicons 桶；单文件 36.39MB（无徽章内联）
+- 【跨版本一致性修复】batch23 E1 在 93ed89e 即失败（非本批回归）：Next 版顶栏 bar img 只有 Tailwind 工具类、standalone 有 .tp-bar——补 tp-bar 类对齐（测试钩子类双版本统一）
+- test_batch25.ts（双版本 16 项）：A 结构（无 img/无 typeicons 引用/文案配对 store/色 #595959/位置 52-59%/字号 0.057）B 布局（类型行底<描述块顶/块底 78-84%/行距 1.15）C 注入 4 行卡+升级卡（不重叠/锚定/类型行不变）D 素材弃用（404/ASSETS 无键）——16+16 全绿
+- 测量技术：字号比例断言须用 offsetWidth（getBoundingClientRect 含舞台 scale 0.833 与旋转，比值失真 0.0889 误报）；视口 577px 会截掉手牌下半（类型行 552<577 可见但描述 587>577 出画）→ set viewport 1280 800 后 VLM 才能读到完整卡
+- 全套回归（合并树重建后）：batch25 16+16 / batch20 12+12 / batch21 34+42 / batch22 22+20 / batch23 37+37（E1 修复后）/ regression 16 / regression5 412 / bugcheck 29+29 / mptest 23 / fulltest 全流程 gameover（含 rest:smith/商店/宝箱/bossRelic/二幕）——全绿
+- VLM 终验（合并构建）：类型行灰字在插画正下方、白色描述不重叠、顶栏/敌人立绘/意图在位、双版本一致（初验裁剪错位由视口高度与 4x 放大读小字能力不足所致，先像素坐标后 VLM）
+
+Stage Summary:
+- 类型行从"wiki 徽章+文字@卡底"修正为原版 renderType 精确复刻：纯灰字 #595959 @55.5% from top（插画窗底缘），双版本同步；描述改底端锚定+行距 1.15 消除长卡上侵
+- 沙箱回滚事故恢复方法入库：rebase --onto <old-baseline> 只重放本批提交；二进制工件取 ours 后必须重建；"远端为唯一权威"再次验证（本地 reflog 可被回滚，GitHub 不会）
+- 后续候选（承 Task 25）：敌人 idle 多帧动画/检视屏大图/商店宝箱 UI 素材；新候选：原版 ZHS 默认字体 NotoSansMonoCJKsc（现全站思源宋，FontHelper.java ZHS_DEFAULT_FONT 证据）
+
+---
+Task ID: 28
+Agent: 主 Agent（43aquarius 会话）
+Task: 第二十七批：敌人 idle 原版动画——Spine 3.4 动画烘焙器（timeline/deform/drawOrder/shear 全通道）+ 52 敌循环 WebP + 双版本接入
+
+Work Log:
+- 【权威映射考证】反编译 java 逐类提取 loadAnimation/setAnimation：52 sprite 全量映射（50 Spine 动画 + bronzeOrb 原版无动画(AbstractMonster 静态 img) + hexaghost 非 Spine → 两者单帧）；idle 动画名大小写混杂（idle/Idle/waving/animation/idle_flap/idle_open/Idle_1/Idle_2）；byrd 双骨架选 flying、bookOfStabbing 实际用 stabBook 目录、corruptHeart 走 npcs/heart、类名考古（dagger→SnakeDagger、shieldGremlin→GremlinTsundere、madGremlin→GremlinWarrior、mystic→Healer、sneakyGremlin→GremlinThief、theChamp→Champ）
+- 【通道普查】Spine 3.4 json 动画通道：bones(rotate/translate/scale/**shear**——首次扫描漏报，FFD 键名是 deform 不是 ffd) + slots(attachment 466/color 76) + deform 130 + drawOrder 7 + paths 14(跳过)/events 9(跳过)；idle 含 deform 31 敌、含 shear 8 敌(fungibeast 尾巴 21 骨全 shear)、无 ik 动画、无非 normal transform、全 default 单皮肤
+- 【引擎 spine_anim.py】SpineAnimator(SpineComposer)：①_world 按 Bone.updateWorldTransform 逐行对齐（la=cos(rot+shearX)*sx、lb=cos(rot+90+shearY)*sy；**6 元组 (a,b,tx,c,d,ty) 陷阱：首次实现按 libGDX (a,b,c,d) 顺序解包致 pc=tx 污染，root 层正常子层全飞，逐骨骼数值对比定位**）②timeline 插值（线性/stepped/贝塞尔 [cx1,cy1,cx2,cy2] 二分 48 次求根；首帧前 timeline 不生效=保持 setup=spine-c 语义）③deform 权威语义（SkeletonJson.java 574-611 + VertexAttachment.computeWorldVertices 100-115 逐行考证）：runtime 将 json 混合顶点 [cnt,(bi,x,y,w)*cnt] 拆为 bones 流+xyw 流；weighted deform=零基增量流(长度 2Σk, offset 元素偏移, 未覆盖=0 增量)；非加权 deform=setup+json 增量=绝对坐标(渲染直接替换)；weighted 世界顶点=Σ((x+dx)·boneA+(y+dy)·boneB+boneW)·w ④drawOrder 3.4 算法（offsets 仅 {slot,offset} 无 attachment 字段——那是 3.6+ 语义；drawOrder[pos]=origIdx + unchanged 逆序回填）⑤IK setup 约束每帧重解（_apply_ik_setup 复用，解析解幂等）
+- 【烘焙】帧 n=clamp(ceil(dur*12),8,20)（循环语义 t=dur*i/n 不含末帧）；联合 bbox 固定画布（含 setup 防御帧）；max_side=min(静态 png 最长边,460) 保持显示尺寸基准；q70/alpha80/method6，单敌>260KB 自动降级 q60/mf16（corruptHeart/nemesis/writhingMass 降级）；52 敌全量 5.76MB 零失败
+- 【guardian 形态修正（意外收获）】setup 全挂 80 附件(idle+defensive 形态同显)——第二十四批静态图把防御形态附件一起渲染了；动画 attachment timeline t=0 卸下 def* → 41 附件=原版正确 idle 形态（460x227 宽扁比例）
+- 【双版本接入】Next CombatScreen.tsx / standalone ui.ts 1159：.png→.webp；**CSS 模拟浮动 idle-bob 双版本移除**（真动画替代模拟，避免双重动作）；make_assets enemies 桶改 WEBP_ONLY（.png 全弃）；52 静态 png 删除（webp 全替代）；单文件 36.39→40.72MB（+4.3MB）
+- 【test_batch27 双模式 13+13】A 资产（52 webp 可达/MIME/RIFF 头、50 含 ANIM+ANMF chunk、旧 png 404|内联键清零——standalone atob 前缀 23 字符陷阱 slice(22)→split(',')、standalone img src 是 data URI 无 'enemies/' 字样→选择器按模式分）B 战斗 DOM（全 .webp 引用、加载成功、idle-bob 移除+animationName 无 bob）C 动画运行证据（**headless 下 canvas drawImage 不取动图新帧恒同帧——改双 screenshot 精确裁剪首敌 sprite bbox 像素 diff>200**，对照组混入能量VFX问题→精确 bbox 裁剪）
+- 【全套回归】batch27 13+13 / regression 16 / batch20 12+12 / batch21 34+42 / batch22 22+20 / batch23 37+37 / batch25 16+16 / regression5 412 / bugcheck 29+29 / mptest 22+22（客机金币首跑失败重跑过=历史时序偶发非本批回归）/ fulltest 全流程 gameover（16 层）
+- 【VLM 验收】四敌抽帧拼贴全过（cultist 挥手/deca 呼吸/fungibeast 蠕动/guardian 双臂扇动平滑无破图）；游戏内 jawworm/slimeBoss 立绘完整协调；受击闪白工作（VLM 所见"高亮荧光绿"即 brightness(3) 中间帧）；伤害 140→134 生效（**测试调 playCard 正确签名 (uid, targetUid) 而非 {cardUid,targetIdx}**）
+
+Stage Summary:
+- 敌人立绘从静态合成图升级为原版 idle 循环动画：Spine timeline 全通道（含 deform/shear/drawOrder）逐帧采样烘焙循环 WebP，52 敌 5.76MB，双版本 img 直接播放零 JS 播放逻辑
+- 方法论入库：①Spine 3.4 FFD 权威语义链（json 混合顶点→runtime bones/xyw 拆分→weighted 增量流/非加权绝对流）必须读内嵌 runtime 源码而非猜 ②6 元组解包错位类 bug 用逐骨骼数值对比定位 ③headless 动图验证用双 screenshot bbox diff 而非 drawImage ④原版语义考证以反编译 java 的 loadAnimation/setAnimation 为唯一权威
+- 后续候选（承 Task 25 队列）：检视屏大图 / 商店宝箱 UI 素材原版化 / 原版 ZHS 默认字体 NotoSansMonoCJKsc（FontHelper.java 证据）
+---
+Task ID: 29
+Agent: main
+Task: 会话恢复（沙箱二次回滚）+ 第二十八批：原版 ZHS 默认字体 NotoSansMonoCJKsc 落地（两版本）
+
+Work Log:
+- 【会话恢复·沙箱二次回滚】摘要滞留"第二十五批"但 worklog/git 考古实际已至第二十七批(a0d02c1)——.git 被回滚至 dc2a86d 但工作区保留第二十七批产物(spine_anim.py/test_batch27.ts/单文件40.72MB)；verify_worktree_vs_remote.py 全量哈希比对：远端 1285 跟踪文件与工作区 100% 一致(0差异0缺失)→无未推送成果丢失→git reset --hard origin/main 干净恢复；scripts/test_batch27.ts 修 /tmp/anim_pilot 截图目录 mkdir(沙箱重启清空 /tmp 导致 C1 环境性失败)
+- 【恢复后清障】reset --hard 不删 untracked：cardart 238 张 png 旧版残留(沙箱回滚恢复物)致 standalone 重建暴涨 50.12MB→精确清理后 39.11MB；生产环境重建(dev server 顶替 :3000 → npm run build + start_prod.sh)
+- 【权威考证·推翻历史实现】FontHelper.java：ZHS 语言 initializeFonts 唯一 fontFile=NotoSansMonoCJKsc-Regular.otf，全部 prepFont 卡位(卡名27/描述24/类型行17/检视大图48/能量数字76/顶栏/伤害数字)共享此一字体；prepFont(size, isLinearFiltering) 第二参是线性过滤而非粗体——历史注释"英文 Kreon+简中 SourceHanSerifSC"系误读：ZHS_BOLD_FONT(SourceHanSerifSC-Bold) 是从未被引用的死常量(grep 全文件仅定义行)，"粗体感"来自 FreeType borderWidth 描边；Kreon 仅 ENG 路线
+- 【子集化】scripts/subset_font_zhs.py：90 源码文件全量文案(字符串字面量正则+注释中文保守并入)+ASCII 全集+常用中英标点+序号圈数字+GB2312 一级 3755 字缓冲=3998 唯一字符(汉字3783)→fontTools woff2 1.32MB(原 OTF 15.7MB)；覆盖校验以原 OTF cmap 为基准(3949 需求字形 0 缺失；emoji ⚓☕ 等原字体本无的走系统 fallback 豁免)；unicode_escape 二次解码陷阱(源文件已是 UTF-8,再解破坏中文)
+- 【重大修复·CSS 变量作用域】next/font 的 --font-zh-mono 挂在 body(layout.tsx variable 类)，而旧 --sts-font-* 定义在 :root(html)——html 无法向内解析后代元素的变量→var 链 guaranteed-invalid→.sts-title/.sts-body 全部退回 Tailwind 默认 sans，**旧宋体实现从未真正生效(全站一直系统 sans 渲染)**；document.fonts face unloaded+getPropertyValue 空 是定位线索；修复：变量定义移至 body + body 全局默认 font-family 即 mono(原版全场景 mono，未挂类文字不再落系统字体)
+- 【Next 版】layout.tsx 四 localFont(Kreon/SerifSC title/body)→单 zhMonoFont；adjustFontFallback:false(自动生成的 Arial 调整 fallback 面 data URI 在本环境 error)
+- 【standalone 版】build.ts @font-face 族名映射 NotoSansMonoCJKsc；style.css body/.sts-title/.sts-body 换 mono 链(sans-serif 兜底)；死常量宋体 2.75MB+Kreon ttf 遗留删除，单文件 40.72→39.11MB
+- 【act-name 书法体保留】.act-name(幕开场"第一幕"大字)的 Ma Shan Zheng 链保留——系自创演出非资源还原范畴
+- 【test_batch28 双版本 13+13】A 资产(woff2 可达/魔法头 wOF2/旧宋体 404 或 @font-face 清零/@font-face 注入[next 派生族名 zhMonoFont|standalone NotoSansMonoCJKsc]) B 等宽数学铁证(iiii=MMMM ASCII 全等宽 ±1.5px + 永永=2×MM 半宽比 2:1——区分 mono 与 serif 的强断言) C computed 样式(body/标题/按钮 mono 链+全站无 SourceHanSerif/STSong/SimSun 残留) D 战斗内(@font-face loaded error=0+卡面文字 mono 继承) E 截图存档；woff2 base64 前缀 d09GMk(OTF/CFF 载体)≠d09GMg(TTF 载体)——两种 sfnt 版本均合法，断言用 d09GM[kg]
+- 【全套回归】batch28 13+13 / regression 16 / regression5 412 / bugcheck 29+29 / batch20 12+12 / batch21 34+42 / batch22 22+20 / batch23 37+37 / batch25 16+16 / batch27 13+13 / mptest 24 / fulltest 全流程 gameover——全绿
+- 【VLM 验收】双版本 6/6 全符合：黑体无衬线/卡面清晰无溢出/顶栏数字统一/等宽对齐/标题协调/无破图重叠
+- 【版本】v1.11 谱系延续；提交 f9b8d93 推送成功
+
+Stage Summary:
+- 全站文字从"从未生效的思源宋链(实际系统 sans)"修正为原版 ZHS 真实观感：NotoSansMonoCJKsc 黑体等宽(含拉丁/数字半宽 2:1)，资源原版化最后一块拼图落地
+- 方法论入库：①FontHelper 字体选择以 initializeFonts 的 fontFile 赋值为唯一权威，常量声明≠使用(死常量陷阱) ②next/font 变量作用域：variable 挂 body 时依赖它的自定义属性必须定义在 body 或其后代，:root 会 guaranteed-invalid ③字体子集覆盖校验以原字体 cmap 为基准而非扫描集(原字体没有的字形走系统 fallback 是预期) ④woff2 base64 头 d09GMk/d09GMg 区分 OTF/TTF 载体 ⑤沙箱回滚 reset --hard 后必查 untracked 旧资产残留(会污染构建产物)
+- 后续候选（承 Task 25 队列）：检视屏大图(SingleCardViewPopup)/商店宝箱 UI 素材原版化/房间切换渐变过渡(第十四批研究收获未落地项)
+
+---
+Task ID: 30
+Agent: main
+Task: 第二十九批（合并线）：原版药水体系完整化——新药水数据+瓶型图层+3色权威修正；并完成本地/远程分叉对齐
+
+Work Log:
+- 批次编号说明：前几会话上下文丢失期间，第21-28批实际已推送到远程GitHub（本地worklog无记录）；本会话在旧基线（第20批）上重做了药水批（与远程第21批主题撞车），经 git 取证（merge-base=第19批7a7c238，远程线 b9e2ca6=药水分层合成）后按第二十六批先例"远端为唯一权威"处理：git rebase --onto origin/main dc2a86d 重放本会话提交，跳过与远程3620fe1重复的本地第二十批，二进制/工件取theirs、药水单图保持远程删除（图层架构）
+- 本批独有增量（远程第21批没有的部分）：钢铁精华/蛇油两种药水游戏数据(potions.ts+usePotion)——镀金护甲新状态(endPlayerTurn回合结束转化格挡+damagePlayer受击掉层wasHPLost语义)与蛇油costRoll费用随机化(战斗抽牌堆为deck浅拷贝天然隔离；cardCost支持costRoll)
+- 新瓶型图层：anvil(4张glass/liquid/hybrid/outline，PotionSize.ANVIL无spots同moon/spiky惯例)+snecko(5张含spots) 从反编译仓库复制安装；POTION_LAYERS补essenceOfSteel(anvil+#008080 TEAL)/sneckoOil(snecko+#7FFF00 GREEN_TEXT+#EFC851 GOLD)
+- 3色权威修正(以本会话拉取的libGDX 1.9.5 Color.java为准)：strength液#4d4d4d→#3f3f3f(DARK_GRAY)、fear hybrid#ff1400→#ff341c(SCARLET)、blood/ghost hybrid#b3b3b3→#bfbfbf(LIGHT_GRAY)
+- powers.atlas提取platedarmor状态图标(顶部原点+offset平铺，128/armor校准可见像素差0.00，alpha_composite透明区RGB归零)；standalone经make_assets缩至72px(与metallicize同规格)
+- 测试适配：远程test_batch21断言更新(A8形状集11→13种、C14期望#bfbfbf)；batch18 B6字体URL适配第28批体系(SourceHanSerifSC-Bold已删→NotoSansMonoCJKsc-Regular，28批漏跑batch18的遗留)
+- 测试时序经验沉淀：HUD读players[0].potions镜像(直接setState须双写)；RewardScreen需run.combat非null；敌执行def.moves[nextMoveIdx]原版招式而非显示intent(固定intent只改UI)；endTurn全链可在<100ms完成(同步段内读block，勿sleep后读)；standalone img为data URL断言须按ASSETS值全等比对
+- test_batch29双版本13+13全绿；全套回归：batch21(远程版)34+42/regression16/412/fulltest全流程/batch18 41+45/bugcheck29+29/mptest23/batch12 29/13 25/14 19/batch15 31/batch16 30+31/batch20 12+12——全绿(batch18首轮37/4为时序偶发重跑过)
+- VLM双版本商店场景验收：铁砧/蛇形/小圆瓶三形状各异、青绿液#008080、蛇油黄绿液+金色层、商店与HUD同款一致、无破图错位
+- 单文件39.13MB(72.8MB磁盘)；脚本产物：install_potion_layers.py/compose_potions.py/extract_platedarmor.py/test_batch29.ts
+
+Stage Summary:
+- 原版药水体系补全为20种(远程18+钢铁精华/蛇油)，全部走图层合成架构；3处颜色按libGDX 1.9.5权威值修正
+- 本地/远程分叉对齐完成：本地线独有提交已重放合并，dc2a86d(重复第二十批)确认弃用；后续批次从第二十九批续编
+- 教训入库：跨会话批次推进必须先 git fetch 比对远程再开工（本会话在旧基线上重做撞车批次的根因）；沙箱回滚类事故以"远端为唯一权威"
+
+---
+Task ID: 31
+Agent: main
+Task: 会话恢复（摘要滞后校准）+ 第三十批：检视屏 PC 原版化（SingleCardViewPopup 复刻，两版本）
+
+Work Log:
+- 【会话恢复】交接摘要停留在"第二十五批"，worklog/git 考古实际已至第二十九批(5a31acf 本地=远程同步)；沙箱重启后 .next 生产构建全丢（dev server 顶替 :3000）→ npm run build + start_prod.sh 恢复；冒烟 regression16 + batch20 12+12 全绿。判定经验再次验证：摘要滞后时以 worklog+git 为准
+- 【原版考证·SingleCardViewPopup.java 全链路】布局：大卡=1024x1024 逻辑画布 1:1×scale 绘制（renderHelper orig 还原），卡身 bg ~597x838@offset(212,92)、frame 524x363@offset(251,449)、banner 648x153@offset(191,741)、orb 143x140（164 独立画布）、portrait=1024Portraits 目录（名字历史遗留，实际 500x380）@中心(W/2, H/2+136s)；字号 SCP_cardTitleFont_small 46/SCP_cardDescFont 48/panelNameFont 34/SCP_cardEnergyFont 76（我们舞台1600x900=原版1920×5/6）；色值 CARD_TYPE_COLOR=#595959(0.35灰)/BLUE_TEXT_COLOR=#87ceeb/GOLD_COLOR=#efc851（Java Color(int) RRGGBBAA 逆波兰序换算，GOLD 与第二十三批结论互证）；交互：点击卡外/Esc 关闭、POPUP_ARROW 256@W/2±400s（hover 白50%加色混合）、CHECKBOX+TICK"看升级版"@(W/2,70s)（allowUpgradePreview=非诅咒非状态；hover 蓝/平时金）、翻页保留 isViewingUpgrade（openPrev/Next tmp 传递）、open 默认 isViewingUpgrade=false、背景黑 0→0.9 pow2In 0.25s、renderTips 关键词面板@(W/2+340s,420s)
+- 【素材提取 extract_scv_assets.py】cardui.atlas 1024/* region 烘焙回 1024 全画布 webp（33张：bg 16+frame 9+banner 3+orb 5×164画布）→ inset:0 同盒渲染与 CardView 512 画布架构同构；1024Portraits 225 张→scvart/{我们卡id}.webp q80（scv_coverage.ts 生成映射：209 张 nameEn→snake_case 直配 + 16 张特殊名映射：thunder_clap/drop_kick/crippling_poison(我方误名 Crippling Cloud)/sweeping_beam/hyper_beam/multicast/consecrate(供奉)/crush_joints + status/{5张} curse/{3张} 无 type 子目录）；popupArrow/checkbox/tick 3 张；共 4.11MB。烘焙验证：bbox 对照 atlas 元数据（bg 非透明 46.9%≈597×838/1024² 47.8%）
+- 【Next 版】Overlays_inspect.tsx 新组件：ScvCard（1024 画布盒 + data-scv 测试钩子）+ InspectView 重写（旧手机版 NInspectCardScreen 风格整体替换）；布局换算：原版屏幕坐标→画布百分比（卡名@top14.6%中心17%=banner带、插画窗 20.7-79.3%/17.3-61.8%、类型行@52.2%中心53.9%=插画窗底缘与手牌卡 55.5% 互证、描述底端锚定@79.3%、字号=画布宽×原版字号/1024）；升级预览对齐原版语义：ticked 默认 false + shown=upgraded+1（推翻旧实现"默认=已升级/降级显示"）；关键词 tips：SCV_KEYWORDS(消耗/虚无/固有/保留) + STATUS_INFO 中文名匹配 desc 动态提取；globals.css 旧 sts-inspect-* 全套替换为 scv-*（pow2In≈cubic-bezier(0.42,0,1,1)）
+- 【standalone 版】ui.ts：scvCardHtml/inspectLayerHtml 重写（scvAllowUpgrade/scvTips 同构）、inspectOpen 重置 ticked、doInspectStep 保留 ticked（原版 tmp 传递）、doInspectClose 瞬关（原版无退场动画）；style.css 同步；make_assets.py 加 scv/scvart PASSTHROUGH 桶（989 文件 31.70MB）；单文件 39.13→44.62MB(+5.5MB)
+- 【重大既有 bug 修复·standalone 检视屏从未工作】sts-panel/inspect-root 的 inline onclick="event.stopPropagation()" 阻断事件冒泡到 document 的 data-act 委托 → 点击牌堆网格卡/检视箭头在单文件版从来打不开（历史批次从未自动化覆盖 standalone 检视交互，真实鼠标点击同样中招）；修复：移除两处 inline 拦截，委托 handler 内实现忽略语义（closest data-act 命中 .overlay 根且点击在 .sts-panel/.inspect-root 内 → 不触发 closePile）。定位链：console 无 handler 日志 → document 探针收不到 panel 内点击 → 对比 closePile 疑云（overlay 根 data-act 与按钮同名）→ 事件流实锤
+- 【test_batch30 双版本 34+34】A 素材(36+225 抽验/webp RIFF 或 data URI 头) B 结构(853 画布/图层齐全/文案) C 布局字号(46/48/34/76×5/6 精确断言/卡名 CREAM/类型 #595959/行距比 1.07) D 升级预览(默认非绿/勾选后名字+数值+tick) E 翻页(端点箭头隐藏/保留勾选/bash 10 绿/诅咒卡无按钮无宝珠/诅咒底板) F 关闭(背板点击/Esc)。测试技术：offsetWidth 替代 getBoundingClientRect(舞台 scale 陷阱 第二十五批再验证)、computed lineHeight 是 px 须换算比值、着色 span 须 span[style*=color]（首个 span 是无色文本段）、背板点击用 el.click() 派发（agent-browser click 中心点被大卡判遮挡）、SRC 宏占位符须 replaceAll
+- 【全套回归】batch30 34+34 / regression 16 / regression5 412 / bugcheck 29+29 / batch20 12+12 / batch21 34+42 / batch22 22+20 / batch23 37+37 / batch25 16+16 / batch27 13+13 / batch28 13+13 / batch29 13+13 / mptest 22 / fulltest 全流程 gameover——全绿
+- 【VLM 验收】双版本四场景(base/upgrade/curse/tips) 8/8 全符合：图层无错位/字号清晰/类型+描述不重叠/升级绿名绿数值/tick/诅咒无按钮无宝珠/tips 面板不重叠/箭头+黑背景
+
+Stage Summary:
+- 检视屏从手机版风格(NInspectCardScreen 小卡放大+SVG金箭头)升级为 PC 原版 SingleCardViewPopup 精确复刻：1024 画布大卡框架素材 + 1024Portraits 225 张高清插画 + 原版字号/色值/交互语义，双版本同步
+- 重大既有 bug 入库：standalone 版 inline stopPropagation 阻断 document data-act 委托（检视屏从未工作，历史无自动化覆盖）；修复模式=委托内忽略语义替代 inline 拦截
+- 方法论入库：atlas region 烘焙回 orig 全画布→inset:0 同盒渲染（与 512 画布架构同构，零 CSS 坐标换算）；1024Portraits 目录名陷阱（实际 500x380）；Java Color(int) 是 RGBA 倒序需逆波兰换算
+- 后续候选（承队列）：商店宝箱 UI 素材原版化 / 房间切换渐变过渡(第十四批研究收获未落地) / 奖励屏与商店卡的右键检视入口（原版 CardRewardScreen/ShopScreen 均可 open(card)）
+
+---
+Task ID: 32
+Agent: main
+Task: 会话恢复（摘要滞后校准）+ 第三十一批：商店/宝箱屏原版化（三档宝箱模型 + 全屏地毯商店 + 对话气泡，两版本）
+
+Work Log:
+- 【会话恢复】交接摘要滞留"第二十五批"，worklog/git 考古实际已至第三十批(0ade12a 本地=远程同步)；本次无沙箱回滚，仅核验：git 0/0、:3000 生产在跑、单文件 44.62MB 完好；冒烟 regression16 + batch20 12+12 全绿后开工
+- 【原版考证·全链路】ShopScreen.java/AbstractChest/SmallChest·MediumChest·LargeChest/ShopSpeechBubble/OnSaleTag/Merchant + characters.json ZHS：rug 全屏(zhs 1920x1136, updateRug lerp 滑入)；价格=UI_GOLD+tipHeaderFont23px，色 WHITE/#FA8072 SALMON/#87CEEB SKY；特卖标签 128px+加色混合闪烁 (cosDeg(ms/5%360)+1.25)/3∈[0.083,0.75] 周期1.8s；purge/sold_out 512 + 1/4透明黑卡身剪影(offset +18/-14)；商人手 merchantHand 512x1024 hover 跟随 lerp*6/1s 无悬停退场；气泡 speechBubble3 512 单图(facingRight=scaleX(-1))，随机 x(660~1260)s y=H-380s，4s 生命周期 swingIn 弹入 sin(t*4) 浮动，尾段 0.3s 淡出，文案 BUMP_IN 逐词；ZHS 台词（欢迎/买不起[1-6]/成交[7-11]/闲聊16条）；宝箱：入房掷档 act1-3=50/33/17 act4=0/100/0(TheEnding)，Small 75/25/0+金50%25 · Medium 35/50/15+金35%50 · Large 0/75/25+金50%75，CHEST_LOC=(W/2+348s, floorY+192s)→68%/51%，开箱换 openedImg
+- 【素材】extract_shop_chest.py：rug/purge/soldout/hand/saletag/bubble + chests 三档+开箱(+boss 备用)共 14 张 210KB 全 webp；气泡方向考证（alpha 行分布：speechBubble3 尾巴在上右，facingRight 翻转）
+- 【宝箱模型】types.ts chestSize/chestGold 字段；chooseNode treasure 分支入房掷档（入房不播 chestOpen，原版点击开箱才播）；openTreasure 重写：档位掷遗物档+金币立即入账(toast)+CHEST_OPEN 音效；适配说明——本项目遗物库无 rare 档，rare 掷中折叠并入 uncommon（small 75/25 · medium 35/65 · large 0/100，保"大箱必出高阶"原版精神）
+- 【Next 版】ShopScreen 重写：rug 全屏+滑入、卡行/遗物药水行/purge 右侧(73%)、原版价格（金币图标+数字三色）、SaleTag（::after mix-blend-mode:screen 闪烁）、商人手（hover 跟随/1s 退场，位置除回舞台 scale）、SpeechBubbleFx（逐词 BUMP_IN，生命周期 4.4s 与文案长度无关）+ speak 触发链（欢迎[跟踪 run.screen 翻转，原版 open() 每次重置 saidWelcome]/买不起 shopFail/成交 soldCount/闲聊 40-60s）；离开按钮右下角(原版 cancelButton"离开")；TreasureScreen：三档宝箱图@68%/51% + 开箱换图 + 两步语义保留(.sts-chest-relic/glow/拿走)
+- 【standalone 版】ui.ts 商店段整体重写(SHOP_TEXT/建屏/价格/手跟随 setupShopHand 委托/气泡模块 watchShopSpeech+离屏 resetShopSpeech 挂 __shopSeen)、rTreasure 三档图重写；style.css 新增 60 行（rug/手/标签双图法/气泡/宝箱 68%/51%）；make_assets 增 shop/chests PASSTHROUGH 桶；单文件 44.62→44.91MB(+290KB)
+- 【重大修复·Next useRoomFade 竞态】快速连续切换房间时旧 1100ms 定时器把 shown 写回旧目标→画面卡死在旧屏（探针复现：store 已 treasure 而DOM停在 map 12s+）；修复：T1 回调读 targetRef.current（任何时刻触发的定时器都收敛到最新目标）。根因复现方法论：探针先验证"正常流可用"再注入重载复现
+- 【测试适配】batch16 双版本价格断言更新（#FF5555/#7FFF00→#FA8072 SALMON/#87CEEB SKY 原版色）；batch12_standalone 回能断言适配 VFX 语义（batch23 改实现时漏适配，历史遗留 dataset.burst 从未设置——对齐 next 版 .sts-energy-vfx 双图断言）
+- 【测试技术沉淀】lsof 在本环境对改名进程(next-server)失效——端口查杀必须用 ss -tlnp 提取 pid；start_prod.sh 的 pkill 模式 "[s]tandalone/server.js" 会连杀 :3100 测试服务，双端口启动顺序必须 start_prod(:3000) 先、:3100 后；agent-browser eval 内嵌 TS as 语法不可用（浏览器端 SyntaxError）；选择器 #shop-cards>div 会命中外层包裹 div（多包一层破坏既有断言）；老测试(argv[2]=URL)与新测试(argv[2]=mode)参数风格不可混用；Next 房间过渡期间组件不重挂载——跨屏重置语义须跟踪 store 的 run.screen 而非组件挂载
+- 【test_batch31 双版本 32+32】A 素材(shop6+chests8 HTTP/ASSETS+RIFF/data URI 前缀) B 宝箱模型(掷档统计 240 次 50/33/17±13、act4 恒中、金币概率+均值 0.9-1.1 倍、__STS_RELICS 新调试钩子直读档位无 DOM 滞后、开箱 toast+确认回图) C 宝箱屏(三档图 data-chest、rect 比率位置 68%/51%（offsetLeft 不含 translate 陷阱）、开箱换图两步语义) D 商店(rug 全屏、三色+金币图标、特卖标签仅挂折扣卡+闪烁、purge+剪影灰度、手 idle/hover 跟随/1s 退场、离开右下角、售罄换图) E 气泡(欢迎 1.5s/买不起/成交/4.2s 生命周期)
+- 【全套回归】batch31 32+32 / regression 16 / regression5 412 / bugcheck 29+29 / batch10 19+13 / batch12 29+19(std 适配) / batch13 25+25 / batch14 19+18 / batch15 31+28 / batch16 30+31(新色断言) / batch18 41+45 / batch20 12+12 / batch21 34+42 / batch22 22+20 / batch23 37+37 / batch25 16+16 / batch27 13+13 / batch28 13+13 / batch29 13+13 / batch30 34+34 / mptest 22(首轮 1 失败重跑过=历史时序波动) / fulltest 双版本全流程 gameover(含 F8 treasure)——全绿
+- 【VLM 验收】6/6 全符合：全屏波斯地毯/价格三色+金币图标/特卖标签/剪刀移除服务+商人手/带尾巴气泡"欢迎"(位置自然)/宝箱关开两态+遗物光晕/HUD 常驻无破图
+
+Stage Summary:
+- 商店从自创纵向布局升级为原版摊位：全屏地毯+原版价格体系(金币图标+三色)+特卖标签闪烁+移除服务图+售罄图+商人手 hover 跟随+ZHS 台词对话气泡；宝箱从 mapicons 复用图升级为三档宝箱模型(入房掷档/开箱掷遗物档+金币/开箱换图)
+- 重大既有 bug 入库：Next useRoomFade 旧定时器回写 shown 竞态（画面卡死在旧屏）；修复=targetRef 收敛
+- 方法论入库：①端口查杀用 ss 不用 lsof（改名进程逃逸）②双端口启动顺序（start_prod 的 pkill 连杀）③跨屏重置语义挂 store 的 run.screen（房间过渡不重挂载）④选择器勿多包一层 div ⑤新老测试参数风格(argv URL vs mode) ⑥VLM 前先"正常流可用+重载注入"两步复现法
+- 后续候选（承队列）：奖励屏与商店卡的右键检视入口（原版 CardRewardScreen/ShopScreen 均可 open(card)）/ 房间切换渐变过渡未落地项已由本批 useRoomFade 加固部分覆盖 / 敌人受击/死亡音效按敌种细分
+---
+Task ID: 33
+Agent: main
+Task: 会话恢复（摘要滞后校准，第五次）+ 第三十二批：奖励屏与商店卡的右键检视入口（原版 CardRewardScreen/ShopScreen open(card)，两版本）
+
+Work Log:
+- 【会话恢复】交接摘要滞留"第25批待启动"，git 考古：本地 dc2a86d(第二十批 amend) 与远端 3620fe1 树一致仅权限位差异，远端已推进至第三十一批 1a579bb（前会话上下文丢失期间推送）→ 按既定经验"远端为唯一权威" reset --hard 对齐；生产环境恢复(.next 全丢→build+start_prod :3000)；冒烟 regression16 + batch20 12+12 全绿。判定经验第五次验证：摘要滞后时以 worklog+git 为准
+- 【原版考证·全链路】CardRewardScreen.cardSelectUpdate:267 / ShopScreen.update:592-594（反编译仓库重新克隆）：hoveredCard 上 justClickedRight → cardPopup.open(hoveredCard)；open(card) 单卡版(153行)无 prev/next 翻页组（箭头端点隐藏）；左键语义独立（选卡/购买）；hoveredCard 不滤 sold——售出卡也可检视；open 时 isPopupOpen=true 屏蔽后续输入
+- 【Next 版】RewardScreen/ShopScreen：useInspectCard 局部态（inspectCard + onCtx preventDefault + 已开忽略）；卡行 wrapper data-inspect + onContextMenu；ShopScene 卡行（ShopSlot 内层 relative div）；InspectView 单卡（cards=[card] index=0 → 箭头自动隐藏）；Overlays_inspect 根 div 加 onContextMenu preventDefault（屏蔽层上默认菜单）
+- 【standalone 版】ui.ts：inspectExtra 外部单卡源（与牌堆源 pileCardsOf 分立）+ inspectCardsAll 统一入口 + inspectOpenCard（open(card) 单卡版语义）；overlayHtml 新独立分支（sig inspx:...，与 pileView 互斥）；奖励屏卡（updateRewardScreen 创建块 data-inspect=cid 常驻）与商店卡（updateShopScreen 创建块 data-inspect=cardId，sold 保留）；document contextmenu 全局委托（closest [data-inspect]→preventDefault→#shop-cards 判 uid shop_i / rw_cid）；键盘导航守卫扩展（inspectUid && (pileView || inspectExtra)——漏改即右键检视下 ←/→/空格失效，自查发现）
+- 【重大bug修复① standalone·本批引入路径】overlayHtml 空态 return {html:'',sig:''} 与 inspectRerender 强置 __sig='' 相等 → ''!=='' 为假 → renderOverlays 跳过更新 → 外部单卡源关闭（inspectExtra 清空+无 pileView）后 DOM 残留旧检视层；第三十批牌堆检视关闭不中招（pileView 常驻返回非空 sig）。修复：空态 sig='none'（两处）
+- 【重大bug修复② Next·既有bug·VLM 发现】InGameMenu Esc 监听只让行 pileView/select/busy——右键检视打开时（无 pileView）Esc 同时关检视+误开菜单（z-900 盖检视层 z-320）；VLM 图2 验收发现"游戏主菜单弹窗覆盖卡牌之上"，二次 VLM 确认内容（菜单/继续游戏/设置/放弃本局/返回主菜单）。修复：与 page.tsx 同款 stsInspect 让行标记（InGameMenu Esc 分支）
+- 【测试基建】start_test_server.sh：:3100 独立启动器（复刻 start_prod.sh double-fork：setsid+exec+文件重定向），根治两类事故——普通 nohup&disown 被会话收割、start_prod pkill 连杀 :3100（须顺序 start_prod(:3000) 先、start_test_server(:3100) 后）；npm run build 重建 .next 后 :3000 陈旧进程白屏（curl 200 但 __sts undefined）——构建后必须重启
+- 【test_batch32 双版本 16+16】A 锚点（3 卡 data-inspect）B 奖励屏右键（开+preventDefault/卡名描述/无箭头/不触发选卡/升级绿+6→9/已开不切换/Esc 关/关后重开）C 商店右键（特卖卡/层上右键屏蔽/售出卡可检视/关后左键购买正常）D 截图+复验。测试技术：dispatchEvent 返回 false=被 preventDefault；contextmenu 派发 MouseEvent button:2；测试 patch 须同步顶层 r.gold 与 players[0].gold（buyCard 用顶层）；RewardScreen 守卫要求 run.combat 非 null（mutate 回奖励屏勿漏）
+- 【全套回归全绿】batch32 16+16 / regression 16 / regression5 412 / bugcheck 29+29 / batch12 29+19 / batch13 25+25 / batch14 19+18 / batch15 31+28 / batch16 30+31 / batch18 41+45 / batch20 12+12 / batch21 34+42 / batch22 22+20 / batch23 37+37 / batch25 16+16 / batch27 13+13 / batch28 13+13 / batch29 13+13 / batch30 34+34 / batch31 32+32 / mptest 23 / fulltest 全流程 gameover
+- 【VLM 验收】首轮 4 图发现图2 主菜单弹窗（→InGameMenu Esc 修复）；修复后复验 4/4：五层结构无错位/文字清晰不重叠/单卡无箭头/背板半透明原界面隐约可见/画面纯净无弹窗——全部符合原版 SingleCardViewPopup 观感
+- 【版本】单文件 44.91MB；生产 :3000 已部署（含 InGameMenu 修复构建）
+
+Stage Summary:
+- 检视能力补齐至奖励屏与商店（原版 CardRewardScreen/ShopScreen 右键 open(card) 单卡版精确复刻），第三十批检视屏与第三十一批商店屏在此收口衔接
+- 两大既有/新引入 bug 入库：①sig 空态与强置空相等的 DOM 残留（"强制更新"技巧的隐藏反例——强置值必须与可能的空态值不等）②Esc 多监听者竞态（新增遮罩层时须排查全部既有 Esc 监听的让行条件，page.tsx/InGameMenu 两处让行标记不同源是隐患温床）
+- 测试基建入库：:3100 double-fork 独立启动器；npm run build 后必须重启 :3000；老式(argv[2]=URL)与新式(argv[2]=mode)测试参数地图（batch12-16/fulltest 老式、batch18+ 新式）
+- 后续候选（承队列）：敌人受击/死亡音效按敌种细分 / 房间切换渐变过渡剩余项 / 牌堆弹窗检视的双版本行为统一审计
