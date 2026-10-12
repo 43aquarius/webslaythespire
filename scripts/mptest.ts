@@ -139,13 +139,15 @@ async function main() {
     const r = g.getState().run
     check('奖励界面', r.screen === 'reward' && !!r.reward)
     check('双份卡牌奖励', r.reward.mpCards?.length === 2 && r.reward.mpCards[0].length >= 2)
+    // 注意：双方金币基数可能不同（涅奥祝福随机，如房主+100金币），须各用各的基数
     const gold0 = r.players[0].gold
+    const guestGold0 = r.players[1].gold
     g.getState().takeGold()          // 房主领金币
     const r1 = g.getState().run
     check('房主金币入账', r1.players[0].gold === gold0 + (r1.reward?.gold || 0), `${gold0} -> ${r1.players[0].gold}`)
     guestAct('takeGold')             // 客机也领金币
     const r2 = g.getState().run
-    check('客机金币独立入账', r2.players[1].gold === gold0 + (r2.reward?.gold || 0), `${r2.players[1].gold}`)
+    check('客机金币独立入账', r2.players[1].gold === guestGold0 + (r2.reward?.gold || 0), `${r2.players[1].gold} (客机基数${guestGold0})`)
     // 各自选卡（拿卡即确认）
     const card0 = r2.reward.mpCards[0][0]
     const card1 = r2.reward.mpCards[1][0]
@@ -245,7 +247,9 @@ async function main() {
       if (c.activeIdx === 1) c.activeIdx = 0
     }
     check('单人死亡不判负', !g.getState().run.gameOverInfo)
-    // 打完一场战斗验证复活
+    // 打完一场战斗验证复活（仅当本段确实从战斗态打出奖励屏才检查——
+    // 压力循环可能停在 reward/shop 等屏，此时人为设置的死亡没有经历战斗，本就不应复活）
+    const enteredCombat = g.getState().run.screen === 'combat'
     let guard = 0
     while (g.getState().run.screen === 'combat' && guard < 30) {
       guard++
@@ -253,13 +257,13 @@ async function main() {
       await sleep(300)
       if (g.getState().run.screen === 'reward') break
     }
-    if (g.getState().run.screen === 'reward') {
+    if (enteredCombat && g.getState().run.screen === 'reward') {
       g.getState().proceedFromReward()
       guestAct('proceedFromReward')
       const r2 = g.getState().run
       check('阵亡队友战后复活', r2.players[1].hp > 0 && !r2.players[1].dead, `hp ${r2.players[1].hp}`)
     } else {
-      check('阵亡队友战后复活(跳过-非战斗态)', true)
+      check('阵亡队友战后复活(跳过-未经历战斗)', true)
     }
   }
 

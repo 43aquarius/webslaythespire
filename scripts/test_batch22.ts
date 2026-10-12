@@ -69,6 +69,19 @@ async function main() {
   await sleep(3500)
   for (let i = 0; i < 12; i++) { if (ev(`typeof window.__sts === 'function'`) === true) break; await sleep(800) }
 
+  // ---------- A0. CSS新鲜度哨兵（曾因dev server陈旧CSS缺失endturn/scv规则，整套UI断言误报为lab()继承色/bg=none） ----------
+  if (MODE === 'next') {
+    const g = evJson(`(async () => {
+      const html = await (await fetch('/')).text()
+      const m = html.match(/\\/_next\\/static\\/[^"']+\\.css/)
+      if (!m) return { ok: false, why: 'no-css-chunk' }
+      const css = await (await fetch(m[0])).text()
+      const ok = /\\.sts-endturn/.test(css) && /endturn\\/button\\.png/.test(css) && /scv/.test(css)
+      return { ok, why: ok ? '' : 'served-css-stale(缺endturn/scv规则→须重启dev server并清.next)', bytes: css.length }
+    })()`)
+    check('A0 CSS新鲜度(含endturn/scv规则)', g.ok === true, JSON.stringify(g))
+  }
+
   // ---------- A. 资源可达 ----------
   console.log('-- A. 三态素材 --')
   if (MODE === 'next') {

@@ -784,3 +784,26 @@ Stage Summary:
 - 主页贴图错误已彻底修复：远端权威实现+本会话增量(原版高清Logo/角色选择屏TitleBackground常驻/遗留素材清理/batch15断言修正)
 - 重大流程结论入库：多会话并行时必须先fetch取证再动手——本会话因本地沙箱落后13批,整套修复被独立重做一遍(幸而同根因同方案,合并取远端即可)；后续会话开工前应先比对origin/main与本地HEAD
 - 遗留待办：batch22/23套件在本沙箱的计算样式序列化/时序适配(下一测试适配批)
+
+---
+Task ID: 36
+Agent: main
+Task: 第三十五批：batch22/23 测试套件适配批（遗留待办）——根因实为 dev server 陈旧 CSS，顺带根治 mptest 偶发竞态
+
+Work Log:
+- 承接：Task 35 遗留"batch22(9败)/batch23(3败)套件在本沙箱漂移，留待专门测试适配批"
+- 【复现取证】batch22 稳定 9 败，症状高度一致：.et-text 色恒为 lab(2.75381 0 0)（≈rgb(14,14,14) 继承深灰）、.et-plate bg=none、.et-hover opacity恒1、敌方灰度 filter=none——所有状态下数值恒定不变 → 排除动画时序，判定为整段 .sts-endturn CSS 规则未被应用
+- 【根因确认】源 globals.css 含 sts-endturn×16/scv×18 规则，但 :3000 dev server 下发的 CSS chunk（162874B）中为 0；而 sts-glow(4/5)/intent-burst(4/4) 存在——陈旧编译产物定格于昨日合并冲突处理的某中间状态（Task 34 排障①已记录同类 HMR 缓存固化问题）。结论：非测试漂移、非代码 bug，是基建陈旧；且用户经 3000 端口实际看到的游戏 UI 同样是坏的
+- 【修复】杀 dev server → rm -rf .next → 重启（start_dev.sh 固化为脚本：setsid+disown 双保险脱离进程组，解决工具会话退出连带杀进程问题；旧 server 挂 pts/1 幸存故此前未暴露）；下发 CSS 恢复 169136B 含全部规则
+- 【3100 附属恢复】rm -rf .next 连带清掉了 3100 生产测试服务器的构建产物（batch31/32/15/16 套件指向 3100）→ npm run build + start_test_server.sh 重建，双端口 CSS 新鲜度均验证（3100 双 chunk 134KB 压缩版规则齐全）
+- 【防回归资产】test_batch22 新增 A0 CSS 新鲜度哨兵：抓取下发 CSS 断言含 .sts-endturn/endturn/button.png/scv 规则，陈旧时给出明确诊断（重启dev+清.next）而非费解的 lab() 色值误报
+- 【mptest 偶发根治】(probe_mp_flake.ts 插桩捕获) ①"客机金币独立入账"败因=断言假设双方金币基数相同，但涅奥祝福随机（房主摇中+100金 → 基数199 vs 99），游戏逻辑本身正确（客机 99+10=109 ✓）→ 断言改用客机自身基数 ②"阵亡队友战后复活"败因=压力循环停在 reward 屏时，人为设置死亡后未经历战斗就检查复活 → enteredCombat 门控修正
+- 【全套回归·修复后环境权威复验】batch22 23(含哨兵) / batch23 37 / batch18 43 / batch34 13+12 / bugcheck 29+29 / batch31 32 / batch32 16 / batch15 31+28 / batch16 双模式 / batch12 29+19 / batch13 25+25 / batch14 19+18 / batch20 12 / batch21 34 / batch25 16+16 / regression 16 / regression5 412 / fulltest 16层gameover / mptest 19连绿（22-24 项分支相关）——全绿
+- 【VLM终验】战斗屏结束回合按钮：常态羊皮纸底板+奶白文字、能量耗尽金色发光版、无裁切无重叠、全界面无样式缺失——五项全部符合；计算样式取证 glow 态 bg=glow.png color=rgb(239,200,81)
+
+Stage Summary:
+- batch22/23 失败根治：根因是 dev server 陈旧 CSS（合并冲突中间态被 HMR 缓存固化），重启+清缓存即愈，零游戏代码改动；A0 哨兵防再次静默发生
+- mptest 两处断言缺陷修正（金币基数假设/复活无战斗门控），19 连绿
+- 环境恢复并加固：start_dev.sh（setsid 存活）/sweep.sh（回归扫描器）/3100 重建
+- 重大教训入库：dev server 下发 CSS 必须与源码比对（curl chunk + grep），DOM 正确≠CSS 正确；Task 35 的"测试漂移"结论实为基建陈旧——多轮"绿"回归也可能是在坏环境下的空洞通过，换环境后应复扫
+- 后续候选（承队列）：敌人受击/死亡音效细分 / 房间渐变剩余项 / 牌堆检视统一审计 / mg3Bot 4:3 适配（超宽屏裁切）
