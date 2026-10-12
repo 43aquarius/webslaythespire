@@ -263,7 +263,7 @@ img { -webkit-user-drag: none; }
 .map-scroll { width: 100%; height: 100%; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #6b4a2e rgba(0,0,0,.3); }
 .map-scroll::-webkit-scrollbar { width: 8px; }
 .map-scroll::-webkit-scrollbar-thumb { background: #6b4a2e; border-radius: 4px; }
-.map-canvas { position: relative; width: 100%; max-width: 940px; height: 1450px; margin: 0 auto; background-size: 100% 100%; filter: brightness(.85); }
+.map-canvas { position: relative; width: 100%; max-width: 940px; height: 1450px; margin: 0 auto; background-size: 100% 100%; }
 .map-canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 5; }
 .node { position: absolute; z-index: 10; }
 .node img { width: 100%; height: 100%; object-fit: contain; }

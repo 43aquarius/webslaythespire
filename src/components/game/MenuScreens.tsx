@@ -280,7 +280,7 @@ export function SettingsScreen() {
 
   return (
     <div className="w-full h-full relative flex items-center justify-center sts-screen-fade"
-      style={{ backgroundImage: `url(${A}/bg/combat.jpg)`, backgroundSize: 'cover', backgroundPosition: 'center 20%' }}>
+      style={{ backgroundImage: `url(${A}/bg/menubg.jpg)`, backgroundSize: 'cover', backgroundPosition: 'center 20%' }}>
       <div className="absolute inset-0" style={{ background: 'rgba(6,3,2,0.66)' }} />
       <div className="relative sts-panel flex flex-col items-center gap-5" style={{ padding: '36px 56px', maxWidth: 560 }}>
         <div className="sts-title" style={{ fontSize: 32, color: '#ffd980', letterSpacing: 6 }}>设 置</div>
@@ -357,7 +357,7 @@ export function StatsScreen() {
 
   return (
     <div className="w-full h-full relative flex items-center justify-center sts-screen-fade"
-      style={{ backgroundImage: `url(${A}/bg/combat.jpg)`, backgroundSize: 'cover', backgroundPosition: 'center 20%' }}>
+      style={{ backgroundImage: `url(${A}/bg/menubg.jpg)`, backgroundSize: 'cover', backgroundPosition: 'center 20%' }}>
       <div className="absolute inset-0" style={{ background: 'rgba(6,3,2,0.66)' }} />
       <div className="relative sts-panel flex flex-col items-center gap-4" style={{ padding: '32px 60px', minWidth: 520 }}>
         <div className="sts-title" style={{ fontSize: 32, color: '#ffd980', letterSpacing: 6 }}>统 计</div>
@@ -399,7 +399,7 @@ export function CreditsScreen() {
   const gotoMenuScreen = useGame(s => s.gotoMenuScreen)
   return (
     <div className="w-full h-full relative flex items-center justify-center sts-screen-fade overflow-hidden"
-      style={{ backgroundImage: `url(${A}/bg/combat.jpg)`, backgroundSize: 'cover', backgroundPosition: 'center 20%' }}>
+      style={{ backgroundImage: `url(${A}/bg/menubg.jpg)`, backgroundSize: 'cover', backgroundPosition: 'center 20%' }}>
       <div className="absolute inset-0" style={{ background: 'rgba(6,3,2,0.7)' }} />
       <div className="relative sts-panel flex flex-col items-center gap-4 sts-body" style={{ padding: '34px 64px', maxWidth: 640, color: '#c8b090', fontSize: 15, lineHeight: 2.1, textAlign: 'center' }}>
         <div className="sts-title" style={{ fontSize: 32, color: '#ffd980', letterSpacing: 6 }}>制 作 名 单</div>

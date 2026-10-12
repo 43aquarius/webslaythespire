@@ -43,8 +43,8 @@ export function NeowScreen() {
       className="w-full h-full relative flex flex-col items-center justify-center select-none overflow-hidden sts-screen-fade"
       style={{
         backgroundImage: `url(${A}/bg/map.jpg)`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center 30%',
+        backgroundSize: 'auto 100%',
+        backgroundPosition: 'center',
       }}
     >
       <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(4,4,10,0.82) 0%, rgba(8,6,14,0.62) 45%, rgba(4,4,10,0.86) 100%)' }} />

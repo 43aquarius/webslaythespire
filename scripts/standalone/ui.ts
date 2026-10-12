@@ -789,7 +789,7 @@ function rCharSelect(): string {
 // ---- 设置 ----
 function rSettings(): string {
   const s = loadSettings()
-  return `<div class="screen bg-cover" style="background-image:url('${A('bg/combat.jpg')}')">
+  return `<div class="screen bg-cover" style="background-image:url('${A('bg/menubg.jpg')}')">
   <div class="shade" style="background:rgba(6,3,2,.66)"></div>
   <div class="center-col" style="padding-top:0;gap:18px">
     <div class="sts-title" style="font-size:32px;color:#ffd980;letter-spacing:6px">设 置</div>
@@ -819,7 +819,7 @@ function rStats(): string {
     const e = s.perChar[c]
     return `<div class="srow"><span>${CHARACTER_INFO[c].name}</span><b>${e ? `${e.runs} 局 · ${e.wins} 胜 · 最高 ${e.bestFloor} 层` : '未使用'}</b></div>`
   }
-  return `<div class="screen bg-cover" style="background-image:url('${A('bg/combat.jpg')}')">
+  return `<div class="screen bg-cover" style="background-image:url('${A('bg/menubg.jpg')}')">
   <div class="shade" style="background:rgba(6,3,2,.66)"></div>
   <div class="center-col" style="padding-top:0;gap:14px">
     <div class="sts-title" style="font-size:32px;color:#ffd980;letter-spacing:6px">统 计</div>
@@ -841,7 +841,7 @@ function rStats(): string {
 
 // ---- 制作名单 ----
 function rCredits(): string {
-  return `<div class="screen bg-cover" style="background-image:url('${A('bg/combat.jpg')}')">
+  return `<div class="screen bg-cover" style="background-image:url('${A('bg/menubg.jpg')}')">
   <div class="shade" style="background:rgba(6,3,2,.7)"></div>
   <div class="center-col" style="padding-top:0;gap:12px">
     <div class="sts-title" style="font-size:32px;color:#ffd980;letter-spacing:6px">制 作 名 单</div>
@@ -892,7 +892,7 @@ function rMpLobby(): string {
         border:1.5px solid ${mode === m ? '#ffd980' : '#6b4a2e'};
         background:${mode === m ? 'rgba(80,56,20,.55)' : 'rgba(0,0,0,.4)'};
         color:${mode === m ? '#ffd980' : '#a89070'}">${title} <span style="font-size:11px;opacity:.75">${desc}</span></button>`
-    return `<div class="screen bg-cover" style="background-image:url('${A('bg/combat.jpg')}')">
+    return `<div class="screen bg-cover" style="background-image:url('${A('bg/menubg.jpg')}')">
     <div class="shade" style="background:rgba(6,3,2,.64)"></div>
     <div class="center-col" style="padding-top:0;gap:14px">
       <div class="sts-title" style="font-size:34px;color:#ffd980;letter-spacing:8px">联 机 合 作</div>
@@ -960,7 +960,7 @@ function rMpLobby(): string {
       ${pickable ? `<div class="row" style="gap:5px">${CHARACTERS.map(c => `<button data-act="lobbyPick" data-char="${c}" data-tip="${CHARACTER_INFO[c].name}" style="width:25px;height:25px;border-radius:50%;border:2px solid ${char === c ? '#ffd980' : CHAR_COLOR[c]};background:radial-gradient(circle at 40% 35%,${CHAR_COLOR[c]},rgba(10,8,6,.95));cursor:pointer;padding:0"></button>`).join('')}</div>` : ''}
       <div class="sts-title" style="font-size:16px;color:${char ? '#ffd980' : '#8a7458'};letter-spacing:2px">${char ? CHARACTER_INFO[char].name : '？？？'}</div>
     </div>`
-  return `<div class="screen bg-cover" style="background-image:url('${A('bg/combat.jpg')}')">
+  return `<div class="screen bg-cover" style="background-image:url('${A('bg/menubg.jpg')}')">
   <div class="shade" style="background:rgba(6,3,2,.64)"></div>
   <div class="center-col" style="padding-top:0;gap:16px">
     <div class="sts-title" style="font-size:30px;color:#ffd980;letter-spacing:6px">合 作 房 间</div>
@@ -1067,7 +1067,7 @@ function rNeow(run: RunState): string {
       <div class="sts-body" style="font-size:13px;color:#c8b898;line-height:1.6">${esc(opt.desc)}</div>
     </button>`
   }).join('')
-  return `<div class="screen bg-cover" style="background-image:url('${A('bg/map.jpg')}')">
+  return `<div class="screen" style="background-image:url('${A('bg/map.jpg')}');background-size:auto 100%;background-position:center">
   <div class="shade" style="background:linear-gradient(180deg,rgba(4,4,10,.85),rgba(8,6,14,.6),rgba(4,4,10,.88))"></div>
   <div class="center-col" style="padding-top:8px">
   <div style="position:relative;display:inline-block">
@@ -3570,7 +3570,7 @@ net.onRooms(list => {
 })
 useGame.subscribe(render)
 render()
-console.log('[STS standalone] 游戏就绪 v1.14（单人 + 联机合作 · 服务器中转/P2P双通道 + 房间大厅）')
+console.log('[STS standalone] 游戏就绪 v1.15（单人 + 联机合作 · 服务器中转/P2P双通道 + 房间大厅）')
 
 
 

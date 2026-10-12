@@ -171,7 +171,6 @@ export function MapScreen() {
             style={{
               backgroundImage: `url(${A}/bg/map.jpg)`,
               backgroundSize: '100% 100%',
-              filter: 'brightness(0.85)',
             }}
           />
           {/* 路径圆点（原版 map_dot 点状路径，替代旧 SVG 虚线） */}

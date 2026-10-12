@@ -828,3 +828,26 @@ Stage Summary:
 - 一代/二代素材零混淆确认：当前全部资产溯源至反编译一代仓库，238 张早期图搜旧 png 残留（唯一二代混入风险源）已彻底清除
 - 环境全绿认证：:3000/:3100/standalone 三交付物 + 16 套件 ~700+ 项回归全绿
 - 产物：scripts/audit_rollback_residue.py（回滚残留审计工具）/ audit_visual_b36.ts（全屏视觉审计）/ audit_sa_b36.ts / audit_reward_b36.ts / probe_reward*_b36.sh / vlm_reward_b36.ts / vlm_restzoom_b36.ts；截图存档 scripts/study/batch36/
+---
+Task ID: 38
+Agent: main
+Task: 第三十七批：地图背景还原一代原版羊皮纸 + 沙箱回滚对齐重放（用户需求"地图背景和主页背景没有和一代还原，从网络找资源还原"）
+
+Work Log:
+- 【会话恢复·沙箱N次回滚】交接摘要停在"第二十批"，实际本会话开始时本地=dc2a86d(第二十批)——但 fetch 发现远端已至 95eba83(第三十六批)：第21-32批+第33/34批(主页TitleBackground完整还原)+35/36批(预览500根治/纯度审计)均在远端主线。延续"远端为唯一权威"既有先例(第二十六/二十九/三十四批同款流程)
+- 【本会话第一轮(旧基线,已弃)】在 dc2a86d 上独立完成主页+地图背景还原(menubg烘焙合成/18朵云/辉光/charbg立绘/map羊皮纸三段合成/mptest+batch15+batch18测试修复)，全套绿后提交 cfe6f62 —— push 时发现远端分叉
+- 【撞车评估(对照远端worklog 745-784行)】①主页背景: 远端第33/34批已做且方案更优(分离图层 sky+mg3Top+glows+18云 可扩展视差,含charSelect常驻+原版eng logo) → 本会话烘焙合成方案弃用 ②地图背景: 远端 map.jpg 仍为171KB wiki时期老素材(768x1344)从未替换 → 本会话羊皮纸合成为独有增量,保留重放 ③菜单家族背景(combat.jpg→menubg): 远端未做,保留 ④测试修复: mptest金币/batch15墨迹远端已修(跳过), batch18遮罩选择器远端已用store API重写(跳过)
+- 【重放·地图羊皮纸(DungeonMap.renderNormalMap还原)】重新克隆反编译仓库提取 images/ui/map 六张源料; alpha分析+VLM双确认结构: 各段内容列[326,1594]居中约1268px宽(非全屏,外部深色)、mapTop卷边0-15%、mapBot撕裂边85-100%、mapBlend核心30-70%羽化带; 合成 bg/map.jpg 1100x1450: 面板窗裁剪→x0.8675缩放, bot@[513,1450]+top@[0,937]按原版绘制序叠加+blend居中盖接缝937(左下信封胶带为原版装饰非瑕疵,VLM对照原版素材确认)
+- 【重放·配套代码】MapScreen.tsx 移除 brightness(0.85) 压暗滤镜(原版baseMapColor全亮); NeowScreen.tsx cover→auto 100%居中(竖版羊皮纸不裁切,原版涅奥祝福就在地图上); MenuScreens.tsx 3处+standalone ui.ts 5处 combat.jpg→menubg.jpg(设置/统计/制作名单/大厅——原版为菜单背景上叠面板); standalone style.css .map-canvas 去滤镜+Neow按高适配; make_assets 排除6张地图合成源料(不内联)
+- 【测试】test_batch37(双版本12+11项): 合成图+源料HTTP 200/尺寸合理(standalone验证内联+源料排除)/地图羊皮纸就位/无滤镜/铺满/Neow按高适配/菜单家族三屏menubg —— 全绿; 涅奥循环采用远端batch18成熟模式(chooseNeow(1)+resolveSelect)
+- 【全套回归(远端基线16套件)】Next: regression 16/412, mptest 24(首跑1时序偶发重跑过), batch10 19, batch12 29, batch13 25, batch14 19, batch15 31, batch16 30, batch18 43, batch20 12, batch21 34, batch22 23, batch23 37, batch25 16, batch27 13, batch28 13, batch29 13, batch30 34, batch31 32, batch32 16, batch34 13, bugcheck 29 —— 全绿; standalone: batch10-16(13/19/25/18/28/31), batch20-34(12/42/20/37/16/13/13/13/34/32/16/12), bugcheck 29, batch37 11 —— 全绿; fulltest 全流程F0→F10(启发式战败正常); 生产构建通过
+- 【VLM验收】Next地图: 羊皮纸质感✓卷边✓撕裂边✓节点路径清晰✓HUD图例正常✓无破图; standalone地图: 同过(撕裂边缘/点状路径/底纹线稿确认)
+- 【排障记录】①dev server 端口约定: batch15/16/31/32默认3100(测试端口隔离), batch18/bugcheck写死3000——跑错端口表现为 ERR_CONNECTION_REFUSED 批量失败(易误判为产品回归) ②start_dev.sh [port] 可指定端口,但 .next/dev/lock 禁双实例,切换端口须先杀旧实例+删锁 ③agent-browser 浏览器重启后 localhost 偶发解析到 IPv6 ::1 而 dev server 只听 IPv4——用 127.0.0.1 或重开一次即可恢复 ④VLM 对"验收"类 prompt 偶发输出无关 HTML——改为"描述+分点验收"更稳
+- 【版本】v1.14→v1.15(standalone启动日志); 单文件 44.99MB(远端基线素材全量+地图源料排除后)
+
+Stage Summary:
+- 地图背景彻底还原一代原版: DungeonMap 羊皮纸三段式合成(mapTop卷边+mapBot撕裂边+mapBlend接缝), 1100x1450 全亮无滤镜, 双版本同步
+- Neow屏共享羊皮纸(按高适配不裁切); 菜单家族(设置/统计/名单/大厅)统一原版主菜单背景
+- 主页背景经撞车评估采用远端第33/34批权威实现(分离图层方案), 本会话仅保留其未覆盖的独有增量
+- 远端基线16套件+本批 test_batch37 双版本全绿(约750项), VLM双版本地图验收通过
+- 沙箱回滚对齐流程第四次执行(第二十六/二十九/三十四批先例), 远端权威+独有增量重放模式已固化

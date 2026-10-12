@@ -83,6 +83,9 @@ for d, (maxside, fmt, quality) in PLANS.items():
         # 第十八批：已被原版图替换的旧背景不再内联（combat1-4/campfire*/event*/menubg 在用）
         if d == 'bg' and f in ('combat.jpg', 'menu.jpg'):
             continue
+        # 第三十七批：地图合成源料不内联（map.jpg 已是 mapTop+mapBot+mapBlend 合成品）
+        if d == 'bg' and f in ('maptop.png', 'mapmid.png', 'mapmid2.png', 'mapbot.png', 'mapblend.png', 'mapblend2.png'):
+            continue
         # 第二十五批：主菜单只内联在用的 WebP 素材（mg3Top/18朵云/2红光；旧 PNG 云已弃用）
         if d == 'title' and not f.endswith('.webp'):
             continue
