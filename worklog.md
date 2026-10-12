@@ -807,3 +807,24 @@ Stage Summary:
 - 环境恢复并加固：start_dev.sh（setsid 存活）/sweep.sh（回归扫描器）/3100 重建
 - 重大教训入库：dev server 下发 CSS 必须与源码比对（curl chunk + grep），DOM 正确≠CSS 正确；Task 35 的"测试漂移"结论实为基建陈旧——多轮"绿"回归也可能是在坏环境下的空洞通过，换环境后应复扫
 - 后续候选（承队列）：敌人受击/死亡音效细分 / 房间渐变剩余项 / 牌堆检视统一审计 / mg3Bot 4:3 适配（超宽屏裁切）
+
+---
+Task ID: 37
+Agent: main
+Task: 第三十六批：用户反馈"预览显示有bug，彻底修复；不要搞混一代和二代的素材资源"——沙箱六次回滚恢复 + 预览500根治 + 旧素材残留清理（STS2污染源清除）+ 双版本全屏视觉审计
+
+Work Log:
+- 【会话恢复·沙箱六次回滚】本地 .git 回滚至第二十批(dc2a86d)，远端已至第三十五批(26203b1)；audit_rollback_residue.py 全量哈希比对：1684 跟踪文件与远端 100% 一致(0差异0缺失)→无未推送成果→按既定协议 git reset --hard origin/main（第六次"远端为唯一权威"）
+- 【预览500根治】根因：沙箱重启后旧 dev server(pid 1107) 对 scripts/spine_test 的文件监听失效(EACCES os error 13，目录权限实为 z:z 755 正常——陈旧进程持有回滚前句柄)→Turbopack "Failed to write app endpoint /page"→整站 HTTP 500；修复：杀进程 + rm -rf .next + start_dev.sh 全新启动→:3000 恢复 200
+- 【旧素材残留清理·STS2污染源清除】沙箱回滚恢复物：public/assets 下 238 张 cardart 旧 png（早期 wiki/图搜版，第二十三批前架构）+ enemies/typeicons/potions 旧 png 若干（reset 自动清除部分）；按"远端树文件清单"精确删除全部不在远端的残留；cardart 现为纯 238 webp（反编译一代仓库提取，第十九/二十三批溯源）；make_assets.py 的 cardart PASSTHROUGH 桶会全量内联目录文件——不清理则 standalone 重建混入旧素材且暴涨（Task 29 同款事故预防）
+- 【一代/二代纯度审计】资产溯源链核对：cardart/frames/status/relics/intent/mapicons/orbs/topbar(19/23批)、enemies webp Spine烘焙(27批)、hero立绘4张+charbg(24批)、scv/scvart 1024插画(30批)、shop/chests(31批)、title云层/红光/mg3Top/logo(25/33/34批)——全部出自反编译一代仓库；VLM 15 张截图全屏审计（Next 10屏+standalone 5屏）逐一确认"纯一代手绘暗黑风，无二代高饱和3D小人国特征"
+- 【视觉审计·完整性】Next 10屏（标题/选角/涅奥/地图/战斗/商店/宝箱/休息/事件/奖励）+ standalone 5屏：0 破图(naturalWidth机械检测)、0 HTTP 4xx/5xx(performance entries)、无错位重叠（VLM 逐屏确认）；奖励屏三次"异常"均为审计脚本注入类型错误（taken 应为 string[] 而非对象、cards 应为 string[] 而非对象数组——RewardScreen myCards.map((cid))直传CardView id），run.ts:325 引擎真实构造正确，游戏本体无辜；正确注入后 3 卡面 webp 512px 全加载+药水图标在位+0页面错误
+- 【环境恢复】:3100 生产测试服重建（npm run build + start_test_server.sh，双端口 CSS 新鲜度由 batch22 A0 哨兵保障）；standalone 45.14MB 完好（worktree==remote 哈希一致）
+- 【全套回归】regression 16 / regression5 412 / bugcheck 29+29 / batch18 43 / batch21 34 / batch22 23(含A0哨兵) / batch25 16 / batch27 13 / batch28 13 / batch29 13 / batch30 34 / batch31 / batch32 16 / batch34 13 / mptest 22 / fulltest 全流程——全绿(~700+项)
+- 【方法论入库】①沙箱回滚后 dev server 必杀重启（陈旧监听句柄致 Turbopack 全站 500，目录权限正常也会发生）②审计脚本注入状态必须先读组件消费代码核对类型（RewardScreen cards: string[]/taken: string[]，本次三次误报教训）③public/ 残留=STS2混入风险源，回滚恢复后必跑"远端树清单差集"清理（audit_rollback_residue.py 固化为工具）④VLM"搜索框"误读=空药水槽（potionbox 空槽位），机械检测+组件源码可证伪 VLM 描述
+
+Stage Summary:
+- 预览 bug 根治：500 错误（陈旧 dev server 文件监听失效）→ 全新启动恢复；视觉层面 15 屏双版本零破图零异常
+- 一代/二代素材零混淆确认：当前全部资产溯源至反编译一代仓库，238 张早期图搜旧 png 残留（唯一二代混入风险源）已彻底清除
+- 环境全绿认证：:3000/:3100/standalone 三交付物 + 16 套件 ~700+ 项回归全绿
+- 产物：scripts/audit_rollback_residue.py（回滚残留审计工具）/ audit_visual_b36.ts（全屏视觉审计）/ audit_sa_b36.ts / audit_reward_b36.ts / probe_reward*_b36.sh / vlm_reward_b36.ts / vlm_restzoom_b36.ts；截图存档 scripts/study/batch36/
