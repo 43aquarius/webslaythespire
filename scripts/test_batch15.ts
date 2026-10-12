@@ -192,7 +192,10 @@ async function main() {
       screen: window.__sts.getState().run?.screen,
     }
   })()`)
-  check('⑤b墨迹逐朵点亮(带延迟)', ink2.inked > 3, JSON.stringify(ink2))
+  // 注: 边上圆点数=floor(边长/22), 随机地图布局下第二次移动的边多数为3朵(同列短边),
+  // >3 依赖长边运气(连续会话多次复现失败; git stash A/B 验证与产品代码无关)。
+  // 断言目的=「第二次移动确实产生墨迹且带延迟」(对比⑤首次无墨迹), >=3 即满足。
+  check('⑤b墨迹逐朵点亮(带延迟)', ink2.inked >= 3, JSON.stringify(ink2))
   check('⑤b墨迹延迟递增(≤0.55s)', ink2.maxDelay !== null && ink2.maxDelay > 0.02 && ink2.maxDelay <= 0.56, `max=${ink2.maxDelay}`)
   // 等待跳转完成再继续（战斗）
   for (let i = 0; i < 15; i++) {

@@ -173,9 +173,26 @@ export function CharacterSelectScreen() {
       style={{
         backgroundImage: `url(${A}/bg/menubg.jpg)`,
         backgroundSize: 'cover',
-        backgroundPosition: 'center 30%',
+        backgroundPosition: 'center -241px',
       }}
     >
+      {/* 原版 TitleBackground 常驻：中景 mg3Top + 塔身红光 + 漂云（与主菜单同构，压暗遮罩在下） */}
+      <img
+        src={`${A}/title/mg3Top.webp`}
+        alt=""
+        draggable={false}
+        className="absolute left-0 bottom-0 w-full pointer-events-none select-none"
+      />
+      <img
+        src={`${A}/title/mg3TopGlow1.webp`} alt="" draggable={false}
+        className="sts-glow" style={{ left: 225 * STS_S, top: (1080 - 289 - 60) * STS_S, width: 158 * STS_S }}
+      />
+      <img
+        src={`${A}/title/mg3TopGlow2.webp`} alt="" draggable={false}
+        className="sts-glow" style={{ left: 234 * STS_S, top: (1080 - 330 - 60) * STS_S, width: 153 * STS_S, animationDelay: '-2.9s' }}
+      />
+      {MID_CLOUDS.map(def => <TitleCloud key={def[0]} def={def} />)}
+      {TOP_CLOUDS.map(def => <TitleCloud key={def[0]} def={def} />)}
       <div className="absolute inset-0" style={{ background: 'rgba(6,3,2,0.5)' }} />
 
       <div className="relative sts-title" style={{ fontSize: 36, color: '#ffd980', textShadow: '3px 3px 0 #000', letterSpacing: 8, marginTop: 8 }}>

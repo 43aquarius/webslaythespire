@@ -764,7 +764,14 @@ function rCharSelect(): string {
       <div class="sts-title" style="font-size:19px;margin-top:2px;letter-spacing:3px;color:${sel ? '#ffd980' : '#a89070'};text-shadow:2px 2px 0 #000">${CHARACTER_INFO[c].name}</div>
     </div>`
   }).join('')
-  return `<div class="screen bg-cover" style="background-image:url('${A('bg/menubg.jpg')}')">
+  return `<div class="screen bg-cover" style="background-image:url('${A('bg/menubg.jpg')}');background-position:center -241px">
+  <img src="${A('title/mg3Top.webp')}" draggable="false" alt="" style="position:absolute;left:0;bottom:0;width:100%;pointer-events:none;user-select:none">
+  <img class="sts-glow" src="${A('title/mg3TopGlow1.webp')}" draggable="false" alt=""
+    style="left:${(225 * STS_S).toFixed(1)}px;top:${((1080 - 289 - 60) * STS_S).toFixed(1)}px;width:${(158 * STS_S).toFixed(1)}px">
+  <img class="sts-glow" src="${A('title/mg3TopGlow2.webp')}" draggable="false" alt=""
+    style="left:${(234 * STS_S).toFixed(1)}px;top:${((1080 - 330 - 60) * STS_S).toFixed(1)}px;width:${(153 * STS_S).toFixed(1)}px;animation-delay:-2.9s">
+  ${MID_CLOUDS.map(rCloud).join('\n  ')}
+  ${TOP_CLOUDS.map(rCloud).join('\n  ')}
   <div class="shade" style="background:rgba(6,3,2,.5)"></div>
   <div class="center-col" style="padding-top:0;gap:16px">
     <div class="sts-title" style="font-size:36px;color:#ffd980;text-shadow:3px 3px 0 #000;letter-spacing:8px">选 择 你 的 角 色</div>

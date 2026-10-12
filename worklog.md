@@ -761,3 +761,26 @@ Stage Summary:
 - 主菜单贴图错误根治：从"3 朵云+误用地形图"还原为原版 TitleBackground 完整七层结构，双版本同步，全套回归+三阶段 VLM 验收通过
 - 环境发现入库：本沙箱与远端存在批次分叉（本地 20 批 vs 远端 32 批），已 merge 合一；远端 21-32 批功能（商店/宝箱/右键检视/3100基建）经 batch31/32 验证在合并后完好
 - 后续候选（承队列）：敌人受击/死亡音效细分 / 房间渐变剩余项 / 牌堆检视统一审计 / mg3Bot 4:3 适配（超宽屏裁切）
+
+---
+Task ID: 35
+Agent: main
+Task: 第三十四批：主页贴图修复·沙箱对齐重放（发现远端已有等效修复+第21-32批主线，reset对齐后重放会话独有增量）
+
+Work Log:
+- 承接：用户报告"主页贴图有错误"，本会话基于本地沙箱(过时第二十批dc2a86d)独立完成了等效修复（mg2地形误作漂云根因/menubg合成/18朵云/红光/原版logo），全套回归绿后提交6f54d9b——push时发现远端已分叉
+- 【fetch取证】远端origin/main=30ca950已含：第21-32批主线(右键检视/商店宝箱原版化/ZHS字体/敌人idle动画/检视屏/类型行/药水体系)+等效主页修复4a81959(sky底对齐+mg3Top全屏中景+塔身红光+18朵云,与本地独立实现同根因同方案)+两轮合并(888dbc4/30ca950)；本会话此前摘要"第21-24批完成"实为远端工作,本地沙箱落后13批
+- 【对齐决策】沿用项目既有惯例(第二十八/二十九批先例)：git reset --hard origin/main以远端为唯一权威(本地重复实现备份为backup-batch25-redo分支,6f54d9b含完整分析工件scripts/study/batch25/)
+- 【重放独有增量】评估四项候选：①make_assets MIME按扩展名→远端第二十三批已修,跳过 ②menubg烘焙合成→远端分离图层方案更优(可扩展视差),跳过 ③bg/logo.png←原版eng.png 680×550(远端仍为wiki模糊404×360版)→重放 ④batch15 ⑤b断言(inked>3布局依赖)→重放(>=3+注释)
+- 【新增：角色选择屏TitleBackground常驻】原版行为考证：TitleBackground常驻渲染于整个主菜单族(含charSelect)；两版本rCharSelect/CharacterSelectScreen补齐mg3Top中景+双红光+18朵云(与主菜单同构)+sky底对齐(center -241px)，压暗遮罩后置
+- 【遗留清理】title/目录7张废弃png删除(mg2/mg3Bot/mg3Top.png/midCloud13/midCloud9/topCloud2/topCloud7——4a81959声称删除mg2但合并时复活；逐一无引用grep确认)；make_assets非webp跳过已有,不进单文件
+- 【测试】新建test_batch34.ts(next 13+standalone 12全绿)：主菜单基线18云+2红光+mg3Top加载/原版Logo 680×550/角色选择屏常驻(云+光+中景+遮罩+动画生效)/遗留404探测；standalone的mg3Top断言用ASSETS全等模式(文件名选择器对data URL失效教训)
+- 【全套回归】batch34 13+12 / batch18 43+47 / bugcheck 29+29 / regression 16 / regression5 412 / batch25(类型行) 16+16 / batch15 31+28 / batch12 29+19 / batch13 25+25 / batch14 19+18 / batch16 30+31 / batch20 12 / batch21 34 / mptest 22 / fulltest全流程16层gameover —— 全绿
+- 【已知问题·非本批引入】batch22(9败)/batch23(3败)：A/B验证(git stash前后同败)为既有测试套件在本沙箱的漂移——计算样式返回lab()序列化(初步分析疑为入场动画进行中读值,2.75%插值进度)及bg/opacity时序；留待专门测试适配批
+- 【VLM终验】主菜单(背景完整/云层自然/尖塔红光/Logo清晰锐利)+角色选择屏(背景层次保留+压暗+四立绘清晰)——"修复质量很高,符合原版美术风格"
+- 单文件45.14MB重建(logo/charselect增量)
+
+Stage Summary:
+- 主页贴图错误已彻底修复：远端权威实现+本会话增量(原版高清Logo/角色选择屏TitleBackground常驻/遗留素材清理/batch15断言修正)
+- 重大流程结论入库：多会话并行时必须先fetch取证再动手——本会话因本地沙箱落后13批,整套修复被独立重做一遍(幸而同根因同方案,合并取远端即可)；后续会话开工前应先比对origin/main与本地HEAD
+- 遗留待办：batch22/23套件在本沙箱的计算样式序列化/时序适配(下一测试适配批)
