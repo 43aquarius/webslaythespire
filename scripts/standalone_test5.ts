@@ -26,7 +26,7 @@ async function main() {
   // 1. 主菜单渲染：Logo图 + 石板按钮
   const menu = ev(`(() => {
     const logo = document.querySelector('.menu-logo')
-    const btns = [...document.querySelectorAll('.menu-btn')].map(b => b.textContent.trim().replace(/\\s+/g, ''))
+    const btns = [...document.querySelectorAll('.menu-btn, .sts-menu-opt')].map(b => b.textContent.trim().replace(/\\s+/g, ''))
     const gh = document.querySelector('.github-btn')
     return JSON.stringify({
       hasLogo: !!logo && logo.naturalWidth > 50,
@@ -69,7 +69,7 @@ async function main() {
   // 4. 返回 → 再次开始冒险（原bug：按钮失效）
   ev(`window.__sts.getState().gotoMenuScreen('title')`)
   await sleep(400)
-  const isMenu = ev(`!!document.querySelector('.menu-btn')`)
+  const isMenu = ev(`!!document.querySelector('.menu-btn, .sts-menu-opt')`)
   check('返回主菜单正常', isMenu === 'true')
   ev(`window.__sts.getState().gotoMenuScreen('charSelect')`)
   await sleep(400)

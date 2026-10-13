@@ -23,7 +23,7 @@ async function main() {
   execFileSync('agent-browser', ['open', 'http://localhost:3000/'], { encoding: 'utf-8', timeout: 60000 })
   // 等待 React hydration（dev 冷编译时较慢）
   for (let i = 0; i < 20; i++) {
-    const ready = ev(`typeof window.__sts === 'function' && !!document.querySelector('.menu-item')`)
+    const ready = ev(`typeof window.__sts === 'function' && !!document.querySelector('.menu-item, .sts-menu-opt')`)
     if (ready === true) break
     await sleep(1000)
   }
@@ -32,7 +32,7 @@ async function main() {
   // 1. 主菜单
   const m = ev(`(() => {
     const logo = document.querySelector('.menu-logo')
-    const btns = [...document.querySelectorAll('.menu-item')].map(b => b.textContent.trim().replace(/\\s+/g, ''))
+    const btns = [...document.querySelectorAll('.menu-item, .sts-menu-opt')].map(b => b.textContent.trim().replace(/\\s+/g, ''))
     const gh = document.querySelector('a[href*="github.com"]')
     return JSON.stringify({
       logoOk: logo && logo.complete && logo.naturalWidth > 100,
@@ -58,7 +58,7 @@ async function main() {
   check('点4角色仍停留角色选择', ev(`!!document.querySelector('.char-stand')`) === true)
   ev(`[...document.querySelectorAll('button')].find(b => b.textContent.replace(/\\s+/g, '') === '返回').click()`)
   await sleep(500)
-  check('返回主菜单', ev(`!!document.querySelector('.menu-item')`) === true)
+  check('返回主菜单', ev(`!!document.querySelector('.menu-item, .sts-menu-opt')`) === true)
   ev(`[...document.querySelectorAll('button')].find(b => b.textContent.replace(/\\s+/g, '').includes('开始冒险')).click()`)
   await sleep(500)
   check('再次开始冒险正常', ev(`!!document.querySelector('.char-stand')`) === true)

@@ -851,3 +851,25 @@ Stage Summary:
 - 主页背景经撞车评估采用远端第33/34批权威实现(分离图层方案), 本会话仅保留其未覆盖的独有增量
 - 远端基线16套件+本批 test_batch37 双版本全绿(约750项), VLM双版本地图验收通过
 - 沙箱回滚对齐流程第四次执行(第二十六/二十九/三十四批先例), 远端权威+独有增量重放模式已固化
+
+---
+Task ID: 39
+Agent: main
+Task: 第三十八批：主菜单按钮原版几何（MenuButton.java 逆向）+ 沙箱回滚对齐重放（第五次）
+
+Work Log:
+- 【会话恢复·沙箱第五次回滚】交接摘要称"第二十五批待启动"，实际本会话开始时本地=c67fce7(第二十一批平台快照)。在旧基线上完成了"第二十五批"(titleScene接线/地图H=2250全幅几何/菜单五屏)并全套绿后 git fetch 发现远端已至 1a57ed0(第三十七批)：33/34批(主页TitleBackground分离图层)+35/36批(预览500根治/纯度审计)+37批(地图羊皮纸三段式)——与本会话三大问题完全撞车
+- 【撞车评估(对照远端Task38记录)】①主页背景/贴图: 远端33/34批分离图层方案更优(本会话92分 vs 远端98分实测) → 弃用本会话titleScene.ts接线方案 ②地图几何: 远端37批羊皮纸三段式(1100x1450面板窗)为本会话后完成，实测98分 → 弃用本会话H=2250全幅方案 ③预览bug: 远端35批dev server陈旧CSS根治(与Turbopack缓存发现同源) → 已覆盖 ④mptest客机金币偶发: 远端35批已修(测试侧基数假设)——与本会话结论一致(最小复现证明r.gold=活跃玩家镜像语义正确,勿改store) ⑤主菜单按钮: 远端未做(仍居中石板menu-item) → 本会话独有增量,保留重放
+- 【重放·主菜单按钮(本批核心)】MenuButton.java 权威参数: START_Y=120/SPACE_Y=50·scale(自底向上), x=hb宽/2+75(左对齐), 高=SPACE_Y, 字=buttonLabelFont 32·scale, 原版为纯文本+悬停高亮图(无石板背景)；落地: 左对齐x=75·S, y=(1080-(120+50i))·S 顶至底[开始591.7/继续633.3/联机675/统计716.7/设置758.3/制作名单800], 330×50·S, 纯文本+optionHighlight悬停图; Logo绝对定位对齐原版锚点(930,554)·S; 按钮顺序顶至底=开始…制作名单(对应原版QUIT..PLAY序)
+- 素材: optionHighlight(原版menu_option_highlight 358x104)→title/optionHighlight.webp 3.7KB(全title目录webp惯例一致)
+- 两版本同步: Next(MenuScreens.tsx)+standalone(ui.ts rMainMenu)+CSS(.sts-menu-opt两份)+make_assets(自动随title webp规则内联)
+- 测试适配: standalone_test5/nextjs_test5(第五批期遗留)选择器 .menu-btn/.menu-item → 兼容 .sts-menu-opt
+- 【VLM幻觉排障】"验收"prompt偶发输出无关HTML(远端Task38已记录)——改"先描述后分点"句式稳定复现正确结果: 左侧纵排纯文字样式✓无石板✓无破图✓双版一致✓(差异项为浏览器窗口装饰artifact)
+- 回归: bugcheck 29+29 / batch37 12+11(重建后standalone内联断言过) / batch34 13 / regression5 412 / mptest 23 —— 全绿; 对齐基线冒烟: 主菜单98/设置90/地图98(远端实现实测)
+- 遗留脚本名冲突: reset --hard会覆盖与远端同名untracked文件(本会话shot_batch25.ts被远端同名脚本覆盖)——新脚本用batch38+命名避让
+
+Stage Summary:
+- 主菜单按钮还原一代原版几何与样式(左侧纵排纯文字+悬停原版高亮图), Logo对齐原版锚点(930,554)
+- 三大视觉问题终态: 主页(远端33/34批98分)+预览(远端35批根治)+地图(远端37批98分)+菜单按钮(本批)——全部由权威实现解决
+- takeGold多人语义结论入库: r.gold=活跃玩家镜像(setRunActive切视角), 最小复现已证明store语义正确勿改
+- 沙箱回滚对齐流程第五次执行, 远端权威+独有增量重放模式持续有效

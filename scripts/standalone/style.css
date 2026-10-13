@@ -992,3 +992,14 @@ img { -webkit-user-drag: none; }
   animation: sts-chest-pop-in .35s cubic-bezier(.34,1.56,.64,1) both; }
 .sts-chest-img:hover { filter: drop-shadow(0 10px 18px rgba(0,0,0,.55)) brightness(1.12); }
 .sts-chest-opened { filter: drop-shadow(0 8px 14px rgba(0,0,0,.5)) saturate(.85) brightness(.92); cursor: default; }
+
+/* ===== 一代原版主菜单文字按钮（第三十八批 MenuButton.java 逆向） ===== */
+.sts-menu-opt { position: absolute; background: none; border: none; color: #d9c48f;
+  text-shadow: 2px 2px 0 rgba(0,0,0,.9), 0 0 14px rgba(0,0,0,.5); opacity: .92;
+  display: flex; align-items: center; justify-content: flex-start; padding-left: 28px;
+  cursor: pointer; transition: color .12s ease; z-index: 2; }
+.sts-menu-opt .hl { position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  object-fit: contain; object-position: left center; opacity: 0; transition: opacity .12s ease; pointer-events: none; }
+.sts-menu-opt:hover:not(:disabled) { color: #ffe9ad; }
+.sts-menu-opt:hover:not(:disabled) .hl { opacity: 1; }
+.sts-menu-opt:disabled { opacity: .8; cursor: not-allowed; }

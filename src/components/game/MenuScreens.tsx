@@ -122,38 +122,37 @@ export function MainMenuScreen() {
       {MID_CLOUDS.map(def => <TitleCloud key={def[0]} def={def} />)}
       {TOP_CLOUDS.map(def => <TitleCloud key={def[0]} def={def} />)}
 
-      {/* 官方 Logo */}
-      <div className="relative flex flex-col items-center" style={{ marginBottom: 30 }}>
-        <img
-          src={`${A}/bg/logo.png`}
-          alt="Slay the Spire"
-          draggable={false}
-          className="menu-logo"
-          style={{ width: 286 }}
-        />
-      </div>
+      {/* 官方 Logo（第三十八批：绝对定位对齐原版锚点——TitleBackground.java draw(titleLogoImg) 中心(930,554)） */}
+      <img
+        src={`${A}/bg/logo.png`}
+        alt="Slay the Spire"
+        draggable={false}
+        className="menu-logo absolute"
+        style={{ left: 930 * STS_S, top: 554 * STS_S, width: 286, transform: 'translate(-50%, -50%)' }}
+      />
 
-      {/* 竖排菜单（原版石板按钮） */}
-      <div className="relative flex flex-col items-center" style={{ gap: 13 }}>
-        {items.map(it => (
-          <button
-            key={it.label}
-            className="menu-item sts-title"
-            style={{
-              fontSize: 21,
-              letterSpacing: 7,
-              padding: '11px 0',
-              width: 340,
-              opacity: it.disabled ? 1 : undefined,
-              cursor: it.disabled ? 'not-allowed' : 'pointer',
-            }}
-            disabled={it.disabled}
-            onClick={it.onClick}
-          >
-            <span style={{ opacity: it.disabled ? 0.45 : 1, display: 'block' }}>{it.label}</span>
-          </button>
-        ))}
-      </div>
+      {/* 竖排菜单（第三十八批：MenuButton.java 原版几何——左对齐 x=75·scale，y 中心=(1080-(120+50·i))·scale
+          自底向上；高 50·scale；纯文本 buttonLabelFont(32·scale) + 悬停原版高亮图 optionHighlight，无石板背景。
+          顺序自底向上 index0..5：制作名单/设置/统计/联机/继续/开始 → 顶至底为 开始(591.7)…制作名单(800) */}
+      {items.map((it, i) => (
+        <button
+          key={it.label}
+          className={`sts-title sts-menu-opt${it.disabled ? ' dis' : ''}`}
+          style={{
+            left: 75 * STS_S,
+            top: [591.7, 633.3, 675, 716.7, 758.3, 800][i] - 25 * STS_S,
+            width: 330,
+            height: 50 * STS_S,
+            fontSize: 32 * STS_S,
+            letterSpacing: 5,
+          }}
+          disabled={it.disabled}
+          onClick={it.onClick}
+        >
+          <img src={`${A}/title/optionHighlight.webp`} alt="" draggable={false} className="hl" />
+          <span style={{ opacity: it.disabled ? 0.45 : 1, display: 'block' }}>{it.label}</span>
+        </button>
+      ))}
     </div>
   )
 }

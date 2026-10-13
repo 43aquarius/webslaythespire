@@ -743,13 +743,12 @@ function rMainMenu(): string {
     style="left:${(234 * STS_S).toFixed(1)}px;top:${((1080 - 330 - 60) * STS_S).toFixed(1)}px;width:${(153 * STS_S).toFixed(1)}px;animation-delay:-2.9s">
   ${MID_CLOUDS.map(rCloud).join('\n  ')}
   ${TOP_CLOUDS.map(rCloud).join('\n  ')}
-  <div class="center-col" style="padding-top:0;gap:14px">
-    <img class="menu-logo" src="${A('bg/logo.png')}" alt="Slay the Spire" draggable="false" style="width:286px">
-    <div style="display:flex;flex-direction:column;gap:13px;margin-top:22px">
-      ${items.map(it => `<button class="menu-btn sts-title ${it.dis ? 'dis' : ''}" data-act="${it.act}" ${it.arg ? `data-screen="${it.arg}"` : ''} ${it.dis ? 'disabled' : ''}
-        style="opacity:${it.dis ? 1 : ''}"><span style="opacity:${it.dis ? .45 : 1};display:block">${it.label}</span></button>`).join('')}
-    </div>
-  </div>
+  <img class="menu-logo" src="${A('bg/logo.png')}" alt="Slay the Spire" draggable="false"
+    style="position:absolute;left:${(930 * STS_S).toFixed(1)}px;top:${(554 * STS_S).toFixed(1)}px;width:286px;transform:translate(-50%,-50%)">
+  ${items.map((it, i) => `<button class="sts-title sts-menu-opt${it.dis ? ' dis' : ''}" data-act="${it.act}" ${it.arg ? `data-screen="${it.arg}"` : ''} ${it.dis ? 'disabled' : ''}
+    style="left:${(75 * STS_S).toFixed(1)}px;top:${([591.7, 633.3, 675, 716.7, 758.3, 800][i] - 25 * STS_S).toFixed(1)}px;width:330px;height:${(50 * STS_S).toFixed(1)}px;font-size:${(32 * STS_S).toFixed(1)}px;letter-spacing:5px">
+    <img class="hl" src="${A('title/optionHighlight.webp')}" alt="" draggable="false">
+    <span style="opacity:${it.dis ? .45 : 1};display:block">${it.label}</span></button>`).join('')}
 </div>`
 }
 

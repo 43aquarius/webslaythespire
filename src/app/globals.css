@@ -1236,3 +1236,14 @@ body {
 .sts-chest-opened { filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.5)) saturate(0.85) brightness(0.92); cursor: default; }
 @keyframes sts-chest-pop-in { from { transform: translate(-50%, -50%) scale(1.25); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
 .sts-chest-img { animation: sts-chest-pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* ===== 一代原版主菜单文字按钮（第三十八批 MenuButton.java 逆向） ===== */
+.sts-menu-opt { position: absolute; background: none; border: none; color: #d9c48f;
+  text-shadow: 2px 2px 0 rgba(0,0,0,.9), 0 0 14px rgba(0,0,0,.5); opacity: .92;
+  display: flex; align-items: center; justify-content: flex-start; padding-left: 28px;
+  cursor: pointer; transition: color .12s ease; z-index: 2; }
+.sts-menu-opt .hl { position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  object-fit: contain; object-position: left center; opacity: 0; transition: opacity .12s ease; pointer-events: none; }
+.sts-menu-opt:hover:not(:disabled) { color: #ffe9ad; }
+.sts-menu-opt:hover:not(:disabled) .hl { opacity: 1; }
+.sts-menu-opt:disabled { opacity: .8; cursor: not-allowed; }
