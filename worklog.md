@@ -231,3 +231,26 @@ Stage Summary:
 - 怪物贴图修复：43 个全姿势动画 webp 重编码+dispose=1 补丁，逐帧独立显示，双版本像素级验证通过（RGB 差 ≤0.2）；7 个 delta 动画与 2 个静态图确认正常未动
 - 地图修复：羊皮纸 14.5% 水平压扁根治（画布 940→1100 原生 1:1）+ 原版墨圈（circle5）/手绘墨点（dot1）闲置素材启用，双版本同步落地
 - 部署状态：dev server 3000 热更新生效；standalone v1.17 重建；待按第四十一批规范回推 GitHub
+
+---
+Task ID: 9
+Agent: Super Z (主控)
+Task: 沙箱重置后重部署 + 双修复(地图/怪物贴图)回归验证(用户反馈:1.地图显示有bug 2.怪物的贴图显示有问题)
+
+Work Log:
+- 【环境核查】沙箱于本会话前被整体重置(/home/sync/repo.tar 缺失,pre-stop 归档未发生):my-project 仅剩脚手架(git 单 Initial commit、无 src/public),dev server :3000 不存在。上游 main 8dbfba2(第四十一批)= Task 8 的双修复提交,克隆确认已推送成功
+- 【重部署】克隆上游 → bun.lock registry 重写 npmmirror(937 处)→ rsync 全量同步(src/public/prisma/scripts/download/配置)→ bun install(836 包 31.5s)→ prisma generate+db push → bun run dev :3000 就绪
+- 【进程机制实证】沙箱 supervisor 对 Bash 会话派生进程做全量回收:setsid+nohup 分离的 dev server 与裸 sleep 均在命令结束时被杀,同回合相邻命令同样回收——历史 setsid 方案在当前镜像已失效。所有 server 依赖验证改为"单命令一体化"模式(启动→浏览器全流程→取证→收尾)
+- 【地图修复验证·机械】画布 getBoundingClientRect 实测 1100×1450,ratio=0.7586 与 1100/1450 期望精确相等(羊皮纸 1:1 零压扁);56 节点全渲染墨圈(.sts-node-ring=56),路径墨点 407 枚(13×13px,dot1.png 载入 16×16),5 个可达节点脉动正常
+- 【地图修复验证·视觉】VLM 整屏:羊皮纸无水平压扁/插画比例正常/手绘墨圈/布局居中 全过;2 倍放大局部:节点间墨点成串/图标套墨环/无破图错位 全过
+- 【怪物贴图验证·文件级】RIFF/ANMF chunk 遍历 52 个敌人 webp:43 个全姿势动画 flags&0xC0==0xC0(dispose+blend 补丁在位);7 delta 动画(acidslimeS/deca/giantHead/gremlinWizard/guardian/spikeSlimeM/S)与 2 静态(bronzeOrb/hexaghost)按设计未动,分类与第四十一批完全一致
+- 【怪物贴图验证·运行时】redlouse(重影最严重案例)浏览器直开 canvas 采样:覆盖率 t1=t2=0.3551 恒定(单姿势覆盖 ~35%,无逐帧累积);游戏内战斗:邪教徒 172×210 贴身盒 bottom=609/900=68% 地面线,VLM 四项全过(形象连贯无残影拖影/落地不悬空/名牌血条 51 51/英雄武器完整)
+- 【回归】重建 scripts/test-mp-api.js(17 断言,协议对齐 v1.8 HTTP 轮询)17/17 通过;tsc --noEmit src/ 零错误(scripts/skills 既有基线 16 项不动);浏览器零控制台错误
+- 【开机自愈】新建 .zscripts/dev.sh(杀 3000 残留 → rm -rf .next → bun install → prisma 幂等 → 健康等待 → exec bun run dev):沙箱下次重启时 /start.sh 将受保护地拉起 dev server;实测冷启 66s ready,/api/mp pong 正常
+- 【排障记录】①Bash 工具输出吞字再现(MapScreen.tsx 显示 run.playersyIdx],Read 工具复核文件完好,勿按幻象修复)②tsc --noEmit src/ 传目录报 TS6231,应项目根全量跑③agent-browser 每命令新实例,localStorage/游戏进度跨命令不保留,流程必须单命令闭环④涅奥"转化"类祝福点击选项后还需点选 .sts-card 完成选卡,流程需二次判定⑤首次验证流程卡在选卡界面即此因
+
+Stage Summary:
+- 重部署完成:8dbfba2(第四十一批,含地图+怪物双修复)全量落地 my-project,dev server :3000 可用
+- 双修复全维度回归通过:地图(机械 ratio 精确 1:1 + VLM 两遍)、怪物(文件级 43 补丁 + 运行时覆盖率恒定 + 战斗 VLM)
+- 常驻性方案:当前镜像进程全量回收下唯一存续通道 = 开机自启,.zscripts/dev.sh 已就位;会话内验证依赖单命令一体化脚本(scripts/verify-fixes.sh / verify-dots.sh / regression.sh)
+- 待办:worklog + 重建的回归脚本按第四十二批规范回推 GitHub
