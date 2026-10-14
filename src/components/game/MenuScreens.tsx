@@ -68,13 +68,6 @@ function TitleCloud({ def }: { def: CloudDef }) {
   )
 }
 
-const CHAR_BORDER: Record<CharacterId, string> = {
-  ironclad: '#b03828',
-  silent: '#3a9a5a',
-  defect: '#3a7ac8',
-  watcher: '#9a5ab8',
-}
-
 // ============ 原版风格主菜单 ============
 export function MainMenuScreen() {
   const gotoMenuScreen = useGame(s => s.gotoMenuScreen)
@@ -157,7 +150,19 @@ export function MainMenuScreen() {
   )
 }
 
-// ============ 角色选择界面（原版：角色站立 + 信息 + 出发/返回） ============
+// ============ 角色选择界面（第四十批：原版四分屏面板还原） ============
+// 原版布局：屏幕纵向均分四条面板，每条 = 角色专属海报背景(charbg) + 站立立绘 + 底部名牌，
+// 面板间白色光束分隔；选中面板全亮、其余压暗；左上返回 / 右下出发(EMBARK 金色横幅)
+// 英文名名牌格式化：剥离自带 The 前缀（避免 THE THE SILENT 重复）
+const stripThe = (n: string) => n.replace(/^The\s+/i, '')
+
+const CS_PANEL: Record<CharacterId, { bg: string; x: string; color: string }> = {
+  ironclad: { bg: `${A}/charbg/redBg.jpg`, x: '74%', color: '#e0603c' },
+  silent: { bg: `${A}/charbg/greenBg.jpg`, x: '70%', color: '#4cc06a' },
+  defect: { bg: `${A}/charbg/blueBg.jpg`, x: '70%', color: '#4a92e8' },
+  watcher: { bg: `${A}/charbg/purpleBg.jpg`, x: '50%', color: '#b070e8' },
+}
+
 export function CharacterSelectScreen() {
   const startRun = useGame(s => s.startRun)
   const gotoMenuScreen = useGame(s => s.gotoMenuScreen)
@@ -166,101 +171,135 @@ export function CharacterSelectScreen() {
   const [hoverInfo, setHoverInfo] = useState<CharacterId | null>(null)
   const info = CHARACTER_INFO[hoverInfo || selectedCharacter]
 
+  // 预加载四张海报，避免首次选中时白闪
+  useEffect(() => {
+    for (const cid of CHARACTERS) {
+      const img = new Image()
+      img.src = CS_PANEL[cid].bg
+    }
+  }, [])
+
   return (
-    <div
-      className="w-full h-full relative flex flex-col items-center justify-center gap-6 select-none overflow-hidden sts-screen-fade"
-      style={{
-        backgroundImage: `url(${A}/bg/menubg.jpg)`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center -241px',
-      }}
-    >
-      {/* 原版 TitleBackground 常驻：中景 mg3Top + 塔身红光 + 漂云（与主菜单同构，压暗遮罩在下） */}
-      <img
-        src={`${A}/title/mg3Top.webp`}
-        alt=""
-        draggable={false}
-        className="absolute left-0 bottom-0 w-full pointer-events-none select-none"
-      />
-      <img
-        src={`${A}/title/mg3TopGlow1.webp`} alt="" draggable={false}
-        className="sts-glow" style={{ left: 225 * STS_S, top: (1080 - 289 - 60) * STS_S, width: 158 * STS_S }}
-      />
-      <img
-        src={`${A}/title/mg3TopGlow2.webp`} alt="" draggable={false}
-        className="sts-glow" style={{ left: 234 * STS_S, top: (1080 - 330 - 60) * STS_S, width: 153 * STS_S, animationDelay: '-2.9s' }}
-      />
-      {MID_CLOUDS.map(def => <TitleCloud key={def[0]} def={def} />)}
-      {TOP_CLOUDS.map(def => <TitleCloud key={def[0]} def={def} />)}
-      <div className="absolute inset-0" style={{ background: 'rgba(6,3,2,0.5)' }} />
-
-      <div className="relative sts-title" style={{ fontSize: 36, color: '#ffd980', textShadow: '3px 3px 0 #000', letterSpacing: 8, marginTop: 8 }}>
-        选 择 你 的 角 色
-      </div>
-
-      {/* 角色立绘一排（原版站位：无框站立，选中发光） */}
-      <div className="relative flex items-end justify-center gap-9" style={{ marginTop: 4 }}>
+    <div className="w-full h-full relative select-none overflow-hidden sts-screen-fade">
+      {/* ===== 四分屏面板 ===== */}
+      <div className="absolute inset-0 flex">
         {CHARACTERS.map(cid => {
           const c = CHARACTER_INFO[cid]
+          const p = CS_PANEL[cid]
           const active = selectedCharacter === cid
           return (
             <button
               key={cid}
-              className={`relative flex flex-col items-center char-stand ${active ? 'active' : ''}`}
-              style={{
-                transform: active ? 'translateY(-10px) scale(1.06)' : 'none',
-                transition: 'transform .18s ease, filter .18s ease',
-              }}
+              className={`cs-panel ${active ? 'active' : ''}`}
+              style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
               onClick={() => selectCharacter(cid)}
               onMouseEnter={() => setHoverInfo(cid)}
               onMouseLeave={() => setHoverInfo(null)}
             >
+              {/* 海报背景（原版：每角色专属海报铺满面板） */}
+              <div className="cs-bg" style={{ backgroundImage: `url(${p.bg})`, backgroundPosition: `${p.x} center` }} />
+              <div className="cs-dim" />
+
+              {/* 角色立绘：站位于面板中下部（原版站位），等比缩放适配面板宽度，选中时轻微放大 */}
               <img
+                className="cs-hero absolute left-1/2"
                 src={`${A}/hero/${c.sprite}.png`}
                 alt={c.name}
-                width={210}
-                height={150}
                 draggable={false}
-                style={{ objectFit: 'contain' }}
-              />
-              <div
-                className="sts-title"
                 style={{
-                  fontSize: 19, marginTop: 2, letterSpacing: 3,
-                  color: active ? '#ffd980' : '#a89070',
-                  textShadow: '2px 2px 0 #000',
+                  bottom: 122, maxHeight: 430, maxWidth: '90%',
+                  width: 'auto', height: 'auto',
+                  transform: `translateX(-50%) scale(${active ? 1.05 : 1})`,
                 }}
-              >
-                {c.name}
+              />
+              {/* 脚下彩色光晕（角色主题色） */}
+              <div
+                className="absolute left-1/2"
+                style={{
+                  bottom: 108, width: 300, height: 54, transform: 'translateX(-50%)',
+                  background: `radial-gradient(ellipse at center, ${p.color}${active ? '55' : '22'} 0%, transparent 68%)`,
+                  opacity: active ? 0.9 : 0.4, transition: 'opacity .28s ease',
+                }}
+              />
+
+              {/* 底部名牌（中文名 + 英文名） */}
+              <div className="absolute left-0 right-0 flex flex-col items-center" style={{ bottom: 30, pointerEvents: 'none' }}>
+                <div
+                  className="sts-title"
+                  style={{
+                    fontSize: 27, letterSpacing: 4,
+                    color: active ? '#ffd980' : '#9a8266',
+                    textShadow: '2px 2px 0 #000, 0 0 18px rgba(0,0,0,.9)',
+                    transition: 'color .25s ease',
+                  }}
+                >
+                  {c.name}
+                </div>
+                <div
+                  className="sts-body"
+                  style={{
+                    fontSize: 11, letterSpacing: 3, marginTop: 2,
+                    color: active ? p.color : '#6e5c46', textShadow: '1px 1px 0 #000',
+                    transition: 'color .25s ease',
+                  }}
+                >
+                  THE {stripThe(c.nameEn).toUpperCase()}
+                </div>
               </div>
             </button>
           )
         })}
       </div>
 
-      {/* 选中角色信息 */}
-      <div className="relative sts-body text-center" style={{ color: '#c8b090', fontSize: 14, lineHeight: 1.8, maxWidth: 580, minHeight: 46 }}>
-        <span style={{ color: '#ffd980' }}>{info.name}</span> · {info.desc}<br />
-        生命值 <span style={{ color: '#ff8a7a' }}>{info.hp}</span> · 初始遗物「<span style={{ color: '#9ad8f0' }}>{RELICS[info.relic]?.name}</span>」 · 全 4 幕 · 220+ 卡牌 · 60+ 敌人 · 12 首领
+      {/* 面板间白色光束（原版分隔光柱） */}
+      {[400, 800, 1200].map(x => (
+        <div key={x} className="cs-beam" style={{ left: x }} />
+      ))}
+
+      {/* 顶部/底部渐变压暗（衬托标题与名牌） */}
+      <div className="cs-vignette-top" />
+      <div className="cs-vignette-bottom" />
+
+      {/* 顶部标题 */}
+      <div
+        className="absolute left-1/2 sts-title"
+        style={{ top: 24, transform: 'translateX(-50%)', fontSize: 36, color: '#ffd980', textShadow: '3px 3px 0 #000, 0 0 30px rgba(255,180,60,.35)', letterSpacing: 10, pointerEvents: 'none' }}
+      >
+        选 择 你 的 角 色
       </div>
 
-      {/* 底部按钮（原版：左侧返回、右侧出发） */}
-      <div className="relative flex items-center gap-10">
-        <button
-          className="sts-btn sts-title"
-          style={{ fontSize: 20, padding: '10px 44px', letterSpacing: 4 }}
-          onClick={() => gotoMenuScreen('title')}
-        >
-          返 回
-        </button>
-        <button
-          className="sts-btn sts-btn-gold sts-title"
-          style={{ fontSize: 26, padding: '12px 72px', letterSpacing: 6 }}
-          onClick={() => startRun()}
-        >
-          出 发
-        </button>
+      {/* 左上返回（原版左上角返回按钮） */}
+      <button
+        className="cs-back absolute sts-title"
+        style={{ left: 26, top: 26, fontSize: 19, padding: '9px 26px', letterSpacing: 3 }}
+        onClick={() => gotoMenuScreen('title')}
+      >
+        ← 返 回
+      </button>
+
+      {/* 左下选中角色信息（原版底部角色信息区） */}
+      <div
+        className="absolute sts-body"
+        style={{
+          left: 30, bottom: 26, zIndex: 40, pointerEvents: 'none',
+          background: 'rgba(12,7,4,.68)', border: '1.5px solid #5a4230', borderRadius: 10,
+          padding: '10px 16px', color: '#c8b090', fontSize: 13.5, lineHeight: 1.75, maxWidth: 430,
+        }}
+      >
+        <span style={{ color: '#ffd980', fontSize: 15 }}>{info.name}</span>
+        <span style={{ color: '#8a7458' }}> · THE {stripThe(info.nameEn).toUpperCase()}</span><br />
+        {info.desc}<br />
+        生命值 <span style={{ color: '#ff8a7a' }}>{info.hp}</span> · 初始遗物「<span style={{ color: '#9ad8f0' }}>{RELICS[info.relic]?.name}</span>」
       </div>
+
+      {/* 右下出发（原版 EMBARK 金色横幅按钮） */}
+      <button
+        className="cs-embark absolute"
+        style={{ right: 34, bottom: 28, zIndex: 40, fontSize: 27, padding: '13px 64px', letterSpacing: 8 }}
+        onClick={() => startRun()}
+      >
+        出 发
+      </button>
     </div>
   )
 }

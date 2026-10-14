@@ -873,3 +873,27 @@ Stage Summary:
 - 三大视觉问题终态: 主页(远端33/34批98分)+预览(远端35批根治)+地图(远端37批98分)+菜单按钮(本批)——全部由权威实现解决
 - takeGold多人语义结论入库: r.gold=活跃玩家镜像(setRunActive切视角), 最小复现已证明store语义正确勿改
 - 沙箱回滚对齐流程第五次执行, 远端权威+独有增量重放模式持续有效
+
+---
+Task ID: 40
+Agent: main
+Task: 第三十九批：选角界面原版四分屏面板还原 + 双版本战斗布局修复落地（用户需求"1.人物和怪物的贴图有问题修复 2.从网络上找资源还原选择角色的ui界面"）
+
+Work Log:
+- 【贴图问题·根因与修复】英雄立绘（hero/*.png 4张）为此前部署会话以官方 wiki 高清版替换（install-hero-sprites.py: 透明边距裁切后约大30%分辨率, 454x324/333x300/303x283/487x384 vs 旧版 349x251 档），官方一代美术、无二代混淆风险；本批将替换成果正式入库并同步 standalone 内联
+- 【选角四分屏·Next 版】MenuScreens.tsx CharacterSelectScreen 重写为原版四分屏：屏幕纵向均分四条面板，每条=角色专属海报背景(charbg redBg/greenBg/blueBg/purpleBg.jpg, 复用第三十四批已入库素材, background-size auto 100% + 面板差异化锚点 x 74%/70%/70%/50%) + 站立立绘(bottom 122/maxHeight 430, 选中 scale 1.05 + 金色辉光) + 脚下角色主题色光晕 + 底部中英文名牌；面板间三根白色光束(400/800/1200)呼吸动画；顶部标题+左上返回+左下信息框(悬停跟随悬停角色, 移开回落已选)+右下 EMBARK 金色横幅按钮；globals.css 配套 .cs-*/cs-beam/cs-embark(cs-embark-glow 呼吸)/cs-back/cs-vignette 全套
+- 【名牌小修】THE 前缀重复修复: nameEn 'The Silent' 自带 The → stripThe() 剥离前缀后再拼 "THE ..."（此前显示 THE THE SILENT）
+- 【战斗布局修复·Next 版落地】CombatScreen.tsx 敌人区 items-start→items-end + bottom 300→285(原版 68% 地面线, 怪物全部落地); EnemyView 贴身精灵盒: SPRITE_NAT 模块级缓存(跨战斗复用防布局跳变) + img onLoad 读取 naturalWidth/Height 按宽高比求 drawW/drawH(宽图缩高/高图缩宽), 画布底缘=脚底贴盒底, 消除 contain 方形盒下方空边; 名字/血条/状态改绝对定位(top:100%+4px 脚底之下), 状态图标增减不再把怪物整体顶起; FloatFx 浮动数字 top 跟随 drawH*0.4(身体上部), SlashFx 斩击 topPct 动态计算(身体中部); 英雄容器单人/联机 bottom 96/92→282 落地面线, 能量球(z44)与抽牌堆不再遮挡武器; 牌堆原版化: 抽牌堆 bottom 158→44 左下角/弃牌堆 158→44 右下角/消耗堆 88→150(弃牌上方, 修复互相叠压); ShuffleFx 洗牌剪影 bottom 204→90 跟随抽牌堆; PotionThrowFx 药水投掷按新敌人区中心重校准
+- 【standalone 同步·选角】ui.ts rCharSelect 重写为四分屏(CS_PANEL/stripTheEn/csInfoHtml/csHover 悬停状态, 与 Next 同构值); 事件委托: 全局 mouseover 检测 .cs-panel 切换 csHover → 差异更新 #cs-info 信息框(不整屏重建); pickChar/startRun/gotoMenu 复用既有 data-act 管线; style.css 新增 cs-* 全套并清除两处遗留 .char-row/.char-card 死 CSS(旧无框立绘布局)
+- 【standalone 同步·战斗】enemies-row align-items center→flex-end + bottom 300→285; SPRITE_NAT+fitSpriteImg() 贴身盒适配(img complete 即时适配/未载入挂 load 一次性监听), 精灵分档补 small 150 档与 Next 对齐; enemy-info 改绝对定位 top:100%(移除 margin-top:-28px 叠压); 英雄区单人 bottom 96→282/联机 88→282; 抽/弃牌堆 158→44 底角, 消耗堆 88→150; shuffle-wrap top 46→bottom 90 跟随抽牌堆; 浮动数字落点 fxPositions 由容器 top+20 改为容器高 45%(身体上部, 特效坐标本就动态采样 DOM, 布局修复后自动跟随无需逐项校准)
+- 【make_assets】PLANS 新增 charbg 桶(900px JPEG q82, 1920x1200 原图缩至 900x562, 4张共~408KB); JPEG 分支支持 maxside 缩放(此前仅 PNG 分支生效); hero 桶自动拾取新立绘(4张共~381KB)
+- 【重建】standalone v1.15→v1.16, 45.58MB(基线45.14+charbg/新立绘约+0.44MB); Next 版 dev server 热更生效
+- 【验证·机械测量】standalone 战斗实测(1600x900 舞台): 颚虫精灵 210x113 贴身盒(原图 278x149 等比), 脚底距底 296px≈67% 高度, 名牌血条位于脚底正下方(y619-673); 英雄(观者) 240x189 脚底 282px 与 Next 一致; 抽/弃牌堆 bottom 44 两底角, 能量球 left118/bottom116——全部与 Next 修复版坐标一致
+- 【验证·VLM】Next 选角(四分屏/海报/立绘完整/名牌/按钮/无破图) + Next 战斗(英雄贴图完整/怪物落地/血量状态正常) + standalone 选角(六项全过: 四分屏/海报+立绘+名牌/选中高亮其余压暗/光束/按钮/无bug) + standalone 战斗(五项全过: 怪物落地/名牌紧贴脚底/英雄武器无遮挡/牌堆底角/无错位)
+- 【验证·交互与回归】standalone 实战: 开始→选角(悬停信息框跟随/点选切换 active)→出发→涅奥(选卡分支 chooseNeow→neowGainCard 三选一正常)→地图 66 节点→战斗(出牌打击: 颚虫 44→28, 浮动数字, 零控制台错误); Next 版 /api/mp 回归 17/17 通过; tsc 无新增错误(仅上游既有 4 项)
+
+Stage Summary:
+- 选角界面彻底原版化: 四分屏海报面板(复用第三十四批 charbg 素材)+立绘+光束+EMBARK 横幅, 双版本同步, 悬停信息框交互一致
+- 战斗布局修复双版本落地: 怪物落地(67-68% 地面线)+贴身精灵盒+名牌绝对定位, 英雄落地面线武器无遮挡, 牌堆/能量球原版化构图
+- 英雄立绘正式入库 wiki 高清版(透明边距已裁切), standalone 内联同步
+- standalone v1.16 (45.58MB); 名牌 THE 前缀重复修复; make_assets JPEG 桶支持 maxside

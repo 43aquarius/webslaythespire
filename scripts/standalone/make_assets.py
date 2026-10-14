@@ -35,6 +35,8 @@ PLANS = {
     'status': (72, 'PNG', None),
     # typeicons 目录已移除（第二十五批：类型行改原版纯文字渲染，wiki 徽章弃用）
     'bg': (None, None, None),        # jpg 保持
+    # 第三十九批：选角四分屏海报背景（1920x1200 原图 → 900px JPEG；面板 400 逻辑宽，2x 余量足够）
+    'charbg': (900, 'JPEG', 82),
     'campfire': (128, 'PNG', None),  # 原版篝火按钮(sleep/smith)
     'title': (900, 'PNG', None),     # 原版漂云(仅 3 张在用)
     # events: 仅内联本项目用到的 7 张原版插画（见下方 SELECT）
@@ -103,6 +105,10 @@ for d, (maxside, fmt, quality) in PLANS.items():
         else:
             if fmt == 'JPEG' or path.lower().endswith(('.jpg', '.jpeg')):
                 im = img.convert('RGBA')
+                # 第三十九批：JPEG 桶支持 maxside 缩放（charbg 海报 1920x1200 → 900px 控制单文件体积）
+                if maxside and max(im.size) > maxside:
+                    ratio = maxside / max(im.size)
+                    im = im.resize((round(im.width * ratio), round(im.height * ratio)), Image.LANCZOS)
                 bg = Image.new('RGB', im.size, (10, 6, 4))
                 bg.paste(im, mask=im.split()[3])
                 buf = io.BytesIO()

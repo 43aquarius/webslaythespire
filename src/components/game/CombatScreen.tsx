@@ -18,6 +18,9 @@ import { sfx } from '@/game/sfx'
 
 const A = '/assets'
 
+// 敌人精灵原始尺寸缓存（模块级，跨战斗复用）：首次载入后同款怪再次出现不再有方形盒→贴身盒的布局跳变
+const SPRITE_NAT = new Map<string, { w: number; h: number }>()
+
 // ============ 屏幕震动引擎（移植 sts2-web NScreenShake punch 模型） ============
 // punch：位移 = cos(t·60rad/s)·幅度·cubicOut(剩余/总时长)，沿随机方向；
 // 强度分档对齐原版 STRENGTH 表（1920 设计像素 → 1600 舞台 ×0.833）：
@@ -168,7 +171,7 @@ function ShuffleFx({ items, removeFx }: { items: FxItem[]; removeFx: (id: number
   return (
     <>
       {items.map(it => (
-        <div key={it.id} className="absolute pointer-events-none" style={{ left: 59, bottom: 204, zIndex: 57 }}>
+        <div key={it.id} className="absolute pointer-events-none" style={{ left: 59, bottom: 90, zIndex: 57 }}>
           {[0, 1, 2, 3, 4, 5, 6, 7].map(k => (
             <div key={k} className="sts-shuffle-card absolute" style={{ animationDelay: `${k * 0.05}s` }} />
           ))}
@@ -290,7 +293,7 @@ function FloatFx({ items, removeFx }: { items: FxItem[]; removeFx: (id: number) 
 }
 
 // ============ 斩击特效 ============
-function SlashFx({ items, removeFx, big }: { items: FxItem[]; removeFx: (id: number) => void; big?: boolean }) {
+function SlashFx({ items, removeFx, big, topPct = 38 }: { items: FxItem[]; removeFx: (id: number) => void; big?: boolean; topPct?: number }) {
   const timedRef = useRef<Set<number>>(new Set())
   useEffect(() => {
     let timers: ReturnType<typeof setTimeout>[] = []
@@ -306,7 +309,7 @@ function SlashFx({ items, removeFx, big }: { items: FxItem[]; removeFx: (id: num
     <>
       {items.map(it => (
         <div key={it.id} className="absolute inset-0 pointer-events-none overflow-visible" style={{ zIndex: 55 }}>
-          <div className="sts-slash" style={{ width: big ? 260 : 170, height: big ? 260 : 170, left: '50%', top: '38%', transform: 'translate(-50%,-50%)' }} />
+          <div className="sts-slash" style={{ width: big ? 260 : 170, height: big ? 260 : 170, left: '50%', top: `${topPct}%`, transform: 'translate(-50%,-50%)' }} />
         </div>
       ))}
     </>
@@ -387,12 +390,18 @@ function EnemyView({ enemy, idx }: { enemy: EnemyInstance; idx: number }) {
   const targetable = alive && (!!selectedCard || selectedPotion !== null)
   const myFx = fxList.filter(f => f.target === enemy.uid && f.kind !== 'slash' && f.kind !== 'lunge')
   const mySlashes = fxList.filter(f => f.target === enemy.uid && f.kind === 'slash')
-  const spriteW = def.boss ? 340 : def.elite ? 260 : def.small ? 150 : 210
+  // 精灵包围盒（原版尺寸分档）；再按原图宽高比求贴身绘制尺寸（宽图缩高、高图缩宽），
+  // 让画布底缘（脚底）贴合盒子底部 —— 修复 contain 方形盒下方空边导致怪物"脚不落地"
+  const spriteBox = def.boss ? 340 : def.elite ? 260 : def.small ? 150 : 210
+  const [nat, setNat] = useState<{ w: number; h: number } | null>(() => SPRITE_NAT.get(def.sprite) ?? null)
+  const natRatio = nat && nat.h > 0 ? nat.w / nat.h : 1
+  const drawW = natRatio >= 1 ? spriteBox : Math.round(spriteBox * natRatio)
+  const drawH = natRatio >= 1 ? Math.round(spriteBox / natRatio) : spriteBox
 
   return (
     <div
       className={`relative flex flex-col items-center ${enemy.dying ? 'sts-dying' : ''} ${targetable ? 'sts-targetable' : ''}`}
-      style={{ minWidth: spriteW * 0.8, borderRadius: 14, padding: '6px 10px' }}
+      style={{ minWidth: spriteBox * 0.8, borderRadius: 14, padding: '6px 10px' }}
       onClick={() => targetable && clickEnemy(enemy.uid)}
     >
       {/* 意图 */}
@@ -401,27 +410,33 @@ function EnemyView({ enemy, idx }: { enemy: EnemyInstance; idx: number }) {
         {/* 意图执行爆发（原版 NIntent.PlayPerform：四份叠加副本 α0.27，各 0.25s 间隔，1s 内 0.5→1.49） */}
         <IntentBurst items={fxList.filter(f => f.kind === 'intentBurst' && f.target === enemy.uid)} removeFx={removeFx} />
       </div>
-      {/* 浮动特效 */}
-      <div className="absolute" style={{ top: 100, left: '50%', marginLeft: -60, width: 120, height: 40, zIndex: 60 }}>
+      {/* 浮动特效（跟随精灵实际绘制高度，落在身体上部 ~40% 处） */}
+      <div className="absolute" style={{ top: 40 + Math.round(drawH * 0.4), left: '50%', marginLeft: -60, width: 120, height: 40, zIndex: 60 }}>
         <FloatFx items={myFx} removeFx={removeFx} />
       </div>
-      {/* 斩击特效 */}
-      <SlashFx items={mySlashes} removeFx={removeFx} big={def.boss} />
-      {/* 精灵图（原版 idle 动画 WebP + 受击闪白；第二十七批） */}
+      {/* 斩击特效（居中于精灵身体中部） */}
+      <SlashFx items={mySlashes} removeFx={removeFx} big={def.boss} topPct={Math.round(((60 + drawH / 2) / (66 + drawH)) * 100)} />
+      {/* 精灵图（原版 idle 动画 WebP + 受击闪白；第二十七批；贴身盒：脚底贴盒底） */}
       <div ref={spriteRef}>
         <img
           src={`${A}/enemies/${def.sprite}.webp`}
           alt={def.name}
           draggable={false}
+          onLoad={e => {
+            const w = e.currentTarget.naturalWidth, h = e.currentTarget.naturalHeight
+            if (w > 0 && h > 0) { SPRITE_NAT.set(def.sprite, { w, h }); setNat(p => p ?? { w, h }) }
+          }}
           style={{
-            width: spriteW, height: spriteW,
+            width: drawW, height: drawH,
             objectFit: 'contain',
             filter: 'drop-shadow(0 10px 12px rgba(0,0,0,0.55))',
           }}
         />
       </div>
-      {/* 名字 + 血条 + 状态（战斗开始自上方 20px 滑入，每敌随机延迟 1.3-1.7s，原版 NCreatureStateDisplay；中途召唤的敌人立即滑入） */}
-      <div className="flex flex-col items-center gap-1 relative"
+      {/* 名字 + 血条 + 状态：绝对定位于精灵正下方（脚底之下）——修复 ①状态图标增减把怪物整体顶起跳动 ②血条离身体过远；
+          滑入动画（战斗开始自上方 20px 滑入，每敌随机延迟 1.3-1.7s，原版 NCreatureStateDisplay；中途召唤的敌人立即滑入）不变 */}
+      <div className="absolute left-0 right-0 flex justify-center" style={{ top: '100%', marginTop: 4 }}>
+      <div className="flex flex-col items-center gap-1"
         ref={el => {
           if (el && !el.dataset.stated) {
             el.dataset.stated = '1'
@@ -430,7 +445,7 @@ function EnemyView({ enemy, idx }: { enemy: EnemyInstance; idx: number }) {
             el.style.animation = `sts-state-in .5s cubic-bezier(.2,.8,.3,1) ${delay}s backwards`
           }
         }}
-        style={{ marginTop: -28 }}>
+      >
         <div className="sts-body font-bold" style={{ fontSize: 15, color: '#f5e5c8', textShadow: '1px 1px 0 #000' }}>
           {def.name}
         </div>
@@ -448,6 +463,7 @@ function EnemyView({ enemy, idx }: { enemy: EnemyInstance; idx: number }) {
         </div>
         <StatusRow statuses={enemy.statuses} size={28} />
       </div>
+      </div>
     </div>
   )
 }
@@ -459,13 +475,13 @@ function PotionThrowFx({ show }: { show: number }) {
     <div key={show}>
       <div
         className="absolute sts-potion-throw"
-        style={{ left: 420, top: 120, zIndex: 75, '--ptx': '480px', '--pty': '220px' } as React.CSSProperties}
+        style={{ left: 400, top: 500, zIndex: 75, '--ptx': '600px', '--pty': '-30px' } as React.CSSProperties}
       >
         <span style={{ fontSize: 34, filter: 'drop-shadow(0 0 8px rgba(140,255,160,0.85))' }}>🧪</span>
       </div>
       <div
         className="absolute"
-        style={{ left: 905, top: 345, zIndex: 75, opacity: 0, animation: 'sts-potion-shatter .45s .5s ease-out forwards' }}
+        style={{ left: 985, top: 470, zIndex: 75, opacity: 0, animation: 'sts-potion-shatter .45s .5s ease-out forwards' }}
       >
         <span style={{ fontSize: 46, filter: 'drop-shadow(0 0 16px rgba(140,255,160,0.9))' }}>💫</span>
       </div>
@@ -956,7 +972,7 @@ export function CombatScreen() {
 
       {/* ===== 玩家（左下；联机双人并排） ===== */}
       {mp ? (
-        <div className="absolute flex items-end gap-2" style={{ left: 30, bottom: 92, zIndex: 40, pointerEvents: 'auto' }}>
+        <div className="absolute flex items-end gap-2" style={{ left: 30, bottom: 282, zIndex: 40, pointerEvents: 'auto' }}>
           {run.players.map((rp, i) => {
             const pc = combat.players[i]
             const items = fxList.filter(f =>
@@ -978,7 +994,7 @@ export function CombatScreen() {
           })}
         </div>
       ) : (
-        <div className="absolute flex flex-col items-center gap-1.5" style={{ left: 44, bottom: 96, zIndex: 40, pointerEvents: 'auto' }}>
+        <div className="absolute flex flex-col items-center gap-1.5" style={{ left: 44, bottom: 282, zIndex: 40, pointerEvents: 'auto' }}>
           <div className="relative" style={{ width: 240, height: 60 }}>
             <FloatFx items={playerFx} removeFx={removeFx} />
           </div>
@@ -997,9 +1013,9 @@ export function CombatScreen() {
         </div>
       )}
 
-      {/* ===== 敌人区 ===== */}
-      <div className="absolute flex items-start justify-center gap-10"
-        style={{ left: '31%', right: 12, top: 118, bottom: 300, zIndex: 30, pointerEvents: 'auto' }}>
+      {/* ===== 敌人区（底对齐地面线 y≈615/68%：原版怪物立于地面；旧版 items-start 顶对齐导致全部悬空偏高） ===== */}
+      <div className="absolute flex items-end justify-center gap-10"
+        style={{ left: '31%', right: 12, top: 118, bottom: 285, zIndex: 30, pointerEvents: 'auto' }}>
         {combat.enemies.map((e, i) => (
           <EnemyView key={e.uid} enemy={e} idx={i} />
         ))}
@@ -1034,14 +1050,14 @@ export function CombatScreen() {
       )}
 
       {/* ===== 抽牌堆 ===== */}
-      <PileButton label="抽牌堆" count={AP(combat).drawPile.length} style={{ left: 26, bottom: 158 }} onClick={() => openPile('draw')} shuffled />
+      <PileButton label="抽牌堆" count={AP(combat).drawPile.length} style={{ left: 26, bottom: 44 }} onClick={() => openPile('draw')} shuffled />
       {/* 洗牌黑色剪影（原版 NCardFlyShuffleVfx） */}
       <ShuffleFx items={fxList.filter(f => f.kind === 'shuffle')} removeFx={removeFx} />
       {/* ===== 弃牌堆 ===== */}
-      <PileButton label="弃牌堆" count={AP(combat).discardPile.length} style={{ right: 26, bottom: 158 }} onClick={() => openPile('discard')} />
+      <PileButton label="弃牌堆" count={AP(combat).discardPile.length} style={{ right: 26, bottom: 44 }} onClick={() => openPile('discard')} />
       {/* ===== 消耗堆 ===== */}
       {AP(combat).exhaustPile.length > 0 && (
-        <PileButton label="消耗堆" count={AP(combat).exhaustPile.length} style={{ right: 26, bottom: 88 }} onClick={() => openPile('exhaust')} small />
+        <PileButton label="消耗堆" count={AP(combat).exhaustPile.length} style={{ right: 26, bottom: 150 }} onClick={() => openPile('exhaust')} small />
       )}
 
       {/* ===== 能量球（能量 0 时红字暗球 —— 原版 NEnergyCounter dark 态；回能 VFX=原版 EnergyPanel） ===== */}

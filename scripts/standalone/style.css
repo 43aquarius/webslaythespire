@@ -32,13 +32,48 @@ img { -webkit-user-drag: none; }
   box-shadow: inset 0 1px 0 rgba(255,214,140,.22), inset 0 -6px 14px rgba(0,0,0,.5), 0 0 18px rgba(255,200,90,.28), 0 4px 10px rgba(0,0,0,.65);
   transform: translateY(-1px); }
 .menu-btn.dis { filter: grayscale(.6) brightness(.55); cursor: not-allowed; }
-/* 角色选择：无框立绘（原版站位） */
-.char-row { display: flex; align-items: flex-end; justify-content: center; gap: 34px; }
-.char-card { position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;
-  border: 3px solid transparent; border-radius: 12px; padding: 8px 10px 6px; transition: all .16s ease; }
-.char-card img { width: 196px; filter: drop-shadow(0 10px 16px rgba(0,0,0,.75)); transition: filter .16s ease; }
-.char-card:not(.sel) { filter: brightness(.62) saturate(.8); }
-.char-card.sel img { filter: drop-shadow(0 0 26px rgba(255,205,90,.4)) drop-shadow(0 10px 14px rgba(0,0,0,.7)); }
+/* ============ 角色选择（第三十九批：原版四分屏面板还原） ============ */
+/* 面板：海报背景 + 选中亮/未选暗 */
+.cs-panels { position: absolute; inset: 0; display: flex; }
+.cs-panel { position: relative; flex: 1; min-width: 0; overflow: hidden; cursor: pointer; transition: filter .28s ease; }
+.cs-panel .cs-bg { position: absolute; inset: 0; background-size: auto 100%; background-repeat: no-repeat; transition: filter .28s ease; }
+.cs-panel:not(.active) .cs-bg { filter: brightness(.34) saturate(.7); }
+.cs-panel:not(.active):hover .cs-bg { filter: brightness(.55) saturate(.8); }
+.cs-panel .cs-dim { position: absolute; inset: 0; background: rgba(4,2,1,.42); transition: opacity .28s ease; }
+.cs-panel.active .cs-dim { opacity: 0; }
+.cs-panel .cs-hero { position: absolute; left: 50%; bottom: 122px; width: auto; height: auto; max-height: 430px; max-width: 90%;
+  transform: translateX(-50%); transition: filter .28s ease, transform .28s ease; filter: brightness(.8); }
+.cs-panel:not(.active) .cs-hero { filter: brightness(.5) saturate(.75); }
+.cs-panel.active .cs-hero { filter: brightness(1.05) drop-shadow(0 0 26px rgba(255,215,110,.35)) drop-shadow(0 12px 16px rgba(0,0,0,.7)); transform: translateX(-50%) scale(1.05); }
+.cs-panel .cs-glow { position: absolute; left: 50%; bottom: 108px; width: 300px; height: 54px; transform: translateX(-50%); pointer-events: none; transition: opacity .28s ease; }
+.cs-panel .cs-plate { position: absolute; left: 0; right: 0; bottom: 30px; display: flex; flex-direction: column; align-items: center; pointer-events: none; }
+/* 面板间光束分隔（原版白色光柱） */
+.cs-beam { position: absolute; top: 0; bottom: 0; width: 30px; transform: translateX(-50%); pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255,240,214,.16) 35%, rgba(255,248,232,.34) 50%, rgba(255,240,214,.16) 65%, transparent);
+  animation: cs-beam-pulse 4.2s ease-in-out infinite; }
+.cs-beam::after { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; transform: translateX(-50%);
+  background: linear-gradient(180deg, transparent, rgba(255,250,238,.5) 30%, rgba(255,250,238,.5) 70%, transparent); }
+@keyframes cs-beam-pulse { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+/* 出发按钮（原版 EMBARK 金色横幅） */
+.cs-embark { font-family: var(--sts-font-title, inherit); position: relative; cursor: pointer;
+  background: linear-gradient(180deg, #b08a34 0%, #8a6418 52%, #6e4e12 100%);
+  border: 3px solid #f0d488; border-radius: 10px; color: #ffeaa8; text-shadow: 2px 2px 0 rgba(40,20,0,.85);
+  box-shadow: inset 0 2px 0 rgba(255,230,160,.35), inset 0 -8px 16px rgba(60,30,0,.55), 0 0 22px rgba(255,196,84,.4), 0 5px 0 #3a2a08, 0 8px 18px rgba(0,0,0,.7);
+  animation: cs-embark-glow 2.6s ease-in-out infinite; transition: filter .15s ease, transform .15s ease; }
+.cs-embark:hover { filter: brightness(1.12); transform: translateY(-2px); }
+.cs-embark:active { transform: translateY(1px); }
+@keyframes cs-embark-glow { 0%,100% { box-shadow: inset 0 2px 0 rgba(255,230,160,.35), inset 0 -8px 16px rgba(60,30,0,.55), 0 0 16px rgba(255,196,84,.3), 0 5px 0 #3a2a08, 0 8px 18px rgba(0,0,0,.7); }
+  50% { box-shadow: inset 0 2px 0 rgba(255,230,160,.45), inset 0 -8px 16px rgba(60,30,0,.55), 0 0 34px rgba(255,208,96,.6), 0 5px 0 #3a2a08, 0 8px 18px rgba(0,0,0,.7); } }
+/* 返回按钮（原版左上角箭头） */
+.cs-back { font-family: var(--sts-font-title, inherit); cursor: pointer; background: linear-gradient(180deg, rgba(64,40,26,.88), rgba(38,22,14,.92));
+  border: 2px solid #6e5236; border-radius: 8px; color: #e8d0a8; text-shadow: 1px 1px 0 #000;
+  box-shadow: 0 3px 8px rgba(0,0,0,.55); transition: border-color .15s ease, color .15s ease; }
+.cs-back:hover { border-color: #a8842e; color: #ffd980; }
+/* 顶部/底部渐变压暗 */
+.cs-vig-top { position: absolute; top: 0; left: 0; right: 0; height: 130px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(2,1,0,.82), rgba(2,1,0,.28) 55%, transparent); }
+.cs-vig-bottom { position: absolute; bottom: 0; left: 0; right: 0; height: 170px; pointer-events: none;
+  background: linear-gradient(0deg, rgba(2,1,0,.88), rgba(2,1,0,.42) 55%, transparent); }
 
 /* 屏幕切换淡入 */
 .screen { position: relative; width: 100%; height: 100%; overflow: hidden; animation: fade-in .28s ease-out; }
@@ -155,19 +190,21 @@ img { -webkit-user-drag: none; }
 .sts-card.playable:hover { filter: drop-shadow(0 0 8px rgba(255,220,120,.7)); }
 
 /* ============ 战斗 ============ */
-.enemies-row { position: absolute; left: 31%; right: 12px; top: 118px; bottom: 300px; display: flex; justify-content: center; align-items: center; gap: 40px; z-index: 30; }
+/* 第三十九批：底对齐地面线（原版 68% 高度），怪物落地不悬空 */
+.enemies-row { position: absolute; left: 31%; right: 12px; top: 118px; bottom: 285px; display: flex; justify-content: center; align-items: flex-end; gap: 40px; z-index: 30; }
 .enemy { position: relative; display: flex; flex-direction: column; align-items: center; transition: opacity .4s; border-radius: 14px; padding: 6px 10px; }
 .enemy .intent-slot { height: 50px; margin-bottom: 2px; position: relative; }
 .intent { display: flex; align-items: center; gap: 4px; animation: intent-bob 1.6s ease-in-out infinite; filter: drop-shadow(0 2px 4px #000); }
 .intent .dmg-num { font-size: 26px; font-weight: 900; color: #ffdf9a; text-shadow: 1px 1px 0 #000; font-family: inherit; }
 .intent .dmg-num small { font-size: 16px; }
 .enemy .sprite img { filter: drop-shadow(0 10px 12px rgba(0,0,0,.55)); }
-.enemy-info { display: flex; flex-direction: column; align-items: center; gap: 3px; margin-top: -28px; }
+/* 第三十九批：名字/血条/状态绝对定位于精灵正下方（脚底之下）——状态图标增减不再把怪物整体顶起，血条紧贴脚底 */
+.enemy-info { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .ename { font-weight: bold; font-size: 15px; color: #f5e5c8; text-shadow: 1px 1px 0 #000; font-family: inherit; }
 .enemy.dying { animation: die .9s ease-out forwards; }
 .enemy.targetable { animation: target-pulse 1s infinite; cursor: crosshair; }
 
-.player-zone { position: absolute; left: 44px; bottom: 96px; display: flex; flex-direction: column; align-items: center; gap: 5px; z-index: 40; }
+.player-zone { position: absolute; left: 44px; bottom: 282px; display: flex; flex-direction: column; align-items: center; gap: 5px; z-index: 40; }
 .player-fx-slot { position: relative; width: 240px; height: 56px; }
 .target-hint { position: absolute; left: 50%; transform: translateX(-50%); bottom: 350px; color: #ff9a80; font-size: 16px; font-weight: bold; text-shadow: 1px 1px 0 #000; z-index: 55; font-family: inherit; pointer-events: none; }  /* 不挡下方敌人点击 */
 
@@ -361,13 +398,7 @@ img { -webkit-user-drag: none; }
   display: flex; align-items: center; justify-content: center; }
 .card-type-row span { color: #595959; text-shadow: 0 1px 1px rgba(0,0,0,.35); letter-spacing: 0.5px; }
 
-/* ============ 标题：角色选择 + GitHub ============ */
-.char-row { display: flex; gap: 18px; justify-content: center; margin: 14px 0 4px; flex-wrap: wrap; }
-.char-card { width: 200px; padding: 12px 10px 14px; border: 2px solid #5a4a38; border-radius: 12px;
-  background: linear-gradient(170deg, rgba(30,24,18,.88), rgba(14,10,8,.94)); cursor: pointer;
-  display: flex; flex-direction: column; align-items: center; gap: 6px; transition: all .15s ease; }
-.char-card img { width: 118px; height: 118px; object-fit: contain; filter: drop-shadow(0 6px 10px rgba(0,0,0,.6)); }
-.char-card:hover { transform: translateY(-4px); border-color: #8a7a5a; }
+/* ============ 标题：GitHub 入口（角色选择已改四分屏，见顶部 cs-* 规则） ============ */
 .github-btn { position: absolute; right: 14px; bottom: 12px; display: flex; align-items: center; gap: 7px;
   color: #c8bca8; text-decoration: none; font-size: 13px; padding: 7px 12px; border-radius: 8px;
   background: rgba(20,16,12,.7); border: 1px solid #4a4038; z-index: 60; }
@@ -751,7 +782,7 @@ img { -webkit-user-drag: none; }
 
 /* ============ 第六批：检视屏 / 洗牌剪影 / ACT横幅 / 按钮滑入 ============ */
 /* 洗牌黑色剪影（原版 NCardFlyShuffleVfx：8 张黑色小卡剪影自抽牌堆飞散旋转淡出） */
-.shuffle-wrap { position: absolute; left: 33px; top: 46px; width: 0; height: 0; pointer-events: none; }
+.shuffle-wrap { position: absolute; left: 33px; bottom: 90px; top: auto; width: 0; height: 0; pointer-events: none; }
 .shuffle-card {
   position: absolute; left: -23px; top: -32px;
   width: 46px; height: 64px; border-radius: 5px;

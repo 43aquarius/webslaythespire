@@ -752,36 +752,54 @@ function rMainMenu(): string {
 </div>`
 }
 
-// ---- 角色选择（原版：无框立绘站立 + 出发/返回） ----
+// ---- 角色选择（第三十九批：原版四分屏面板还原，与 Next 版同构） ----
+// 原版布局：屏幕纵向均分四条面板，每条 = 角色专属海报背景(charbg) + 站立立绘 + 底部名牌，
+// 面板间白色光束分隔；选中面板全亮、其余压暗；左上返回 / 右下出发(EMBARK 金色横幅)
+const CS_PANEL: Record<CharacterId, { bg: string; x: string; color: string }> = {
+  ironclad: { bg: 'charbg/redBg.jpg', x: '74%', color: '#e0603c' },
+  silent: { bg: 'charbg/greenBg.jpg', x: '70%', color: '#4cc06a' },
+  defect: { bg: 'charbg/blueBg.jpg', x: '70%', color: '#4a92e8' },
+  watcher: { bg: 'charbg/purpleBg.jpg', x: '50%', color: '#b070e8' },
+}
+// 英文名名牌格式化：剥离自带 The 前缀（避免 THE THE SILENT 重复）
+const stripTheEn = (n: string) => n.replace(/^The\s+/i, '')
+// 悬停中的角色（左下信息框跟随悬停，移开回落到已选角色）
+let csHover: CharacterId | null = null
+
+function csInfoHtml(): string {
+  const info = CHARACTER_INFO[csHover ?? selectedChar]
+  return `<span style="color:#ffd980;font-size:15px">${info.name}</span>` +
+    `<span style="color:#8a7458"> · THE ${stripTheEn(info.nameEn).toUpperCase()}</span><br>` +
+    `${info.desc}<br>生命值 <span style="color:#ff8a7a">${info.hp}</span> · 初始遗物「<span style="color:#9ad8f0">${RELICS[info.relic]?.name ?? ''}</span>」`
+}
+
 function rCharSelect(): string {
-  const info = CHARACTER_INFO[selectedChar]
-  const cards = CHARACTERS.map(c => {
-    const sel = selectedChar === c
-    const col = CHAR_COLOR[c]
-    return `<div class="char-card ${sel ? 'sel' : ''}" data-act="pickChar" data-char="${c}" style="${sel ? `transform:translateY(-10px) scale(1.06)` : ''}">
-      <img src="${A('hero/' + c + '.png')}" alt="${CHARACTER_INFO[c].name}" draggable="false">
-      <div class="sts-title" style="font-size:19px;margin-top:2px;letter-spacing:3px;color:${sel ? '#ffd980' : '#a89070'};text-shadow:2px 2px 0 #000">${CHARACTER_INFO[c].name}</div>
+  const panels = CHARACTERS.map(c => {
+    const p = CS_PANEL[c]
+    const ci = CHARACTER_INFO[c]
+    const active = selectedChar === c
+    return `<div class="cs-panel ${active ? 'active' : ''}" data-act="pickChar" data-char="${c}">
+      <div class="cs-bg" style="background-image:url('${A(p.bg)}');background-position:${p.x} center"></div>
+      <div class="cs-dim"></div>
+      <img class="cs-hero" src="${A('hero/' + ci.sprite + '.png')}" alt="${ci.name}" draggable="false">
+      <div class="cs-glow" style="background:radial-gradient(ellipse at center,${p.color}${active ? '55' : '22'} 0%,transparent 68%);opacity:${active ? 0.9 : 0.4}"></div>
+      <div class="cs-plate">
+        <div class="sts-title" style="font-size:27px;letter-spacing:4px;color:${active ? '#ffd980' : '#9a8266'};text-shadow:2px 2px 0 #000,0 0 18px rgba(0,0,0,.9)">${ci.name}</div>
+        <div class="sts-body" style="font-size:11px;letter-spacing:3px;margin-top:2px;color:${active ? p.color : '#6e5c46'};text-shadow:1px 1px 0 #000">THE ${stripTheEn(ci.nameEn).toUpperCase()}</div>
+      </div>
     </div>`
   }).join('')
-  return `<div class="screen bg-cover" style="background-image:url('${A('bg/menubg.jpg')}');background-position:center -241px">
-  <img src="${A('title/mg3Top.webp')}" draggable="false" alt="" style="position:absolute;left:0;bottom:0;width:100%;pointer-events:none;user-select:none">
-  <img class="sts-glow" src="${A('title/mg3TopGlow1.webp')}" draggable="false" alt=""
-    style="left:${(225 * STS_S).toFixed(1)}px;top:${((1080 - 289 - 60) * STS_S).toFixed(1)}px;width:${(158 * STS_S).toFixed(1)}px">
-  <img class="sts-glow" src="${A('title/mg3TopGlow2.webp')}" draggable="false" alt=""
-    style="left:${(234 * STS_S).toFixed(1)}px;top:${((1080 - 330 - 60) * STS_S).toFixed(1)}px;width:${(153 * STS_S).toFixed(1)}px;animation-delay:-2.9s">
-  ${MID_CLOUDS.map(rCloud).join('\n  ')}
-  ${TOP_CLOUDS.map(rCloud).join('\n  ')}
-  <div class="shade" style="background:rgba(6,3,2,.5)"></div>
-  <div class="center-col" style="padding-top:0;gap:16px">
-    <div class="sts-title" style="font-size:36px;color:#ffd980;text-shadow:3px 3px 0 #000;letter-spacing:8px">选 择 你 的 角 色</div>
-    <div class="char-row">${cards}</div>
-    <div class="sts-body" style="color:#c8b090;font-size:14px;max-width:580px;text-align:center;line-height:1.8">
-      <span style="color:#ffd980">${info.name}</span> · ${info.desc}<br>生命值 <span style="color:#ff8a7a">${info.hp}</span> · 初始遗物「<span style="color:#9ad8f0">${RELICS[info.relic]?.name ?? ''}</span>」 · 全 4 幕 · 220+ 卡牌 · 60+ 敌人 · 12 首领</div>
-    <div class="row" style="gap:36px;margin-top:6px">
-      <button class="sts-btn sts-title" data-act="gotoMenu" data-screen="title" style="font-size:20px;padding:10px 44px;letter-spacing:4px">返 回</button>
-      <button class="sts-btn sts-btn-gold sts-title" data-act="startRun" style="font-size:26px;padding:12px 68px;letter-spacing:6px">出 发</button>
-    </div>
-  </div>
+  return `<div class="screen" id="charselect-screen">
+  <div class="cs-panels">${panels}</div>
+  <div class="cs-beam" style="left:400px"></div>
+  <div class="cs-beam" style="left:800px"></div>
+  <div class="cs-beam" style="left:1200px"></div>
+  <div class="cs-vig-top"></div>
+  <div class="cs-vig-bottom"></div>
+  <div class="sts-title" style="position:absolute;left:50%;top:24px;transform:translateX(-50%);font-size:36px;color:#ffd980;text-shadow:3px 3px 0 #000,0 0 30px rgba(255,180,60,.35);letter-spacing:10px;pointer-events:none">选 择 你 的 角 色</div>
+  <button class="cs-back sts-title" data-act="gotoMenu" data-screen="title" style="position:absolute;left:26px;top:26px;font-size:19px;padding:9px 26px;letter-spacing:3px">← 返 回</button>
+  <div class="sts-body" id="cs-info" style="position:absolute;left:30px;bottom:26px;z-index:40;pointer-events:none;background:rgba(12,7,4,.68);border:1.5px solid #5a4230;border-radius:10px;padding:10px 16px;color:#c8b090;font-size:13.5px;line-height:1.75;max-width:430px">${csInfoHtml()}</div>
+  <button class="cs-embark" data-act="startRun" style="position:absolute;right:34px;bottom:28px;z-index:40;font-size:27px;padding:13px 64px;letter-spacing:8px">出 发</button>
 </div>`
 }
 
@@ -1104,7 +1122,7 @@ function buildCombatScreen(run: RunState): string {
   const hero = run.character
   const mp = run.players.length > 1
   const playerZone = mp
-    ? `<div class="player-zone" style="left:26px;bottom:88px;flex-direction:row;gap:10px;align-items:flex-end">
+    ? `<div class="player-zone" style="left:26px;bottom:282px;flex-direction:row;gap:10px;align-items:flex-end">
       ${run.players.map((p, i) => `
       <div data-hidx="${i}" id="hero-slot-${i}" style="display:flex;flex-direction:column;align-items:center;gap:4px">
         <div class="player-fx-slot" id="player-fx-slot-${i}" style="width:200px;height:52px"></div>
@@ -1130,8 +1148,8 @@ function buildCombatScreen(run: RunState): string {
   <div id="mp-wait-banner"></div>
   <div id="hint-holder"></div>
   <div class="sts-hurt-vignette"></div>
-  <button class="pile-btn" id="pile-draw" data-act="openPile" data-pile="draw" style="left:26px;bottom:158px"><b>0</b><span>抽牌堆</span></button>
-  <button class="pile-btn" id="pile-discard" data-act="openPile" data-pile="discard" style="right:26px;bottom:158px"><b>0</b><span>弃牌堆</span></button>
+  <button class="pile-btn" id="pile-draw" data-act="openPile" data-pile="draw" style="left:26px;bottom:44px"><b>0</b><span>抽牌堆</span></button>
+  <button class="pile-btn" id="pile-discard" data-act="openPile" data-pile="discard" style="right:26px;bottom:44px"><b>0</b><span>弃牌堆</span></button>
   <span id="exhaust-holder"></span>
   <div class="energy" id="energy-box"><img src="${A('frames/' + (ENERGY_ORB[hero] || 'redEnergy') + '.png')}" alt=""><span id="energy-num"></span></div>
   <button class="sts-endturn" data-act="endTurn" id="end-turn-btn"><img class="et-hover" src="${A('endturn/hover.png')}" alt=""><img class="et-plate" src="${A('endturn/button.png')}" alt=""><span class="et-text"></span></button>
@@ -1168,6 +1186,28 @@ function intentHtml(e: EnemyInstance, c: CombatState): string {
   </div>`
 }
 
+// 敌人精灵原始尺寸缓存（模块级，跨战斗复用）：首次载入后同款怪再次出现不再有方形盒→贴身盒的布局跳变
+const SPRITE_NAT = new Map<string, { w: number; h: number }>()
+// 贴身盒适配（与 Next 版 EnemyView 同构）：按原图宽高比求绘制尺寸，画布底缘=脚底贴盒底
+function fitSpriteImg(img: HTMLImageElement, sprite: string, box: number) {
+  const fit = () => {
+    let nat = SPRITE_NAT.get(sprite)
+    if (!nat) {
+      const w = img.naturalWidth, h = img.naturalHeight
+      if (w <= 0 || h <= 0) return
+      nat = { w, h }
+      SPRITE_NAT.set(sprite, nat)
+    }
+    const ratio = nat.w / nat.h
+    const dw = ratio >= 1 ? box : Math.round(box * ratio)
+    const dh = ratio >= 1 ? Math.round(box / ratio) : box
+    img.style.width = dw + 'px'
+    img.style.height = dh + 'px'
+  }
+  if (img.complete && img.naturalWidth > 0) fit()
+  else img.addEventListener('load', fit, { once: true })
+}
+
 function updateEnemies(run: RunState) {
   const row = document.getElementById('enemies-row')
   if (!row || !run.combat) return
@@ -1180,7 +1220,8 @@ function updateEnemies(run: RunState) {
   for (const e of c.enemies) {
     seen.add(e.uid)
     const def = ENEMIES[e.id]
-    const sw = def.boss ? 340 : def.elite ? 260 : 210
+    // 精灵包围盒（原版尺寸分档，含 small 档与 Next 版对齐）；再按原图宽高比求贴身绘制尺寸
+    const spriteBox = def.boss ? 340 : def.elite ? 260 : def.small ? 150 : 210
     let el = row.querySelector(`[data-euid="${e.uid}"]`) as HTMLElement | null
     if (!el) {
       el = document.createElement('div')
@@ -1189,13 +1230,16 @@ function updateEnemies(run: RunState) {
       const stateDelay = freshCombat ? 1.3 + ((eIdx * 37 + (e.uid.charCodeAt(e.uid.length - 1) || 0)) % 41) / 100 : 0
       el.innerHTML = `
         <div class="intent-slot"></div>
-        <div class="sprite"><img src="${A('enemies/' + def.sprite + '.webp')}" alt="" style="width:${sw}px;height:${sw}px"></div>
+        <div class="sprite"><img src="${A('enemies/' + def.sprite + '.webp')}" alt="" style="width:${spriteBox}px;height:${spriteBox}px"></div>
         <div class="enemy-info" style="animation:sts-state-in .5s cubic-bezier(.2,.8,.3,1) ${stateDelay}s backwards">
           <div class="ename">${esc(def.name)}</div>
           ${hpBarShell('', def.boss ? 280 : 170)}
           <div class="estatus" style="margin-top:4px"></div>
         </div>`
       row.appendChild(el)
+      // 贴身盒适配：按原图宽高比缩放（宽图缩高、高图缩宽），脚底贴盒底落地
+      const sImg = el.querySelector('.sprite img') as HTMLImageElement | null
+      if (sImg) fitSpriteImg(sImg, def.sprite, spriteBox)
     }
     // 类与可点击状态（红框提示仅对存活敌人；死亡怪不再被 target-pulse 动画复活显示）
     const alive = !e.dying && e.hp > 0
@@ -1204,7 +1248,7 @@ function updateEnemies(run: RunState) {
     if (el.className !== cls) el.className = cls
     if (targetable) { el.dataset.act = 'clickEnemy'; el.dataset.uid = e.uid }
     else { delete el.dataset.act; delete el.dataset.uid }
-    el.style.minWidth = sw * 0.8 + 'px'
+    el.style.minWidth = spriteBox * 0.8 + 'px'
     // 意图 / 血条 / 状态（区域差异更新；新状态图标闪光）
     setHtml(el.querySelector('.intent-slot'), intentHtml(e, c))
     updateHpBar(el.querySelector('.hpbar'), e.hp, e.maxHp, e.block, (e.statuses as any)?.poison || 0)
@@ -1491,7 +1535,7 @@ function updateCombatScreen(run: RunState) {
   const pc = document.getElementById('pile-discard')
   if (pc) setText(pc.querySelector('b'), String(AP(c).discardPile.length))
   setHtml(document.getElementById('exhaust-holder'), AP(c).exhaustPile.length > 0
-    ? `<button class="pile-btn small" data-act="openPile" data-pile="exhaust" style="right:26px;bottom:88px"><b>${AP(c).exhaustPile.length}</b><span>消耗堆</span></button>` : '')
+    ? `<button class="pile-btn small" data-act="openPile" data-pile="exhaust" style="right:26px;bottom:150px"><b>${AP(c).exhaustPile.length}</b><span>消耗堆</span></button>` : '')
   const et = document.getElementById('end-turn-btn') as HTMLButtonElement | null
   if (et) {
     const mpE = c.players.length > 1
@@ -2547,7 +2591,8 @@ function computeFxPositions() {
   fxPositions = {}
   document.querySelectorAll('.enemy[data-euid]').forEach(el => {
     const r = (el as HTMLElement).getBoundingClientRect()
-    fxPositions[(el as HTMLElement).dataset.euid!] = { x: (r.left + r.width / 2 - sr.left) / k, y: (r.top + 20 - sr.top) / k }
+    // 浮动数字落点：容器高度 45%（精灵身体上部，意图之下）——与 Next 版 drawH*0.4 同构
+    fxPositions[(el as HTMLElement).dataset.euid!] = { x: (r.left + r.width / 2 - sr.left) / k, y: (r.top + r.height * 0.45 - sr.top) / k }
   })
   const pz = document.querySelector('.player-zone') || document.querySelector('[data-hidx="0"]')
   if (pz) {
@@ -3363,6 +3408,14 @@ document.addEventListener('mouseover', (e) => {
   } else {
     tipEl.style.display = 'none'
   }
+  // 选角四分屏：悬停面板 → 左下信息框跟随悬停角色（移开回落到已选角色）
+  const csp = (e.target as HTMLElement).closest('.cs-panel') as HTMLElement | null
+  const cHover = (csp?.dataset.char as CharacterId) || null
+  if (cHover !== csHover) {
+    csHover = cHover
+    const box = document.getElementById('cs-info')
+    if (box) box.innerHTML = csInfoHtml()
+  }
   // 地图图例：悬停条目 → 高亮同类节点（原版 S.highlight 机制）
   const lg = (e.target as HTMLElement).closest('.lg-item') as HTMLElement | null
   if (lg && lg.dataset.ltype) {
@@ -3569,7 +3622,7 @@ net.onRooms(list => {
 })
 useGame.subscribe(render)
 render()
-console.log('[STS standalone] 游戏就绪 v1.15（单人 + 联机合作 · 服务器中转/P2P双通道 + 房间大厅）')
+console.log('[STS standalone] 游戏就绪 v1.16（单人 + 联机合作 · 服务器中转/P2P双通道 + 房间大厅）')
 
 
 
