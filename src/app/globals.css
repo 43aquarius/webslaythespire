@@ -1045,16 +1045,19 @@ body {
 }
 .sts-map-marker img { width: 100%; height: 100%; object-fit: contain; }
 
-/* 地图路径圆点（原版 map_dot：走过 #241F1A 1.2×，未走 #7D6A55D8） */
+/* 地图路径墨点（原版 maporig/dot1 手绘墨滴素材：白稿染墨色；走过变深 1.25×，未走 #7D6A55） */
 .sts-map-dot {
-  position: absolute; width: 9px; height: 9px; border-radius: 50%;
-  background: rgba(125, 106, 85, 0.85);
-  box-shadow: 0 1px 1px rgba(30, 18, 8, 0.5);
+  position: absolute; width: 13px; height: 13px;
+  background: url('/assets/maporig/dot1.png') center / contain no-repeat;
+  filter: brightness(0.5) sepia(0.25) saturate(1.4);
   transform: translate(-50%, -50%);
-  transition: background-color 0.25s ease, transform 0.25s ease;
+  transition: filter 0.25s ease, transform 0.25s ease;
 }
-.sts-map-dot.traveled { background: #241f1a; transform: translate(-50%, -50%) scale(1.25); }
-.sts-map-dot.inking { background: #241f1a; transform: translate(-50%, -50%) scale(1.25); }
+.sts-map-dot.traveled { filter: brightness(0.13) sepia(0.3) saturate(1.4); transform: translate(-50%, -50%) scale(1.25); }
+.sts-map-dot.inking { filter: brightness(0.13) sepia(0.3) saturate(1.4); transform: translate(-50%, -50%) scale(1.25); }
+
+/* 地图节点墨圈（maporig/circle5 原版白色手绘圆框素材，染为墨棕色 #7D6A55 同族） */
+.sts-node-ring { filter: brightness(0.42) sepia(0.28) saturate(1.45); }
 
 /* 地图图例（原版 map_legend 卷轴） */
 .sts-map-legend {

@@ -23,6 +23,8 @@ PLANS = {
     'hero': (None, 'PNG', None),
     'intent': (None, 'PNG', None),
     'mapicons': (140, 'PNG', None),
+    # 第四十一批：原版地图墨圈/墨点素材（circle1-5 192px 手绘圆框 + dot1 16px 墨滴）
+    'maporig': (None, 'PNG', None),
     'neow': (640, 'PNG', None),      # 涅奥鲸鱼+眨眼眼睑(第十八批)
     # 第二十一批：原版药水分层（64px mask 图层，需保真不缩放）；旧 wiki 单图已在第二十一批移除
     'potionlayers': (None, 'PNG', None),

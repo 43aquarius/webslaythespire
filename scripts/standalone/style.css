@@ -300,10 +300,12 @@ img { -webkit-user-drag: none; }
 .map-scroll { width: 100%; height: 100%; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #6b4a2e rgba(0,0,0,.3); }
 .map-scroll::-webkit-scrollbar { width: 8px; }
 .map-scroll::-webkit-scrollbar-thumb { background: #6b4a2e; border-radius: 4px; }
-.map-canvas { position: relative; width: 100%; max-width: 940px; height: 1450px; margin: 0 auto; background-size: 100% 100%; }
+.map-canvas { position: relative; width: 100%; max-width: 1100px; height: 1450px; margin: 0 auto; background-size: 100% 100%; }
 .map-canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 5; }
 .node { position: absolute; z-index: 10; }
-.node img { width: 100%; height: 100%; object-fit: contain; }
+.node .nframe { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; filter: brightness(0.42) sepia(0.28) saturate(1.45); }
+.node .nicon-wrap { position: absolute; inset: 15%; }
+.node .nicon-wrap img { width: 100%; height: 100%; object-fit: contain; }
 .node.reach { z-index: 20; cursor: pointer; animation: node-pulse 1.2s infinite; }
 .node.locked { filter: grayscale(.9) brightness(.55); }
 .cur-ring { position: absolute; inset: -8px; border: 3px solid #ffd070; border-radius: 50%; box-shadow: 0 0 18px rgba(255,208,112,.8); }
@@ -739,15 +741,15 @@ img { -webkit-user-drag: none; }
   pointer-events: none; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.7));
 }
 .map-marker img { width: 100%; height: 100%; object-fit: contain; }
-/* 点状路径 */
+/* 点状路径（原版 maporig/dot1 手绘墨滴素材，白稿染墨色；走过变深 1.25×；背景URL由 ui.ts 注入 dataURI） */
 .map-dot {
-  position: absolute; width: 9px; height: 9px; border-radius: 50%;
-  background: rgba(125, 106, 85, 0.85);
-  box-shadow: 0 1px 1px rgba(30, 18, 8, 0.5);
+  position: absolute; width: 13px; height: 13px;
+  background-position: center; background-size: contain; background-repeat: no-repeat;
+  filter: brightness(0.5) sepia(0.25) saturate(1.4);
   transform: translate(-50%, -50%);
-  transition: background-color 0.25s ease, transform 0.25s ease;
+  transition: filter 0.25s ease, transform 0.25s ease;
 }
-.map-dot.traveled { background: #241f1a; transform: translate(-50%, -50%) scale(1.25); }
+.map-dot.traveled { filter: brightness(0.13) sepia(0.3) saturate(1.4); transform: translate(-50%, -50%) scale(1.25); }
 /* 图例 */
 .map-legend {
   position: absolute; right: 10px; top: 50%; transform: translateY(-50%);

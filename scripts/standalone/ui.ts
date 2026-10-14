@@ -1621,7 +1621,7 @@ function updateMapScreen(run: RunState) {
   const holder = document.getElementById('map-nodes')
   if (holder) {
     for (const nd of Object.values(map.nodes)) {
-      const size = nd.type === 'boss' ? 96 : nd.type === 'elite' ? 60 : 52
+      const size = nd.type === 'boss' ? 112 : nd.type === 'elite' ? 82 : 68
       let el = holder.querySelector(`[data-nid="${nd.id}"]`) as HTMLElement | null
       if (!el) {
         el = document.createElement('div')
@@ -1629,13 +1629,14 @@ function updateMapScreen(run: RunState) {
         el.dataset.ntype = nd.type
         const bi0 = bossIconOf(run)
         const iconKey0 = nd.type === 'boss' && bi0 ? bi0.icon : NODE_ICON[nd.type]
-        el.innerHTML = `<img src="${A('mapicons/' + iconKey0 + '.png')}" alt=""><span class="cur-ring" style="display:none"></span><span class="node-outline"></span>`
+        // 第四十一批：原版墨圈（circle5 白色手绘圆框素材染墨色）+ 图标占圈内 70%
+        el.innerHTML = `<img class="nframe" src="${A('maporig/circle5.png')}" alt=""><span class="nicon-wrap"><img src="${A('mapicons/' + iconKey0 + '.png')}" alt=""></span><span class="cur-ring" style="display:none"></span><span class="node-outline"></span>`
         holder.appendChild(el)
       }
       el.dataset.ntype = nd.type
       const bi = nd.type === 'boss' ? bossIconOf(run) : null
       const iconKey = bi ? bi.icon : NODE_ICON[nd.type]
-      const imgEl = el.querySelector('img') as HTMLImageElement | null
+      const imgEl = el.querySelector('.nicon-wrap img') as HTMLImageElement | null
       if (imgEl) {
         const wantSrc = A('mapicons/' + iconKey + '.png')
         if (imgEl.getAttribute('src') !== wantSrc) imgEl.setAttribute('src', wantSrc)
@@ -1655,7 +1656,7 @@ function updateMapScreen(run: RunState) {
       el.dataset.tip = `<b>${nd.type === 'boss' && bi ? bi.name : NODE_NAME[nd.type]}</b>`
       const ring = el.querySelector('.cur-ring') as HTMLElement
       if (ring) ring.style.display = isCur ? '' : 'none'
-      const img = el.querySelector('img') as HTMLElement
+      const img = el.querySelector('.nicon-wrap img') as HTMLElement
       if (img) img.style.filter = isCur ? 'drop-shadow(0 0 14px #ffd070) brightness(1.2)' : ''
     }
   }
@@ -1675,7 +1676,7 @@ function updateMapScreen(run: RunState) {
         const edgeKey = `${nd.id}>${toId}`
         for (let k = 1; k <= count; k++) {
           let dot = dotHolder.children[i] as HTMLElement | null
-          if (!dot) { dot = document.createElement('div'); dotHolder.appendChild(dot) }
+          if (!dot) { dot = document.createElement('div'); dotHolder.appendChild(dot); dot.style.backgroundImage = `url("${A('maporig/dot1.png')}")` }
           const seed = nd.id.length * 131 + toId.length * 977 + k * 37
           dot.dataset.edge = edgeKey
           dot.dataset.idx = String(k)

@@ -165,7 +165,7 @@ export function MapScreen() {
 
       {/* 地图画布 */}
       <div ref={scrollRef} className="w-full h-full overflow-y-auto sts-scroll">
-        <div className="relative mx-auto" style={{ width: '100%', maxWidth: 940, height: H }}>
+        <div className="relative mx-auto" style={{ width: '100%', maxWidth: 1100, height: H }}>
           <div
             className="absolute inset-0"
             style={{
@@ -272,7 +272,8 @@ function MapNodeView({ node, isCurrent, isReachable, visited, selected, onPick, 
   node: MapNode; isCurrent: boolean; isReachable: boolean; visited: boolean; selected: boolean; onPick: () => void
   bossInfo?: { name: string; enemies: string[] } | null
 }) {
-  const size = node.type === 'boss' ? 96 : node.type === 'elite' ? 60 : 52
+  // 原版墨圈尺寸：普通 68 / 精英 82 / Boss 112（图标占圈内 ~70%）
+  const size = node.type === 'boss' ? 112 : node.type === 'elite' ? 82 : 68
   // 原版：boss 节点用专属图标（预决定 boss 首个敌人映射；未知/旧存档回退通用 boss）
   const bossIconKey = bossInfo && BOSS_ICON[bossInfo.enemies[0]] ? BOSS_ICON[bossInfo.enemies[0]] : null
   const icon = `${A}/mapicons/${node.type === 'boss' && bossIconKey ? bossIconKey : NODE_ICON[node.type]}.png`
@@ -291,19 +292,28 @@ function MapNodeView({ node, isCurrent, isReachable, visited, selected, onPick, 
       }}
       onClick={isReachable ? onPick : undefined}
     >
-      <Tip tip={<b>{tipName}</b>} className="">
-        <img
-          src={icon}
-          alt={tipName}
-          draggable={false}
-          className="w-full h-full object-contain"
-          style={{
-            filter: isCurrent
-              ? 'drop-shadow(0 0 14px #ffd070) brightness(1.2)'
-              : undefined,
-          }}
-        />
-      </Tip>
+      {/* 原版墨圈（maporig/circle5 白色手绘圆框素材，染为墨色；随节点整体压暗/脉动） */}
+      <img
+        src={`${A}/maporig/circle5.png`}
+        alt=""
+        draggable={false}
+        className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none sts-node-ring"
+      />
+      <div className="absolute" style={{ inset: '15%' }}>
+        <Tip tip={<b>{tipName}</b>} className="">
+          <img
+            src={icon}
+            alt={tipName}
+            draggable={false}
+            className="w-full h-full object-contain"
+            style={{
+              filter: isCurrent
+                ? 'drop-shadow(0 0 14px #ffd070) brightness(1.2)'
+                : undefined,
+            }}
+          />
+        </Tip>
+      </div>
       {/* 悬停白描边（原版 OUTLINE_HOVER α0.75） */}
       <div className="sts-map-outline" />
       {isCurrent && (
